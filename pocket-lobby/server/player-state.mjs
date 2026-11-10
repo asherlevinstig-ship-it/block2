@@ -20,6 +20,7 @@ import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.
 import {normalizeMagic} from '../public/essences.js';
 import {furnitureCatalog} from '../public/furniture-catalog.js';
 import {foodItems} from '../public/cooking.js';
+import {normalizeOutfitMagic} from '../public/outfit-magic.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {depthsStages,depthsCacheRoom,depthsSideRooms,normalizeDepthsRun} from '../public/depths.js';
@@ -85,7 +86,7 @@ export function normalizeState(input={}){
   for(const id of [...watchFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
   adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>[wildlifeRoom,...watchRooms,...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
-  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>12||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>13||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
   const combatGear=normalizeCombatGear(input.combatGear);
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
@@ -100,7 +101,7 @@ export function normalizeState(input={}){
     controlMode:input.controlMode??'play',...(input.autoSwitch===true?{autoSwitch:true}:{}),...(['required','complete'].includes(input.autoLesson)?{autoLesson:input.autoLesson}:{}),...(input.autoConfigured===true?{autoConfigured:true}:{}),...(input.pendingCharacterRules?{pendingCharacterRules:normalizeCharacterRules(input.pendingCharacterRules)}:{}),bank:normalizeBank(input.bank),
     ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,leadershipXp:stats.leadershipXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
-    wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
+    outfitMagic:normalizeOutfitMagic(input.outfitMagic),wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<(input.location===wildlifeRoom?wildlifeView.cols:18)&&position.y<(input.location===wildlifeRoom?wildlifeView.rows:16)?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])

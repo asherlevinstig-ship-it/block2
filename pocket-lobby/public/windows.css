@@ -535,3 +535,5 @@
 .food-stall-item h3,.food-stall-item p{margin:0 0 5px}
 .food-stall-actions{display:flex;flex-wrap:wrap;gap:8px}
 #foodStallStatus{min-height:1.2em;margin-bottom:0}
+
+#veilstep:not([hidden]){color:#aee5e7}#veilstep[data-active=true]{border-color:#aee5e7;background:#18364a}#veilstep>span:first-child{font-size:20px;line-height:1}

@@ -7,7 +7,7 @@ import {publishWorldActivity} from './world-activity.mjs';
 import {towerBread} from '../public/cooking.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
-import {isSmartlyDressed,normalizeWardrobe,clothingCatalog} from '../public/wardrobe.js';
+import {isSmartlyDressed,normalizeWardrobe,isFreeClothing} from '../public/wardrobe.js';
 import {configureExplorerLesson} from './exploration-plan.mjs';
 import {migrateHomeSafe} from '../public/home-safe.js';
 import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
@@ -93,9 +93,9 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries(watchFlags.map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
-      if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
-      state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries(watchFlags.map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
+      state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
       state.stats.luckXp=0;delete state.stats.cookingXp;
       delete state.combatGear.weaponEnchantments;
@@ -180,7 +180,7 @@ export async function handlePlayerApi(request,env){
       case "/api/player/create":
         if(state.characterCreated!==false)return json({error:"Your character is already created."},400);
         if(typeof body.avatar?.name!=="string"||!body.avatar.name.trim()||body.avatar.name.trim().length>20)return json({error:"Choose a name using 1 to 20 characters."},400);
-        {const wardrobe=normalizeWardrobe(body.wardrobe,body.avatar);if(wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing.');wardrobe.owned=wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);state=normalizeState({...state,avatar:body.avatar,wardrobe,characterCreated:true,meals:{...state.meals,[towerBread.id]:1}});}
+        {const wardrobe=normalizeWardrobe(body.wardrobe,body.avatar);if(wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing.');wardrobe.owned=wardrobe.owned.filter(isFreeClothing);state=normalizeState({...state,avatar:body.avatar,wardrobe,characterCreated:true,meals:{...state.meals,[towerBread.id]:1}});}
         break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);

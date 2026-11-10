@@ -1,3 +1,4 @@
+import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {factionHallAccess} from './faction-projects.mjs';
 import {factionHall} from '../public/faction-hall.js';
 import {moonwood} from '../public/moonwood.js';
@@ -56,11 +57,16 @@ export class SharedRoom{
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
     ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];});
   }
-  peers(){return [...this.sessions.values()].map(publicPeer);}
+  peers(now=Date.now()){return [...this.sessions.values()].filter(meta=>!(meta.veilUntil>now)).map(publicPeer);}
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
   snapshot(){
-    const now=Date.now(),trails=[...this.sessions.values()].filter(meta=>meta.trail?.until>now).map(meta=>({...meta.trail,player:meta.id,name:meta.name}));
+    const now=Date.now(),trails=[...this.sessions.values()].filter(meta=>!(meta.veilUntil>now)&&meta.trail?.until>now).map(meta=>({...meta.trail,player:meta.id,name:meta.name}));
     const data={type:'snapshot',players:this.peers(),trails};for(const ws of this.sessions.keys())this.send(ws,data);}
+  async scheduleVeilExpiry(){
+    const now=Date.now(),expiries=[...this.sessions.values()].map(meta=>meta.veilUntil??0).filter(at=>at>now);
+    if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
+  }
+  async alarm(){this.snapshot();await this.scheduleVeilExpiry();}
   fetch(request){return this.ctx.blockConcurrencyWhile(()=>new URL(request.url).pathname==='/activity'&&request.method==='POST'?this.activity(request):this.join(request));}
   async activity(request){
     const {playerId,revision,events=[]}=await request.json();
@@ -68,13 +74,16 @@ export class SharedRoom{
     const [ws,meta]=entry;if(!Number.isInteger(revision)||revision<=(meta.activityRevision??0))return json({ok:true});
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
     meta.activityRevision=revision;
+    const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
     const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
-    if(fresh.length)for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
+    if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
     if(state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules'){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
     meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.auto=state.plan?.source==='rules';
     // Connected avatars report bounded visual movement; activity rewards use the saved server position.
     if(meta.auto)meta.seat=null;
-    ws.serializeAttachment(meta);this.snapshot();return json({ok:true});
+    ws.serializeAttachment(meta);this.snapshot();
+    if(previousVeil!==meta.veilUntil)await this.scheduleVeilExpiry();
+    return json({ok:true});
   }
   async join(request){
     let profile;try{profile=JSON.parse(decodeURIComponent(request.headers.get('X-Tower-Profile')));}catch{return json({error:'Invalid room identity.'},403);}
@@ -84,9 +93,10 @@ export class SharedRoom{
     const [client,server]=Object.values(new WebSocketPair()),now=Date.now();
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
-    const meta={...profile,seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    const meta={...profile,veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history});this.snapshot();
+    if(meta.veilUntil>now)await this.scheduleVeilExpiry();
     return new Response(null,{status:101,webSocket:client});
   }
   async authorized(meta){
@@ -141,6 +151,7 @@ export class SharedRoom{
       ws.serializeAttachment(meta);this.snapshot();return;
     }
     if(message?.type==='chat'){
+      if(meta.veilUntil>now){this.send(ws,{type:'notice',text:'End Veilstep before speaking in room chat.'});return;}
       if(now-meta.chatAt>5000){meta.chatAt=now;meta.chatCount=0;}
       if(meta.chatCount>=3){this.send(ws,{type:'notice',text:'Please wait a moment before sending another message.'});return;}
       if(typeof message.text!=='string'||message.text.length>160)return;

@@ -6,6 +6,7 @@ import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
+import {activateVeil,awardVeilCloak,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {besideHomeSafe} from '../public/home-safe.js';
@@ -49,6 +50,11 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='veil'){
+    available(state);
+    if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Veilstep after finishing your current activity.');
+    activateVeil(state,now);return;
+  }
   if(action==='armour'){
     available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose equipment after finishing your current activity.');
     const id=body.id;
@@ -266,7 +272,9 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   }
   if(action==='bank'){
     available(state);
+    const run=state.depthsRun;
     const reward=bankDepthsSpoils(state);
+    awardVeilCloak(state,run,random);
     state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+reward.gold);
     return;
   }
@@ -281,7 +289,9 @@ export function protectFishingState(previous,next){
   next.adventure={...next.adventure};for(const key of watchFlags)next.adventure[key]=previous.adventure?.[key]===true;
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
+  next.outfitMagic=normalizeOutfitMagic(previous.outfitMagic);
   next.wardrobe=normalizeWardrobe({...normalizeWardrobe(next.wardrobe??previous.wardrobe,next.avatar??previous.avatar),owned});
+  if(!wearsVeilCloak(next.wardrobe))next.outfitMagic.veilUntil=0;
   if(previous.autoLesson)next.autoLesson=previous.autoLesson;else delete next.autoLesson;
   if(previous.autoConfigured===true)next.autoConfigured=true;else delete next.autoConfigured;
   if(previous.bedRest){next.bedRest=previous.bedRest;next.homeFurniture=previous.homeFurniture;}else delete next.bedRest;

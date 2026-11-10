@@ -3,6 +3,7 @@ import {watchRooms,watchAreas,watchWater,watchDimensions,willowmereRooms,willowm
 import {factionRegistrar} from './faction-registry.js';
 import {factionHall,factionHallLayout} from './faction-hall.js';
 import {furnitureCatalog,catalogFurnitureSize} from './furniture-catalog.js';
+export * from './outfit-magic.js';
 import {bakeryLayout} from './cooking.js';
 export {factionRegistrar,factionHall,factionHallLayout,furnitureCatalog,catalogFurnitureSize};
 export const socialRooms={[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};

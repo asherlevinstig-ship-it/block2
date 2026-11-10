@@ -2,6 +2,7 @@ import {awardFamiliarBond} from './familiar-progression.mjs';
 import {cinderPounce} from './familiars.mjs';
 import {initializeAdds,addDueAt,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
+import {activateVeil,outfitVeilUntil} from '../public/outfit-magic.js';
 import {combatStamina} from '../public/hunting.js';
 import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
 import {enemyAttack} from '../public/hunting.js';
@@ -27,6 +28,7 @@ function idle(state){
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
 export function startCombatEncounter(state,enemy,now){
   delete state.timberCut;
+  if(state.outfitMagic)state.outfitMagic.veilUntil=0;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
@@ -177,6 +179,7 @@ export function activityAction(state,action,body,now,random){
   }
   if(action==='fight'){
     idle(state);
+    if(outfitVeilUntil(state)>now)throw new Error('Choose End Veilstep before starting a fight.');
     const enemy=huntEnemyForRoom(state.location),index=depthsStageIndex(state.location);
     if(!enemy||!adjacent(state,{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
@@ -192,6 +195,10 @@ export function activityAction(state,action,body,now,random){
       const e=state.hunting.encounter,id=body.slot;
       if(id!=='leader'&&!e.adds.some(a=>a.id===id&&a.spawnAt<=now))throw new Error('Choose an active enemy.');
       e.combatTarget=id;e.manualTarget=true;state.combatReceipt={id:crypto.randomUUID(),events};return true;
+    }
+    if(state.hunting.encounter&&body.input==='veil'){
+      activateVeil(state,now);
+      events.push(result(state,{action:'flee',outcome:'escaped',encounter:null,health:state.health,power:'Veilstep',effect:'breaks the creature’s pursuit'},now,random));
     }
     if(state.hunting.encounter&&body.input==='familiar')events.push(result(state,cinderPounce(state,now),now,random));
     if(state.hunting.encounter&&body.input==='move'){
