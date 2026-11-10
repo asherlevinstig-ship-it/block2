@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {SharedRoom} from '../server/shared-room.mjs';
+import {advanceFishingWork} from '../server/fishing-work.mjs';
+import {startRoutineQueue} from '../server/routine-queue.mjs';
+import {normalizeState,settlePlan} from '../server/player-state.mjs';
+import {sharedFishingPose} from '../public/fishing.js';
+import {worldActivityEvents} from '../public/world-activity.js';
+
+test('two Auto fishers reserve separate tiles and only the completed cast pays',async()=>{
+ const ctx={getWebSockets:()=>[],storage:{get:async()=>null,put:async()=>{}},blockConcurrencyWhile:fn=>fn()};
+ const room=new SharedRoom(ctx,{});
+ const env={SHARED_ROOMS:{idFromName:x=>x,get:()=>room}};
+ const now=Date.now();
+ const make=()=>{
+   const state=normalizeState({location:'pond',position:{x:4,y:5},adventure:{discovered:['pond']},fishingGear:{bait:10,ownedRods:['reed'],equippedRod:'reed'}});
+   const queue={enabled:true,repeats:1,budget:0,reserveGold:0,minHealth:60,steps:[{type:'fishing',amount:1}]};
+   startRoutineQueue(state,{queue},now,{source:'rules',routineCapAt:now+180000,keepBait:0,physicalFishing:true});
+   return state;
+ };
+ const a=make(),b=make();
+ const origin={room:'pond',x:4,y:5};
+ await advanceFishingWork(env,'a',a,now,{room:'creek',x:1,y:4});
+ assert.equal(a.plan.fishingWork.cast,undefined);
+ await advanceFishingWork(env,'a',a,now,origin);
+ await advanceFishingWork(env,'b',b,now,origin);
+ assert(a.plan.fishingWork.cast);
+ assert.notDeepEqual(a.position,b.position);
+ assert.equal(b.plan.fishingWork.cast,undefined);
+ const other={room:'pond',...b.position};
+ await advanceFishingWork(env,'b',b,now,other);
+ assert(b.plan.fishingWork.cast);
+ const cast=a.plan.fishingWork.cast;
+ assert(cast.castEnds<cast.biteAt&&cast.biteAt<cast.landAt);
+ assert.equal(sharedFishingPose(a,now).fishId,undefined);
+ settlePlan(a,cast.landAt+899);
+ await advanceFishingWork(env,'a',a,cast.landAt+899,origin);
+ assert.equal(a.fishingGear.bait,10);
+ const before=structuredClone(a);
+ await advanceFishingWork(env,'a',a,cast.landAt+900,origin,()=>.5);
+ assert.equal(a.fishingGear.bait,9);assert.equal(b.fishingGear.bait,10);
+ assert.equal(a.stats.patienceXp,10);
+ const events=worldActivityEvents(before,a,cast.landAt+900);
+ assert.equal(events.length,1);assert.equal(events[0].fishing.fishId,a.fishingReceipt.fish);
+ await advanceFishingWork(env,'a',a,cast.landAt+900,origin);
+ assert.equal(a.fishingGear.bait,9);
+});

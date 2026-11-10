@@ -6,6 +6,8 @@ import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
 import {prepareManualTree,describeTreeCut,writeTreePlayer} from './shared-trees.mjs';
 import {enablePhysicalTimber,advanceTreeWork} from './tree-work.mjs';
+import {advanceFishingWork} from './fishing-work.mjs';
+import {finishRoutineReport} from './routine-report.mjs';
 import {towerBread} from '../public/cooking.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
@@ -25,7 +27,12 @@ import { resolveIdentity } from "./identity.mjs";
 import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 
 const COOKIE="__Host-tower-character";
-const touchPresence=(state,now,options,env)=>updatePresence(state,now,{...options,physicalTimber:!!(env.SHARED_ROOMS&&env.TOWER_DB.batch)});
+const physicalFishing=env=>!!(env.SHARED_ROOMS&&env.AUTO_ACTORS);
+const enablePhysicalWork=(state,env)=>{
+  enablePhysicalTimber(state,env);
+  if(physicalFishing(env)&&state.plan?.source==='rules')state.plan.physicalFishing=true;
+};
+const touchPresence=(state,now,options,env)=>updatePresence(state,now,{...options,physicalTimber:!!(env.SHARED_ROOMS&&env.TOWER_DB.batch),physicalFishing:physicalFishing(env)});
 const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
 function readPlayerState(row){
@@ -64,11 +71,15 @@ export async function settled(env,id,activities=false,{idle=false,motion=null}={
     if(!row)return null;
     const state=readPlayerState(row);
     const now=Date.now();
-    const initial=JSON.stringify(state);enablePhysicalTimber(state,env);
+    const initial=JSON.stringify(state);enablePhysicalWork(state,env);
     let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false},env);planChanged=true;}
     if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false},env);planChanged=planChanged||previous!==JSON.stringify(state);}
-    enablePhysicalTimber(state,env);
+    enablePhysicalWork(state,env);
     const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
+    if(idle&&state.plan?.physicalFishing){
+      await advanceFishingWork(env,id,state,now,motion);
+      if(!state.plan)finishRoutineReport(state,now);
+    }
     planChanged=planChanged||initial!==JSON.stringify(state);
     const activityChanged=activities&&settleActivities(state,now);
     const before=JSON.parse(row.state_json);
@@ -164,6 +175,7 @@ export async function handlePlayerApi(request,env){
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     let state=readPlayerState(row),factionId=null,treeMutation=null;
+    enablePhysicalWork(state,env);
     if(path.startsWith('/api/player/gameplay/')){
       if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
       Object.assign(state,normalizeState(state));
@@ -218,7 +230,6 @@ export async function handlePlayerApi(request,env){
         if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report&&!state.autoSwitch)return json(packet(row));
         settleActivities(state,Date.now());
         const resume=state.plan?.source==='rules'&&state.controlMode!=='auto'&&body.active!==false?await actorMotion(env,id):null;
-        enablePhysicalTimber(state,env);
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)},env);
         if(resume&&!state.plan){state.location=resume.room;state.position={x:resume.x,y:resume.y};}
         settleActivities(state,Date.now());
@@ -273,7 +284,7 @@ export async function handlePlayerApi(request,env){
         break;
       default:return json({error:"Not found."},404);
     }
-    enablePhysicalTimber(state,env);
+    enablePhysicalWork(state,env);
     const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation);
     if(!updated&&treeMutation){const latest=await read(env.TOWER_DB,id);if(latest?.revision===row.revision)return json({error:'Invalid cut: another player felled this tree. Choose a standing tree.'},400);}
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);

@@ -148,7 +148,7 @@ export function startPlan(state,{hours,baitLimit,kind,source},now){
   state.location="pond";state.position={x:4,y:5};
   return state;
 }
-function finishPlan(state,reason,endedAt){
+export function finishPlan(state,reason,endedAt){
   const plan=state.plan;
   state.report={...plan,reason,endedAt,patienceAfter:skillLevel(state.stats.patienceXp)};
   delete state.plan;
@@ -169,6 +169,10 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     return false;
   }
   if(plan.kind==='woodcutting')return settleWoodcuttingPlan(state,now,{stop});
+  if(plan.physicalFishing){
+    if(now>=plan.endAt||stop){finishPlan(state,stop?'stopped':'time-limit',Math.min(now,plan.endAt));return true;}
+    return false;
+  }
   let changed=false;
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=skillLevel(state.stats.patienceXp);

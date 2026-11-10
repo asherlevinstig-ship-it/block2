@@ -51,7 +51,10 @@ export function autoFishingProgress(state,now){
  const p=active(state);if(!state?.plan||p!==state.plan)return null;
  const step=p.kind==='queue'?p.queue?.steps?.[p.stepIndex]:null;
  if(p.kind==='queue'?step?.type!=='fishing':p.kind&&p.kind!=='fishing')return null;
- const due=p.nextAt??p.nextCatchAt,interval=p.interval??(Number.isFinite(p.cursorAt)?due-p.cursorAt:60000);
+ const cast=p.fishingWork?.cast;
+ if(p.physicalFishing&&!cast)return null;
+ const due=cast?cast.landAt+900:p.nextAt??p.nextCatchAt;
+ const interval=cast?due-cast.started:p.interval??(Number.isFinite(p.cursorAt)?due-p.cursorAt:60000);
  if(!Number.isFinite(due)||!Number.isFinite(interval)||interval<=0)return null;
  const left=Math.max(0,due-now),late=now-due;
  return {seconds:Math.ceil(left/1000),progress:Math.max(0,Math.min(100,100*(1-left/interval))),intervalSeconds:Math.round(interval/1000),

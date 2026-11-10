@@ -597,7 +597,13 @@ function addWorldFloat(actor,event){
  worldFloats.push({actor,room:currentRoom,node,started:performance.now(),lane:existing.length%4,anchor:peer?{rx:peer.rx,ry:peer.ry,seat:peer.seat}:null});
  if(event.kind==='damage'&&remotePeers.has(actor))remotePeers.get(actor).hurtUntil=performance.now()+250;
 }
-function receiveWorldActivity(actor,events){for(const event of events.slice(-16))addWorldFloat(actor,event);}
+function receiveWorldActivity(actor,events){
+  for(const event of events.slice(-16)){
+    const peer=remotePeers.get(actor);
+    if(peer&&event.kind==='catch'&&event.fishing?.room===currentRoom)peer.fishingLanding=event.fishing;
+    addWorldFloat(actor,event);
+  }
+}
 function updateWorldFloats(time){
  const bounds=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
  for(let i=worldFloats.length-1;i>=0;i--){
@@ -619,7 +625,7 @@ function receivePeers(peers){
   }
   for(const id of remotePeers.keys())if(!keep.has(id))remotePeers.delete(id);
   const state=window.playerCloud?.initial;
-  if(isFishingRoom(currentRoom)&&state?.plan?.source==='rules'&&autoTaskFor(state.plan)==='fishing'&&!autoJourney&&multiplayer?.selfId&&[...remotePeers.values()].some(peer=>peer.id<multiplayer.selfId&&peer.x===player.cx&&peer.y===player.cy)){
+  if(isFishingRoom(currentRoom)&&state?.plan?.source==='rules'&&!state.plan.physicalFishing&&autoTaskFor(state.plan)==='fishing'&&!autoJourney&&multiplayer?.selfId&&[...remotePeers.values()].some(peer=>peer.id<multiplayer.selfId&&peer.x===player.cx&&peer.y===player.cy)){
     const destination=autoWorkTile(state);if(destination?.path.length){autoJourneyState=state;autoJourney={room:currentRoom,blocked:false};route=destination.path;target={x:destination.x,y:destination.y};}
   }
 }
@@ -629,10 +635,12 @@ function drawRemote(peer,time){
   const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
   const now=combatNow(),cut=peer.chopping;
+  const cast=!moving&&(fishingView(peer.fishingLanding,currentRoom,now,time)??fishingView(peer.fishing,currentRoom,now,time));
+  const fishingPhase=cast?fishingMoments.phase(cast,time):null;
   const chopping=!moving&&cut?.room===currentRoom&&now<cut.endsAt+400&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
-  const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):peer;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping,sheathed:!chopping&&!!peer.weapon,weaponTier:chopping?'basicAxe':peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:undefined,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
-  if(isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
+  const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping,sheathed:!chopping&&!cast&&!!peer.weapon,weaponTier:chopping?'basicAxe':peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
   const activity=chopping?'Chopping':peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
   renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:43),familiar,familiarName:peer.familiarName});
@@ -6454,6 +6462,12 @@ function autoActivityKey(state){const p=state?.plan;return [state?.location,p?.r
 function autoActivityAnimation(time){
   const state=window.playerCloud?.initial,plan=state?.plan,task=autoTaskFor(plan);
   if(!plan||autoJourney||step||route.length||currentRoom!==state.location){autoWorkAnimation=null;return null;}
+  if(plan.physicalFishing&&(task==='fishing'||plan.fishingLandingUntil>combatNow())){
+    const now=combatNow(),pose=sharedFishingPose(state,now),cast=fishingView(pose,currentRoom,now,time);
+    if(!cast||cast.spot?.x!==player.cx||cast.spot?.y!==player.cy)return null;
+    Object.assign(player,{direction:'right',back:false});
+    return {task:'fishing',cast};
+  }
   if(task==='woodcutting'&&plan.physicalTimber){
     const cut=plan.treeWork?.cut,tree=cut&&roomFurniture().find(item=>isTimberTree(item)&&item.x===cut.x&&item.y===cut.y);
     if(!tree||Math.abs(player.cx-tree.x)+Math.abs(player.cy-tree.y)!==1||treeState(tree).regrowsAt||combatNow()>cut.endsAt+400)return null;
@@ -6484,7 +6498,7 @@ function autoRoomRoute(from,to){
   return null;
 }
 function autoWorkTile(state){
-  if(state.autoPresence?.moving||state.plan?.physicalTimber&&state.plan.treeWork){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
+  if(state.autoPresence?.moving||state.plan?.treeWork||state.plan?.fishingWork){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
   const task=state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type:state.plan?.kind;
   const interactionType=task==='buyBread'?'foodStall':task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
   const item=interactionType?roomFurniture().find(i=>i.type===interactionType):task==='woodcutting'?roomFurniture().filter(i=>isTimberTree(i)&&!treeState(i).regrowsAt).sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:null;
@@ -6588,7 +6602,7 @@ window.towerApplyRoutineState=(state,{reconcile=false}={})=>{
   autoTableState=state;autoTableServerAt=serverNow;autoTableLocalAt=performance.now();autoTableKey='';renderAutoTable(autoTableLocalAt);
   for(const event of feedback)showTransaction(event.title,[{icon:event.outcome==='win'?'✦':event.outcome==='lose'?'♠':'↻',text:event.detail},...(event.banked?[{icon:'◈',text:event.banked+' gold saved to your safe'}]:[])],event.gold,{auto:true,outcome:event.outcome,walletDelta:event.walletDelta});
   const matchesTile=Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0;
-  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(matchesTile||!state.plan?.treeWork&&autoArrivalKey===autoActivityKey(state));
+  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(matchesTile||!state.plan?.treeWork&&!state.plan?.fishingWork&&autoArrivalKey===autoActivityKey(state));
   if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
   else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);}
   if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}

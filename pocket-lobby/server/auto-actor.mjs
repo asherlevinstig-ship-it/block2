@@ -7,6 +7,7 @@ import {socialRooms} from '../public/shared-world.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {AWAY_GRACE_MS} from '../public/character-rules.js';
 import {choppingPose} from '../public/woodcutting.js';
+import {sharedFishingPose} from '../public/fishing.js';
 import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 
 export class AutoActor{
@@ -19,6 +20,11 @@ export class AutoActor{
   const stub=this.env.SHARED_ROOMS.get(this.env.SHARED_ROOMS.idFromName(name));
   const motion=this.actor.motion;
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
+  if(peer){
+   peer.fishingSpot=!!state.plan?.fishingWork?.spot;
+   peer.fishing=motion.moving?null:sharedFishingPose(state);
+   if(state.plan?.physicalFishing&&peer.activity==='fishing'&&!peer.fishing)peer.activity='waiting-to-fish';
+  }
   await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until:Date.now()+30000})}));
  }
  async tick(advance){
@@ -39,7 +45,9 @@ export class AutoActor{
   this.actor.active=active;await this.ctx.storage.put('actor',this.actor);
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
-  if(active)next=now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,Math.min(2000,(state.plan?.treeWork?.cut?.endsAt??now+2000)-now)));
+  const fishing=state?.plan?.fishingWork;
+  const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??state?.plan?.treeWork?.cut?.endsAt??now+2000;
+  if(active)next=now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,Math.min(2000,due-now)));
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
   else if(existing!==null)await this.ctx.storage.deleteAlarm();

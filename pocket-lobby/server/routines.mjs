@@ -11,10 +11,10 @@ import {startPlan,settlePlan} from './player-state.mjs';
 import {jobPreview} from '../public/jobs.js';
 import {depthsStageIndex} from '../public/depths.js';
 import {boarRules} from '../public/hunting.js';
-export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random,forceStart=false,physicalTimber=false}={}){
+export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random,forceStart=false,physicalTimber=false,physicalFishing=false}={}){
   if(state.autoSwitch&&!state.plan){
     const restartAt=state.report?.endedAt??now;delete state.autoSwitch;delete state.report;
-    state.controlMode='auto';touchPresence(state,restartAt,{active:false,forceStart:true,random,physicalTimber});
+    state.controlMode='auto';touchPresence(state,restartAt,{active:false,forceStart:true,random,physicalTimber,physicalFishing});
     if(state.plan)settlePlan(state,now,{random});return;
   }
   const last=state.routineLastSeen;
@@ -24,7 +24,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   if(active||!Number.isFinite(last))state.routineLastSeen=now;
   const rules=normalizeCharacterRules(state.characterRules);
   if(state.plan?.source==='rules'){
-    settlePlan(state,now,{stop:active,random});if(state.autoSwitch&&!state.plan)touchPresence(state,now,{active:false,random,physicalTimber});return;
+    settlePlan(state,now,{stop:active,random});if(state.autoSwitch&&!state.plan)touchPresence(state,now,{active:false,random,physicalTimber,physicalFishing});return;
   }
   if(!forceStart&&state.controlMode!=='auto'&&rules.strategy==='routine'&&upgradeGoalProgress(state)?.receipt)return;
   if(depthsStageIndex(state.location)>=0||(!forceStart&&(!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS))||state.plan||state.report)return;
@@ -47,6 +47,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
     restockAutoBread(state,metadata,queue?.budget??(rules.strategy==='earnGold'?rules.goldPolicy.budget:Infinity),Math.max(queue?.reserveGold??0,rules.goldPolicy.reserveGold));
   }
   if(physicalTimber)metadata.physicalTimber=true;
+  if(physicalFishing)metadata.physicalFishing=true;
   if(rules.simpleMode&&rules.simpleMode!=='gambling'){const queue={enabled:true,repeats:1,budget:100000,reserveGold:rules.goldPolicy.reserveGold,minHealth:simpleAutoRisks[rules.simpleRisk??'balanced'].minHealth,steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true,simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'});settlePlan(state,until,{stop:active,random});return;}
   if(rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='exploring'){if(!state.quest.accepted)return;startExplorationPlan(state,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
   const wantsRest=rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='rest';

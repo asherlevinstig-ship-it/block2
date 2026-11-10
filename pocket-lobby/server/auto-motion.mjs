@@ -29,7 +29,11 @@ export function advanceAutoMotion(motion,state){
  const target=door?.tile??goal,path=autoTilePath(motion.room,motion,target,state);
  if(path===null)return {...motion,moving:false,blocked:true};
  if(!path.length&&door)return {...motion,room:door.to,...door.arrival,moving:true,blocked:false};
- if(!path.length)return {...motion,...(state.plan?.treeWork?.tree?timberFacing({cx:motion.x,cy:motion.y},state.plan.treeWork.tree):{}),moving:false,blocked:false};
+ if(!path.length){
+  const tree=state.plan?.treeWork?.tree;
+  const facing=tree?timberFacing({cx:motion.x,cy:motion.y},tree):state.plan?.fishingWork?.spot?{direction:'right',back:false}:{};
+  return {...motion,...facing,moving:false,blocked:false};
+ }
  const next=path[0],dx=next.x-motion.x,dy=next.y-motion.y;
  return {...motion,...next,direction:dx-dy>=0?'right':'left',back:dx+dy<0,moving:true,blocked:false};
 }

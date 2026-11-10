@@ -14,8 +14,12 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const receipt=after.fishingReceipt;
  const timber=after.timberReceipt;
  if(timber?.id&&timber.id!==before.timberReceipt?.id)add('timber:'+timber.id,'timber','+'+timber.amount+' timber',timber.amount,timber.at??now,timber.room??room);
- if(receipt?.castId&&receipt.castId!==before.fishingReceipt?.castId)add('catch:'+receipt.castId,'catch','+1 '+(fishProducts[receipt.fish]?.name??'fish'),1,now,receipt.room??after.location);
- if(same){const caught=sum(p.catches)-sum(b.catches);if(caught>0){const names=Object.keys(p.catches??{}).filter(id=>(p.catches[id]??0)>(b.catches?.[id]??0));add('catch:'+p.startedAt+':'+sum(p.catches),'catch','+'+caught+' '+(caught===1?fishProducts[names[0]]?.name??'fish':'fish'),caught,p.cursorAt??(Number.isFinite(p.nextCatchAt-p.interval)?p.nextCatchAt-p.interval:now),'pond');}}
+ const landed=receipt?.castId&&receipt.castId!==before.fishingReceipt?.castId;
+ if(landed){
+  add('catch:'+receipt.castId,'catch','+1 '+(fishProducts[receipt.fish]?.name??'fish'),1,receipt.at??now,receipt.room??after.location);
+  if(receipt.cast&&events.at(-1)?.id==='catch:'+receipt.castId)events.at(-1).fishing={...receipt.cast,room:receipt.room,spot:receipt.spot,landAt:receipt.at,fishId:receipt.fish};
+ }
+ if(same&&!landed){const caught=sum(p.catches)-sum(b.catches);if(caught>0){const names=Object.keys(p.catches??{}).filter(id=>(p.catches[id]??0)>(b.catches?.[id]??0));add('catch:'+p.startedAt+':'+sum(p.catches),'catch','+'+caught+' '+(caught===1?fishProducts[names[0]]?.name??'fish':'fish'),caught,p.cursorAt??(Number.isFinite(p.nextCatchAt-p.interval)?p.nextCatchAt-p.interval:now),'pond');}}
  if(after.combatReceipt?.id!==before.combatReceipt?.id)for(const e of after.combatReceipt?.events??[]){
   const key='combat:'+after.combatId+':'+e.at+':'+e.action,eventRoom=before.hunting?.encounter?before.location:room;
   if(e.taken>0)add(key+':hurt','damage','−'+e.taken+' HP',e.taken,e.at,eventRoom);

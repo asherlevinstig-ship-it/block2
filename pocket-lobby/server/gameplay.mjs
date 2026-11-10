@@ -204,7 +204,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
-    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
+    const {id,started,castEnds,biteAt,landAt}=cast;
+    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,at:now,cast:{id,started,castEnds,biteAt,landAt},spot:state.position,...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
     delete state.fishingCast;
     return;
   }

@@ -10,13 +10,15 @@ import {resolveIdentity,tokenHash} from './identity.mjs';
 import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../public/shared-world.js';
 import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 import {choppingPose} from '../public/woodcutting.js';
+import {besideFishingStation} from '../public/region-catalog.js';
+import {sharedFishingPose} from '../public/fishing.js';
 
 function familiarProfile(state){
  const familiar=state.familiars?.equipped;
  return {familiar,familiarName:normalizeFamiliarName(state.familiars?.names?.[familiar])||undefined};
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,chopping:meta.chopping??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};}
+export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,chopping:meta.chopping??null,fishing:meta.fishing??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};}
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
   if(request.method!=='GET'||!check&&request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
@@ -55,9 +57,9 @@ export function sharedMoonTrail(state,room,route,now){
 }
 export class SharedRoom{
   constructor(ctx,env){
-    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.treeSnapshot=null;this.room=null;
+    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.fishingSpots=new Map();this.treeSnapshot=null;this.room=null;
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
-    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));await this.loadTrees(this.sessions.values().next().value?.room??this.autoPeers.values().next().value?.room);});
+    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));const spots=await ctx.storage.get('fishingSpots');if(Array.isArray(spots))this.fishingSpots=new Map(spots.filter(([,spot])=>spot.until>Date.now()));await this.loadTrees(this.sessions.values().next().value?.room??this.autoPeers.values().next().value?.room);});
   }
   peers(now=Date.now()){
     const peers=new Map([...this.sessions.values()].filter(meta=>!meta.serverAuto).map(meta=>[meta.playerId??meta.id,meta]));
@@ -76,9 +78,22 @@ export class SharedRoom{
     if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
   }
   async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);if(this.room)await this.loadTrees(this.room);this.snapshot();await this.scheduleVeilExpiry();}
-  fetch(request){return this.ctx.blockConcurrencyWhile(()=>{const path=new URL(request.url).pathname;return path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
+  fetch(request){return this.ctx.blockConcurrencyWhile(()=>{const path=new URL(request.url).pathname;return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
+  async reserveFishingSpot(request){
+    const {playerId,room,spots}=await request.json(),now=Date.now();
+    for(const [id,spot] of this.fishingSpots)if(spot.until<=now)this.fishingSpots.delete(id);
+    const own=this.fishingSpots.get(playerId);
+    const occupied=[...this.sessions.values(),...this.autoPeers.values(),...[...this.fishingSpots].map(([id,spot])=>({...spot,playerId:id}))];
+    const free=spot=>besideFishingStation(room,spot)&&!occupied.some(other=>other.playerId!==playerId&&other.x===spot.x&&other.y===spot.y);
+    const spot=spots.find(s=>s.x===own?.x&&s.y===own?.y&&free(s))??spots.find(free);
+    if(!spot)return json({spot:null});
+    this.fishingSpots.set(playerId,{...spot,until:now+120000});
+    await this.ctx.storage.put('fishingSpots',[...this.fishingSpots]);
+    return json({spot});
+  }
   async autoPresence(request){
     const {playerId,peer,until,remove}=await request.json();
+    if((remove||!peer?.fishingSpot)&&this.fishingSpots.delete(playerId))await this.ctx.storage.put('fishingSpots',[...this.fishingSpots]);
     if(peer?.room&&this.room!==peer.room)await this.loadTrees(peer.room);
     if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
     else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
@@ -107,7 +122,7 @@ export class SharedRoom{
     const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
     if(state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules'){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
-    meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.chopping=choppingPose(state);meta.auto=state.plan?.source==='rules';
+    meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
     // Connected avatars report bounded visual movement; activity rewards use the saved server position.
     if(meta.auto)meta.seat=null;
     ws.serializeAttachment(meta);this.snapshot();
@@ -123,7 +138,7 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
     await this.loadTrees(profile.room);
-    const meta={...profile,veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    const meta={...profile,fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();

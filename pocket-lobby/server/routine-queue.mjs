@@ -24,10 +24,11 @@ export const QUEUE_ACTION_MS=15000;
 export function startRoutineQueue(state,rules,startedAt,metadata){
   state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:metadata.rationGoldSpent??0,baitBought:0};
 }
-function finish(state,plan,reason,endedAt){
+export function finishRoutineQueue(state,plan,reason,endedAt){
   state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
   state.location='home';state.position={x:5,y:7};return true;
 }
+const finish=finishRoutineQueue;
 function nextStep(plan,at,note){
   plan.entries.push({cycle:plan.cycle+1,type:plan.queue.steps[plan.stepIndex].type,count:plan.stepCount,at,note});
   if(plan.simpleMode){plan.simpleTasks?.shift();if(!plan.simpleTasks?.length){plan.lastSimpleJob=plan.simpleJob;plan.jobsCompleted=(plan.jobsCompleted??0)+1;}}
@@ -38,6 +39,12 @@ function nextStep(plan,at,note){
 export function completeRoutineTimber(state,amount,xp,at){
  const p=state.plan;p.woodXp+=xp;p.timber+=amount;p.stepCount+=amount;p.cursorAt=at;p.nextAt=null;autoStoreVault(state,p,at);
  if(p.stepCount>=p.queue.steps[p.stepIndex].amount){delete p.treeWork;nextStep(p,at,'Gathered '+p.stepCount+' timber from real trees');}
+}
+export function completeRoutineFish(state,fish,xp,at){
+ const p=state.plan;
+ p.catches[fish]=(p.catches[fish]??0)+1;p.patienceXp+=xp;p.stepCount++;p.cursorAt=at;p.nextAt=null;
+ p.fishingLandingUntil=at+1100;
+ if(p.stepCount>=p.queue.steps[p.stepIndex].amount){delete p.fishingWork;nextStep(p,at,'Caught '+p.stepCount+' fish');}
 }
 export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={}){
   const p=state.plan,until=Math.min(now,p.endAt);let changed=false;
@@ -52,6 +59,8 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     p.preflightComplete=true;changed=true;
   }
   for(let guard=0;guard<10000;guard++){
+    if(p.fishingLandingUntil>now&&!stop&&now<p.endAt)return changed;
+    if(p.physicalFishing&&p.fishingWork?.cast&&!stop&&now<p.endAt)return changed;
     if(p.physicalTimber&&p.treeWork?.cut&&!stop&&now<p.endAt)return changed;
     if(p.activeHunt){
       let events=advanceServerCombat(state,until,random);if(events.length)changed=true;
@@ -96,6 +105,20 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     }
     if(p.cycle>=p.queue.repeats)return finish(state,p,'queue-complete',p.cursorAt);
     const step=p.queue.steps[p.stepIndex],type=step.type;
+    if(type!=='fishing')delete p.fishingWork;
+    if(p.physicalFishing&&type==='fishing'){
+      if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
+      const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
+      if(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught)return finish(state,p,'requirements',p.cursorAt);
+      if(state.fishingGear.bait<=p.keepBait){delete p.fishingWork;nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
+      if(!p.fishingWork){
+        const food=applyAutoFood(state,p,p.cursorAt);
+        if(food.returnHome)return finish(state,p,food.reason??'food-reserve',p.cursorAt);
+        p.fishingWork={};state.location='pond';state.position={x:4,y:5};changed=true;
+      }
+      p.nextAt=null;
+      return changed;
+    }
     if(type!=='woodcutting')delete p.treeWork;
     if(p.physicalTimber&&type==='woodcutting'&&(stop||now>=p.endAt))return finish(state,p,stop?'returned':'away-cap',until);
     if(p.physicalTimber&&type==='woodcutting'&&!stop&&now<p.endAt){
