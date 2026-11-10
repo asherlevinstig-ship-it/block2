@@ -9,6 +9,53 @@ test('supplies and wallet limits stop with a useful reason',()=>{const s=start(c
 test('explore loops beyond the old tour and resting stays active after healing',()=>{const s=start(character('exploring',{characterRules:simpleAutoRules('exploring',{risk:'safe'})}));settlePlan(s,600000,{random:()=>.5});assert(s.plan.explored>5);assert.equal(s.credits,100);assert.equal(s.hunting.encounter,null);for(const id of ['pond','logging','creek','trail'])assert(s.adventure.discovered.includes(id));const rest=start(character('rest',{health:25}));settlePlan(rest,600000);assert.equal(rest.health,100);assert(rest.plan);assert.equal(rest.location,'home');});
 test('Random changes job after a completed batch and never selects gambling',()=>{const s=character('random');s.fishingGear.bait=10;const p={simpleMode:'random',simpleRisk:'balanced'};assert.equal(chooseSimpleTask(s,p,()=>.4).step.type,'fishing');p.simpleTasks=[];p.lastSimpleJob='fishing';assert.equal(chooseSimpleTask(s,p,()=>0).step.type,'explore');assert.equal(p.simpleJob,'exploring');});
 test('hunting and battle use suitable equipped weapons and safe unlocked targets',()=>{const unarmed=character('hunting');unarmed.combatGear.equippedWeapon=null;assert.equal(start(unarmed).report.reason,'no-safe-work');const stats={strengthXp:skillXpForLevel(10),agilityXp:skillXpForLevel(10),vitalityXp:skillXpForLevel(10)},gear={ownedWeapons:['ironSword'],equippedWeapon:'ironSword'};const hunt=start(character('hunting',{stats,combatGear:gear}));assert.equal(hunt.plan.queue.steps[0].type,'huntBoars');settlePlan(hunt,180000,{random:()=>.5});assert(hunt.plan.goldEarned>0);const battle=start(character('battle',{stats,combatGear:gear,history:{beetleDefeated:true}}));assert.equal(battle.plan.queue.steps[0].type,'huntBeetles');});
+const battleCharacter=(extra={})=>character('battle',{
+  characterRules:simpleAutoRules('battle',{risk:'bold'}),
+  stats:{strengthXp:skillXpForLevel(20),agilityXp:skillXpForLevel(20),vitalityXp:skillXpForLevel(20)},
+  combatGear:{ownedWeapons:['ironSword'],equippedWeapon:'ironSword'},...extra,
+});
+const battleTick=(state,now)=>settlePlan(state,now,{random:()=>.5});
+
+test('dedicated Auto Battle sells three real victories in one trip',()=>{
+ const state=start(battleCharacter());
+ assert.equal(state.plan.queue.steps[0].amount,3);
+ assert.match(autoStatus(state).current,/Fight 1 of 3/);
+ for(let now=1500;now<100000&&state.location!=='market';now+=500)battleTick(state,now);
+ assert.equal(state.location,'market');
+ assert.equal(state.plan.hunts.wins,3);
+ assert.equal(state.huntingLoot.boar,3);
+ assert.equal(state.credits,100);
+ battleTick(state,state.plan.nextAt);
+ assert.equal(state.huntingLoot.boar,0);
+ assert.equal(state.credits,190);
+ assert.equal(state.plan.entries.filter(e=>e.type==='sellMeat').length,1);
+});
+
+test('Auto Battle sells early when the next fight is unsafe, the bag fills, or time runs short',()=>{
+ for(const condition of ['health','capacity','deadline']){
+  const state=start(battleCharacter(condition==='capacity'?{huntingLoot:{boar:999999}}:{}));
+  battleTick(state,state.plan.nextAt);
+  assert(state.plan.activeHunt);
+  if(condition==='health')state.health=59;
+  if(condition==='deadline')state.plan.endAt=state.plan.activeHunt.startedAt+42000;
+  state.hunting.encounter.health=1;
+  for(let now=16500;now<25000&&state.plan.activeHunt;now+=500)battleTick(state,now);
+  assert.equal(state.plan.hunts.wins,1,condition);
+  assert.equal(state.plan.queue.steps[state.plan.stepIndex].type,'sellMeat',condition);
+  assert.equal(state.location,'market',condition);
+ }
+});
+
+test('Auto Battle checks hunger between fights and sells a full bag before starting',()=>{
+ const hungry=start(battleCharacter({vitals:{hunger:2}}));
+ for(let now=1500;now<40000&&hungry.plan;now+=500)battleTick(hungry,now);
+ assert.equal(hungry.report.reason,'out-of-food');
+ assert.equal(hungry.report.hunts.started,1);
+ assert.equal(hungry.huntingLoot.boar,1);
+ const full=start(battleCharacter({huntingLoot:{boar:1000000}}));
+ assert.equal(full.plan.queue.steps[0].type,'sellMeat');
+ assert.equal(full.plan.activeHunt,undefined);
+});
 test('saved simple mode starts after idle deadline',()=>{const s=character('exploring');s.routineLastSeen=1000;touchPresence(s,AWAY_GRACE_MS,{active:false});assert.equal(s.plan,undefined);touchPresence(s,1000+AWAY_GRACE_MS,{active:false});assert.equal(s.plan.simpleMode,'exploring');});
 test('API starts, switches loops and restarts over an old report in one action',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const clock=Date.now;let now=1000;Date.now=()=>now;t.after(()=>Date.now=clock);const origin='https://tower.test';let packet,cookie='';

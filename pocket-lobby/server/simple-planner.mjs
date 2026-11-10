@@ -1,10 +1,12 @@
-import {simpleAutoRisks} from '../public/simple-auto.js';
+import {battleBatchLimit,simpleAutoRisks} from '../public/simple-auto.js';
 import {safeHuntPreview} from './gold-planner.mjs';
-import {beetleHuntUnlocked,canUseWeapon} from '../public/hunting.js';
+import {beetleHuntUnlocked,canUseWeapon,huntEnemies} from '../public/hunting.js';
 import {fishingCatalog} from '../public/fishing.js';
 import {skillLevel} from '../public/skill-curve.js';
 import {randomNeed,randomSurplusSale} from './random-needs.mjs';
 const step=(type,amount=1)=>({type,amount});
+export const battleLootFull=(state,enemy)=>(state.huntingLoot[enemy.loot]??0)>=1000000;
+
 export function chooseSimpleTask(state,p,random=Math.random){
  const mode=p.simpleMode,policy=state.characterRules.goldPolicy,reserve=policy.reserveGold,risk=p.simpleRisk??'safe',profile=simpleAutoRisks[risk];
  const rod=fishingCatalog.rods[state.fishingGear.equippedRod],canFish=rod&&state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)&&skillLevel(state.stats.patienceXp)>=rod.patience&&(state.history.fishCaught||state.adventure.discovered.includes('pond'));
@@ -38,7 +40,15 @@ export function chooseSimpleTask(state,p,random=Math.random){
    tasks.push(step('fishing',Math.min(profile.batch,state.fishingGear.bait>=profile.batch?state.fishingGear.bait:10)),step('sellFish',mode==='random'?policy.keepFish:0));
   }else if(job==='hunting'||job==='battle'){
    if(job==='hunting'?!canHunt:!canHunt&&!canBattle)return {stop:'no-safe-work',reason:'Your gear is not strong enough for a safe fight. Equip a stronger weapon or choose another mode.'};
-   const beetle=job==='battle'&&canBattle&&(risk!=='safe'||!canHunt);if(!safeHuntPreview(state,beetle?'beetle':'boar',profile.minHealth,profile.remainingHealth))tasks.push(step('rest',0));tasks.push(step(beetle?'huntBeetles':'huntBoars',1),step(beetle?'sellShells':'sellMeat',mode==='random'?(beetle?policy.keepShells:policy.keepMeat):0));
+   const beetle=job==='battle'&&canBattle&&(risk!=='safe'||!canHunt),enemy=huntEnemies[beetle?'beetle':'boar'];
+   const sale=step(beetle?'sellShells':'sellMeat',mode==='random'?(beetle?policy.keepShells:policy.keepMeat):0);
+   if(mode==='battle'&&battleLootFull(state,enemy)){
+    if((state.bank?.vault?.rules?.['loot:'+enemy.loot]??0)>=state.huntingLoot[enemy.loot])return {stop:'inventory-full',reason:'Your bag is full and the loot is protected by your safe rules.'};
+   }else{
+    if(!safeHuntPreview(state,enemy.id,profile.minHealth,profile.remainingHealth))tasks.push(step('rest',0));
+    tasks.push(step(beetle?'huntBeetles':'huntBoars',mode==='battle'?battleBatchLimit:1));
+   }
+   tasks.push(sale);
   }else if(job==='woodcutting'){tasks=[step('woodcutting',profile.batch),step('sellTimber',mode==='random'?policy.keepTimber:0)];}
   else if(job==='rest')tasks=[step('rest',0)];
   else{

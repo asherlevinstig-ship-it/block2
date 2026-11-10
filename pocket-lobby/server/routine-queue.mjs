@@ -1,7 +1,8 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {familiarFishingTime} from '../public/familiars.js';
 import {useHunger} from '../public/player-vitals.js';
-import {chooseSimpleTask} from './simple-planner.mjs';
+import {battleLootFull,chooseSimpleTask} from './simple-planner.mjs';
+import {simpleAutoRisks} from '../public/simple-auto.js';
 import {randomNeed} from './random-needs.mjs';
 import {normalizeFoodPolicy} from '../public/food-policy.js';
 import {explorationStops,EXPLORE_STOP_MS} from './exploration-plan.mjs';
@@ -11,7 +12,7 @@ import {towerBread,cookingQueueRecipes,mealRecipes,homeStove,cookingPlan,prepare
 import {homeRestDuration} from '../public/bed-rest.js';
 import {autoStoreVault} from './vault.mjs';
 import {autoBankGold} from './banking.mjs';
-import {chooseGoldTask} from './gold-planner.mjs';
+import {chooseGoldTask,safeHuntPreview} from './gold-planner.mjs';
 import {resolveQueueGoal} from './upgrade-goals.mjs';
 import {startCombatEncounter,advanceServerCombat} from './activities.mjs';
 import {huntEnemies,canUseWeapon,queueHuntEnemies,huntRespawnAt,beetleHuntUnlocked} from '../public/hunting.js';
@@ -21,6 +22,7 @@ import {skillLevel,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {harvestTimber,woodRules} from '../public/woodcutting.js';
 import {recordQuest} from '../public/quests.js';
 export const QUEUE_ACTION_MS=15000;
+const huntTimeBuffer=30000;
 export function startRoutineQueue(state,rules,startedAt,metadata){
   state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:metadata.rationGoldSpent??0,baitBought:0};
 }
@@ -157,10 +159,17 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         interval=woodRules.offlineInterval;state.location='logging';state.position={x:5,y:5};
       }else if(Object.hasOwn(queueHuntEnemies,type)){
         p.hunts??={started:0,wins:0,escapes:0,defeats:0,xp:{},loot:{},stones:{},mastery:{},recent:[]};
-        const minimum=p.queue.minHealth??60;
+        const minimum=p.queue.minHealth??60,enemy=queueHuntEnemies[type];
+        if(p.simpleMode==='battle'){
+          const remaining=simpleAutoRisks[p.simpleRisk??'balanced'].remainingHealth;
+          const reason=battleLootFull(state,enemy)?'Bag full · Selling loot':!safeHuntPreview(state,enemy.id,minimum,remaining)?'Next fight is unsafe · Selling loot':null;
+          if(reason){nextStep(p,p.cursorAt,reason);changed=true;continue;}
+        }
         if(state.health<minimum){nextStep(p,p.cursorAt,'Hunting stopped at '+state.health+' HP · minimum '+minimum);changed=true;continue;}
-        const enemy=queueHuntEnemies[type];
         interval=Math.max(QUEUE_ACTION_MS,(huntRespawnAt(state.hunting,enemy)??0)-p.cursorAt);
+        if(p.simpleMode==='battle'&&p.stepCount>0&&p.cursorAt+interval+huntTimeBuffer>p.endAt){
+          nextStep(p,p.cursorAt,'Session ending · Selling loot');changed=true;continue;
+        }
         state.location=enemy.room;state.position={x:5,y:5};
       }else if(type==='explore'){const stop=explorationStops[(p.exploreIndex??0)%explorationStops.length];interval=EXPLORE_STOP_MS;state.location=stop.room;state.position={x:stop.x,y:stop.y};}
       else if(type==='rest'){interval=state.health<100?homeRestDuration(state,QUEUE_ACTION_MS):p.simpleMode?60000:QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
@@ -175,7 +184,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if((state.meals[id]??0)+(state.bank?.vault?.items?.['meal:'+id]??0)>=step.amount){nextStep(p,at,'Cooked '+p.stepCount+' '+mealRecipes[id].name+' · Stock target reached');changed=true;continue;}
     }else if(Object.hasOwn(queueHuntEnemies,type)){
       if(state.health<(p.queue.minHealth??60)){nextStep(p,at,'Starting health is too low');changed=true;continue;}
-      if(at+30000>p.endAt)return finish(state,p,'away-cap',at);
+      if(at+huntTimeBuffer>p.endAt)return finish(state,p,'away-cap',at);
       if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))return finish(state,p,'weapon-required',at);
       const enemy=queueHuntEnemies[type];
       if(enemy.id==='beetle'&&!beetleHuntUnlocked(state))return finish(state,p,'beetle-trial-required',at);

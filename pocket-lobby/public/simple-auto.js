@@ -1,8 +1,9 @@
+export const battleBatchLimit=3;
 export const simpleAutoModes={
  fishing:{name:'Auto fish',icon:'fish',loop:'Buy bait → Catch fish → Sell fish → Repeat',detail:'Uses your equipped rod. Buys bait in packs of 10 and sells each batch. Needs a discovered fishing pond.'},
  gambling:{name:'Auto gamble',icon:'lounge',loop:'Visit lounge → Play your table → Repeat',detail:'Uses game gold. Fixed bets; stops at your loss limit. Requires a smart outfit.'},
  exploring:{name:'Auto explore',icon:'map',loop:'Walk trails → Discover places → Return → Repeat',detail:'Explore the courtyard, trail, creek, pond and Timber Hollow. Riskier settings can add suitable hunts along the way.'},
- battle:{name:'Auto battle',icon:'combat',loop:'Choose a safe monster → Fight → Sell loot → Rest → Repeat',detail:'Chooses suitable unlocked monsters for your risk level. Uses your equipped weapon, powers and Auto dodge.'},
+ battle:{name:'Auto battle',icon:'combat',loop:'Fight up to '+battleBatchLimit+' times → Sell loot → Recover as needed',detail:'Checks health, food and bag space between fights. Uses your equipped weapon, powers and Auto dodge.'},
  rest:{name:'Auto rest',icon:'home',loop:'Return home → Recover → Stay resting',detail:'Recover at home and stay there. No supplies or gold needed.'},
  hunting:{name:'Auto hunt',icon:'hunt',loop:'Hunt boars → Sell meat → Rest → Repeat',detail:'Hunts wildlife with your equipped weapon. Recovers before the next fight.'},
  random:{name:'Random',icon:'rules',loop:'Check needs → Eat or recover → Earn, battle or explore → Reassess',detail:'Handles hunger and recovery first. Low gold favours affordable work; healthy, fed adventurers are more likely to fight. Visits the bakery within your bread budget. Never gambles.'}
