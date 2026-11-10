@@ -67,7 +67,7 @@ export async function settled(env,id,activities=false,{idle=false}={}){
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(!planChanged&&!activityChanged&&!migrated)return row;
     const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID());
-    if(updated){await publishWorldActivity(env,id,JSON.parse(row.state_json),state,updated.revision,{fresh:idle||now-(row.updated_at??0)<10000});return updated;}
+    if(updated){await publishWorldActivity(env,id,before,state,updated.revision,{fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});return updated;}
   }
   throw new Error("Your character is busy. Please retry.");
 }
