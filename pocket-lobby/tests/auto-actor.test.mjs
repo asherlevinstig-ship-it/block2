@@ -77,3 +77,12 @@ test('taking control and returning from idle both keep the server walking positi
   assert.equal(response.status,200);const {state}=await response.json();assert.equal(state.location,'hub');assert.deepEqual(state.position,{x:8,y:9});assert(!state.plan);
  }
 });
+
+test('Auto work changing destination does not invalidate its current room login',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());const playerId='auto-transit',state=normalizeState({location:'home'});state.plan={source:'rules',kind:'queue'};
+ sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run(playerId,JSON.stringify(state),'settle:move',Date.now());
+ const ctx=context(),room=new SharedRoom(ctx,{TOWER_DB:db});await ctx.ready();
+ const meta={id:'public-transit',playerId,room:'bakery',serverAuto:true,expiresAt:Date.now()+100000};
+ room.autoPeers.set(playerId,{...meta,until:Date.now()+30000});assert(await room.authorized(meta));
+ meta.expiresAt=Date.now()-1;assert.equal(await room.authorized(meta),false,'expired login still rejected');
+});

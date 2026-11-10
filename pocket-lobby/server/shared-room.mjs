@@ -130,6 +130,10 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();
     if(!row)return false;
     if(meta.room===factionHall&&(await factionHallAccess(this.env.TOWER_DB,meta.playerId))?.id!==meta.factionId)return false;
+    // Auto's saved work destination can change before its visible actor reaches
+    // the next doorway. The trusted room lease owns that transition, not login auth.
+    const actor=this.autoPeers.get(meta.playerId);
+    if(meta.serverAuto&&actor?.until>Date.now()&&actor.room===meta.room)return true;
     const state=JSON.parse(row.state_json);return (!state.plan||state.plan.source==='rules')&&!state.report&&state.location===meta.room;
   }
   async webSocketMessage(ws,raw){
