@@ -5,7 +5,7 @@ export const simpleAutoModes={
  battle:{name:'Auto battle',icon:'combat',loop:'Choose a safe monster → Fight → Sell loot → Rest → Repeat',detail:'Chooses suitable unlocked monsters for your risk level. Uses your equipped weapon, powers and Auto dodge.'},
  rest:{name:'Auto rest',icon:'home',loop:'Return home → Recover → Stay resting',detail:'Recover at home and stay there. No supplies or gold needed.'},
  hunting:{name:'Auto hunt',icon:'hunt',loop:'Hunt boars → Sell meat → Rest → Repeat',detail:'Hunts wildlife with your equipped weapon. Recovers before the next fight.'},
- random:{name:'Random',icon:'rules',loop:'Do a job → Pick a different activity → Repeat',detail:'Mixes suitable fishing, hunting, timber gathering and peaceful exploration. Never gambles.'}
+ random:{name:'Random',icon:'rules',loop:'Check needs → Eat or recover → Earn, battle or explore → Reassess',detail:'Handles hunger and recovery first. Low gold favours affordable work; healthy, fed adventurers are more likely to fight. Visits the bakery within your bread budget. Never gambles.'}
 };
 export const simpleAutoRisks={
  safe:{name:'Safe',batch:3,baitStock:10,minHealth:100,remainingHealth:60,fleeBelow:40,style:'cautious',bet:5,lossLimit:25},
@@ -22,10 +22,11 @@ export function simpleAutoRiskDetail(mode,risk='balanced'){
  if(mode==='random')return (risk==='safe'?'Gathering and peaceful exploration only. No combat.':'Mix gathering, exploration and '+(risk==='bold'?'the strongest suitable unlocked monsters.':'suitable boar hunts.'))+' '+p.batch+' items per gathering batch. Never gambles.'+(risk==='safe'?'':' '+combat);
  return (mode==='battle'&&risk==='safe'?'Prefer boars; try beetles only if no suitable boar fight is available. ':'')+combat;
 }
-export function simpleAutoRules(mode,{risk='balanced',enabled=true,reserveGold=0,bet,lossLimit,game='roulette',breadBudget=0,food}={}){
+export function simpleAutoRules(mode,{risk='balanced',enabled=true,reserveGold=0,bet,lossLimit,game='roulette',breadBudget=mode==='random'?30:0,food}={}){
  if(!Object.hasOwn(simpleAutoModes,mode))throw new Error('Choose an Auto activity.');
  if(!Object.hasOwn(simpleAutoRisks,risk))throw new Error('Choose a valid Auto risk level.');
  if(mode==='rest')risk='safe';
  const profile=simpleAutoRisks[risk];if(!profile)throw new Error('Choose a valid Auto risk level.');
  return {...(breadBudget||food?{food:{...food,breadBudget}}:{}),simpleMode:mode,simpleRisk:risk,enabled,activity:'rest',strategy:mode==='gambling'?'gambling':'routine',keepBait:0,timberTarget:1000000,goldPolicy:{reserveGold,budget:100000,keepFish:0,keepTimber:0,keepMeat:0,keepShells:0,minHealth:profile.minHealth},gambling:{game,color:'red',bet:bet??profile.bet,lossLimit:lossLimit??profile.lossLimit,reserveGold,profitTarget:100000,maxRounds:1000},combat:{enabled:true,q:true,e:true,dodge:true,style:profile.style,fleeBelow:profile.fleeBelow}};
 }
+

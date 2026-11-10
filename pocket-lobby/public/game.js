@@ -5963,7 +5963,7 @@ function openCharacterRules(options={}){
  const button=document.createElement('button');button.type='button';button.dataset.mode=id;
  const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('class','hud-icon');icon.setAttribute('aria-hidden','true');
  const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','#hud-i-'+mode.icon);icon.append(use);
- const label=document.createElement('b');label.textContent=mode.name;button.append(icon,label);button.onclick=()=>{simpleAutoChoice=id;if(id==='gambling'){$('simpleAutoBet').value=simpleAutoRisks[simpleAutoRisk].bet;$('simpleAutoLoss').value=simpleAutoRisks[simpleAutoRisk].lossLimit;}$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
+ const label=document.createElement('b');label.textContent=mode.name;button.append(icon,label);button.onclick=()=>{if(id==='random'&&simpleAutoChoice!=='random'&&rules.simpleMode!=='random'&&Number($('simpleAutoBreadBudget').value)===0)$('simpleAutoBreadBudget').value=30;simpleAutoChoice=id;if(id==='gambling'){$('simpleAutoBet').value=simpleAutoRisks[simpleAutoRisk].bet;$('simpleAutoLoss').value=simpleAutoRisks[simpleAutoRisk].lossLimit;}$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
  }
  renderSimpleAuto();$('simpleAutoDialog').showModal();
 }
@@ -6445,7 +6445,7 @@ function autoRoomRoute(from,to){
 function autoWorkTile(state){
   if(state.autoPresence?.moving){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
   const task=state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type:state.plan?.kind;
-  const interactionType=task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
+  const interactionType=task==='buyBread'?'foodStall':task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
   const item=interactionType?roomFurniture().find(i=>i.type===interactionType):task==='woodcutting'?roomFurniture().filter(i=>isTimberTree(i)&&!treeState(i).regrowsAt).sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:null;
   const goal=state.position??{x:5,y:7},exits=new Set((roomDoors[currentRoom]??[]).map(d=>tileKey(d.tile.x,d.tile.y)));
   const candidates=[];
@@ -6465,7 +6465,7 @@ function renderAutoJourneyHud(){
   $('autoPanel').hidden=false;$('autoModeLabel').textContent=active?'Auto · Walking':'Returning home';
   $('autoCurrent').textContent=autoJourney.blocked?'Path blocked':'Walking to '+(roomDetails[autoJourney.room]?.name??autoJourney.room);
   $('autoWhere').textContent=roomDetails[currentRoom].name+' · Following the room paths';
-  $('autoDecision').textContent=autoJourney.blocked?'There is no clear route. Clear the doorway or adjust your home layout.':'Your adventurer is walking through the doors to the next activity.';
+  $('autoDecision').textContent=autoJourney.blocked?'There is no clear route. Clear the doorway or adjust your home layout.':(state?.plan?.plannerReason?state.plan.plannerReason+' ':'')+'Your adventurer is walking through the doors to the next activity.';
   if(!state?.plan&&!state?.report){$('autoTakeControl').disabled=true;$('autoTakeControl').textContent='Walking home…';}
 }
 function finishAutoJourney(){

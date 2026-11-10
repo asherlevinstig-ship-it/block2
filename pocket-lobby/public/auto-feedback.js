@@ -26,8 +26,10 @@ export function createAutoFeedbackTracker(initial){
   if(delta(p.hunts?.defeats,b.hunts?.defeats))events.push(event('Auto · Defeated','Returned home to recover. Review your risk level.',0,'lose'));
   if(delta(p.hunts?.escapes,b.hunts?.escapes))events.push(event('Auto · Escaped','Retreated from danger. Your hunting session has stopped.'));
   if(wins)events.push(event('Auto · Victory!',wins+' monster'+(wins===1?'':'s')+' defeated · Loot added to Inventory',0,'win'));
+  const bread=delta(p.rationsBought,b.rationsBought);
+  if(bread)events.push(event('Auto · Bread purchased','+'+bread+' Tower Bread · Food for the road',gold));
   if(bait)events.push(event('Auto · Bait purchased','+'+bait+' Riverworms',gold));
-  else if(gold)events.push(event('Auto · Trade complete','Loot sold at the Trading Post',gold,gold>0?'win':'progress'));
+  else if(gold&&!bread)events.push(event('Auto · Trade complete','Loot sold at the Trading Post',gold,gold>0?'win':'progress'));
   if(explored)events.push(event('Auto · Exploring',explored+' peaceful stop'+(explored===1?'':'s')+' visited'));
   if(current.health===100&&before.health<100)events.push(event('Auto · Fully rested','+'+(100-before.health)+' HP · Five hearts restored'));
   return events.slice(-4);

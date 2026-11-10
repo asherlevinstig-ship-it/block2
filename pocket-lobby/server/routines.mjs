@@ -42,7 +42,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget,...(rules.simpleMode?{simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'}:{}),...(rules.food?{foodPolicy:rules.food}:{})};
   const activeWork=rules.simpleMode?['fishing','hunting','battle','random'].includes(rules.simpleMode)
     :rules.strategy==='earnGold'||rules.strategy==='routine'&&(rules.queue?.enabled||['fishing','woodcutting'].includes(rules.activity));
-  if(activeWork){
+  if(activeWork&&rules.simpleMode!=='random'){
     const queue=rules.strategy==='routine'&&!rules.simpleMode&&rules.queue?.enabled?rules.queue:null;
     restockAutoBread(state,metadata,queue?.budget??(rules.strategy==='earnGold'?rules.goldPolicy.budget:Infinity),Math.max(queue?.reserveGold??0,rules.goldPolicy.reserveGold));
   }
