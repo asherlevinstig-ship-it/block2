@@ -644,7 +644,7 @@ function updateActorNameplates(){
 function connectRoom(){
   if(!multiplayer)return;
   const state=window.playerCloud?.initial;
-  if(autoJourney||state?.plan&&state.plan.source!=='rules'||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Travelling · Auto Mode';return;}
+  if(autoJourney||state?.autoPresence?.moving||state?.autoPresence&&state.autoPresence.room!==state.location||state?.plan&&state.plan.source!=='rules'||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Travelling · Auto Mode';return;}
   if(multiplayer.room===currentRoom&&(multiplayer.connected||multiplayer.connecting))return;
   multiplayer.join(currentRoom);
 }
@@ -6391,7 +6391,7 @@ $('fishingSound').onclick=()=>{
   if(fishingSound)fishingMoments.sound('catch');
 };
 movePlayerToSpawn();updateName();switchMode(false);
-if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
+if(savedPlayerState?.location&&roomDetails[savedPlayerState.location]){const motion=savedPlayerState.autoPresence;enterRoom(motion?.room??savedPlayerState.location,motion?{x:motion.x,y:motion.y}:savedPlayerState.position);}
 if(hunting.encounter&&!savedPlayerState?.plan?.activeHunt){
   if(currentRoom===huntEnemy(hunting.encounter).room&&combatGear.equippedWeapon){
     if(!window.playerCloud?.gameplay)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);
@@ -6443,6 +6443,7 @@ function autoRoomRoute(from,to){
   return null;
 }
 function autoWorkTile(state){
+  if(state.autoPresence?.moving){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
   const task=state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type:state.plan?.kind;
   const interactionType=task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
   const item=interactionType?roomFurniture().find(i=>i.type===interactionType):task==='woodcutting'?roomFurniture().filter(i=>isTimberTree(i)&&!treeState(i).regrowsAt).sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:null;
@@ -6517,6 +6518,7 @@ function renderAutoTable(time){
  }
 }
 window.towerApplyRoutineState=state=>{
+  if(state.autoPresence&&state.plan?.source==='rules')state={...state,location:state.autoPresence.room,position:{x:state.autoPresence.x,y:state.autoPresence.y}};
   trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;interaction=null;player.seat=null;autoJourneyState=state;

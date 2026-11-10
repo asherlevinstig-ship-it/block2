@@ -20,3 +20,11 @@ class_name = "SharedRoom"
 [[migrations]]
 tag = "tower-shared-rooms-v1"
 new_sqlite_classes = ["SharedRoom"]
+
+[[durable_objects.bindings]]
+name = "AUTO_ACTORS"
+class_name = "AutoActor"
+
+[[migrations]]
+tag = "tower-auto-actors-v1"
+new_sqlite_classes = ["AutoActor"]

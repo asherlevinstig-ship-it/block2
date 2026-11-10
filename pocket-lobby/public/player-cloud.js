@@ -94,6 +94,9 @@
         packet=await request(path,{...body,revision:packet.revision,operation});
         return packet;
       }catch(error){
+        // Durable Auto alarms can commit between our last packet and this request.
+        // Retry only server settlement revisions; another window still triggers conflict handling.
+        if(['presence','control'].includes(path)&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
         if(path.startsWith('gameplay/')||path==='control'){
           if(error.status===undefined&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}

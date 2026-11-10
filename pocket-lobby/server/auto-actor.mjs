@@ -1,0 +1,54 @@
+import {settled} from './player-api.mjs';
+import {advanceAutoMotion} from './auto-motion.mjs';
+import {tokenHash} from './identity.mjs';
+import {sharedActivity} from '../public/world-activity.js';
+import {armourSelection} from '../public/hunting.js';
+import {socialRooms} from '../public/shared-world.js';
+import {outfitVeilUntil} from '../public/outfit-magic.js';
+import {AWAY_GRACE_MS} from '../public/character-rules.js';
+
+export class AutoActor{
+ constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};});}
+ fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{const {playerId}=await request.json();if(typeof playerId!=='string'||playerId.length>128)return Response.json({error:'Invalid actor'},{status:400});if(new URL(request.url).pathname!=='/position'){this.actor.playerId=playerId;await this.tick(false);}return Response.json({motion:this.actor.active?this.actor.motion:null});});}
+ alarm(){return this.ctx.blockConcurrencyWhile(async()=>{try{await this.tick(true);}catch(error){console.warn('Auto actor retry',error.message);await this.ctx.storage.setAlarm(Date.now()+5000);}});}
+ async relay(room,remove=false,state=null){
+  if(!Object.hasOwn(socialRooms,room??''))return;
+  const name=room==='home'?'home:'+this.actor.playerId:'public:'+room;
+  const stub=this.env.SHARED_ROOMS.get(this.env.SHARED_ROOMS.idFromName(name));
+  const motion=this.actor.motion;
+  const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
+  await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until:Date.now()+30000})}));
+ }
+ async tick(advance){
+  const id=this.actor.playerId;if(!id)return;
+  const row=advance?await settled(this.env,id,true,{idle:true}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
+  if(active){
+   if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
+   // HTTP heartbeats never speed up walking. Only the durable alarm advances a tile.
+   if(advance||!this.actor.active)this.actor.motion=advanceAutoMotion(this.actor.motion,state);
+   if(previous&&previous!==this.actor.motion.room)await this.relay(previous,true);
+   await this.relay(this.actor.motion.room,false,state);this.actor.publishedRoom=this.actor.motion.room;
+  }else{
+   if(previous)await this.relay(previous,true);delete this.actor.publishedRoom;
+   this.actor.motion=state?{room:state.location,...(state.position??{x:5,y:7}),direction:'right',back:false}:null;
+  }
+  this.actor.active=active;await this.ctx.storage.put('actor',this.actor);
+  const existing=await this.ctx.storage.getAlarm();
+  let next=null;
+  if(active)next=now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:2000);
+  else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+30000,(state.routineLastSeen??now)+AWAY_GRACE_MS);
+  if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
+  else if(existing!==null)await this.ctx.storage.deleteAlarm();
+ }
+}
+
+// Register from authenticated player responses; visitors cannot schedule somebody else's actor.
+export async function syncAutoActor(env,response){
+ if(!env.AUTO_ACTORS||!response.ok)return response;
+ const data=await response.clone().json().catch(()=>null);
+ if(!data?.characterKey||!data?.state)return response;
+ try{const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(data.characterKey));const result=await stub.fetch(new Request('https://actor.internal/sync',{method:'POST',body:JSON.stringify({playerId:data.characterKey})}));const {motion}=await result.json();if(motion){data.state.autoPresence=motion;return new Response(JSON.stringify(data),{status:response.status,headers:response.headers});}}
+ catch(error){console.warn('Auto actor registration deferred',error.message);}
+ return response;
+}

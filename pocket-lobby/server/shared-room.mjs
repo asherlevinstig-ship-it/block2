@@ -53,24 +53,44 @@ export function sharedMoonTrail(state,room,route,now){
 }
 export class SharedRoom{
   constructor(ctx,env){
-    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];
+    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
-    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];});
+    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));});
   }
-  peers(now=Date.now()){return [...this.sessions.values()].filter(meta=>!(meta.veilUntil>now)).map(publicPeer);}
+  peers(now=Date.now()){
+    const peers=new Map([...this.sessions.values()].map(meta=>[meta.playerId??meta.id,meta]));
+    for(const [id,peer] of this.autoPeers)if(peer.until>now)peers.set(id,peer);
+    return [...peers.values()].filter(meta=>!(meta.veilUntil>now)).map(publicPeer);
+  }
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
   snapshot(){
     const now=Date.now(),trails=[...this.sessions.values()].filter(meta=>!(meta.veilUntil>now)&&meta.trail?.until>now).map(meta=>({...meta.trail,player:meta.id,name:meta.name}));
     const data={type:'snapshot',players:this.peers(),trails};for(const ws of this.sessions.keys())this.send(ws,data);}
   async scheduleVeilExpiry(){
     const now=Date.now(),expiries=[...this.sessions.values()].map(meta=>meta.veilUntil??0).filter(at=>at>now);
+    for(const peer of this.autoPeers.values()){if(peer.until>now)expiries.push(peer.until);if(peer.veilUntil>now)expiries.push(peer.veilUntil);}
     if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
   }
-  async alarm(){this.snapshot();await this.scheduleVeilExpiry();}
-  fetch(request){return this.ctx.blockConcurrencyWhile(()=>new URL(request.url).pathname==='/activity'&&request.method==='POST'?this.activity(request):this.join(request));}
+  async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();}
+  fetch(request){return this.ctx.blockConcurrencyWhile(()=>{const path=new URL(request.url).pathname;return path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
+  async autoPresence(request){
+    const {playerId,peer,until,remove}=await request.json();
+    if(remove)this.autoPeers.delete(playerId);
+    else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y))this.autoPeers.set(playerId,{...peer,until:Math.min(until,Date.now()+30000)});
+    await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();
+    return json({ok:true});
+  }
   async activity(request){
     const {playerId,revision,events=[]}=await request.json();
-    const entry=[...this.sessions.entries()].find(([,meta])=>meta.playerId===playerId);if(!entry)return json({ok:true});
+    const entry=[...this.sessions.entries()].find(([,meta])=>meta.playerId===playerId);
+    const actor=this.autoPeers.get(playerId);
+    if(actor&&Number.isInteger(revision)&&revision>(actor.activityRevision??0)){
+      actor.activityRevision=revision;
+      const fresh=events.filter(e=>e?.room===actor.room&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
+      if(fresh.length&&!(actor.veilUntil>Date.now()))for(const ws of this.sessions.keys())this.send(ws,{type:'activity',player:actor.id,events:fresh});
+      await this.ctx.storage.put('autoPeers',[...this.autoPeers]);
+    }
+    if(!entry||actor)return json({ok:true});
     const [ws,meta]=entry;if(!Number.isInteger(revision)||revision<=(meta.activityRevision??0))return json({ok:true});
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
     meta.activityRevision=revision;
@@ -128,6 +148,7 @@ export class SharedRoom{
       this.send(ws,{type:'trailNotice',text:'Trail shared with this room.'});return;
     }
     if(message?.type==='move'){
+      if(this.autoPeers.has(meta.playerId))return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
       if(meta.x!==message.x||meta.y!==message.y)meta.seat=null;const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;

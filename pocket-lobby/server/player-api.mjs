@@ -47,7 +47,7 @@ async function write(db,id,revision,state,operation,factionId=null){
   return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId).first();
 }
-async function settled(env,id,activities=false){
+export async function settled(env,id,activities=false,{idle=false}={}){
   const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
@@ -55,6 +55,7 @@ async function settled(env,id,activities=false){
     const state=readPlayerState(row);
     const now=Date.now();
     let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false});planChanged=true;}
+    if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false});planChanged=planChanged||previous!==JSON.stringify(state);}
     const activityChanged=activities&&settleActivities(state,now);
     const before=JSON.parse(row.state_json);
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
@@ -213,8 +214,11 @@ export async function handlePlayerApi(request,env){
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
+          let motion=null;
+          if(env.AUTO_ACTORS){const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(id));const response=await stub.fetch(new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})}));motion=(await response.json()).motion;}
           delete state.autoSwitch;state.controlMode='play';state.routineLastSeen=now;
           if(state.plan?.source==='rules')settlePlan(state,now,{stop:true});
+          if(motion){state.location=motion.room;state.position={x:motion.x,y:motion.y};}
         }
         break;
       }
