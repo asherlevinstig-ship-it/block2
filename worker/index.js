@@ -35,7 +35,10 @@ export default {
     const url = new URL(request.url);
     if(url.pathname.startsWith("/api/account/"))return handleAccountApi(request,env);
     if(url.pathname==="/api/world/connect")return handleWorldConnect(request,env);
-    if(url.pathname.startsWith("/api/player/"))return syncAutoActor(env,await handlePlayerApi(request,env));
+    if(url.pathname.startsWith("/api/player/")){
+      const observe=url.pathname==="/api/player/state"||url.pathname==="/api/player/presence";
+      return syncAutoActor(env,await handlePlayerApi(request,env),{observe});
+    }
     const currentAsset = LEGACY_ASSET_REDIRECTS.get(url.pathname);
     if (currentAsset) {
       url.pathname = currentAsset;

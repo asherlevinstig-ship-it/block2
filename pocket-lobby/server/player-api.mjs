@@ -6,7 +6,7 @@ import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
 import {prepareManualTree,describeTreeCut,writeTreePlayer} from './shared-trees.mjs';
 import {enablePhysicalTimber,advanceTreeWork} from './tree-work.mjs';
-import {advanceFishingWork} from './fishing-work.mjs';
+import {advanceFishingWork,settleFishingBatch} from './fishing-work.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
 import {towerBread} from '../public/cooking.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
@@ -49,7 +49,7 @@ function readPlayerState(row){
   if(state.report)delete state.report.deepRoots;
   return state;
 }
-const packet=row=>({state:publicPlayerState(readPlayerState(row)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
+export const packet=row=>({state:publicPlayerState(readPlayerState(row)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
@@ -64,14 +64,24 @@ async function actorMotion(env,id){
   const response=await stub.fetch(new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})}));
   return (await response.json()).motion;
 }
-export async function settled(env,id,activities=false,{idle=false,motion=null}={}){
+async function settleBeforeLeavingFishing(env,id,state,now,motion){
+  if(!state.plan?.fishingWork?.batchUntil)return;
+  await settleFishingBatch(env,id,state,now,motion??await actorMotion(env,id),{stopping:true});
+  if(!state.plan)finishRoutineReport(state,now);
+}
+export async function settled(env,id,activities=false,{idle=false,motion=null,observed=false}={}){
   const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
     if(!row)return null;
     const state=readPlayerState(row);
     const now=Date.now();
+    if(!idle&&state.plan?.fishingWork?.batchUntil)return row;
     const initial=JSON.stringify(state);enablePhysicalWork(state,env);
+    if(idle&&state.plan?.fishingWork?.batchUntil){
+      await settleFishingBatch(env,id,state,now,motion,{observed});
+      if(!state.plan)finishRoutineReport(state,now);
+    }
     let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false},env);planChanged=true;}
     if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false},env);planChanged=planChanged||previous!==JSON.stringify(state);}
     enablePhysicalWork(state,env);
@@ -228,9 +238,11 @@ export async function handlePlayerApi(request,env){
       case "/api/player/presence":{
         if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>AWAY_GRACE_MS))throw new Error('Invalid activity status.');
         if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report&&!state.autoSwitch)return json(packet(row));
+        if(state.plan?.fishingWork?.batchUntil&&(state.controlMode==='auto'||body.active===false))return json(packet(row));
         const before=body.active===false?JSON.stringify(state):null;
         settleActivities(state,Date.now());
         const resume=state.plan?.source==='rules'&&state.controlMode!=='auto'&&body.active!==false?await actorMotion(env,id):null;
+        if(body.active!==false)await settleBeforeLeavingFishing(env,id,state,Date.now(),resume);
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)},env);
         if(resume&&!state.plan){state.location=resume.room;state.position={x:resume.x,y:resume.y};}
         settleActivities(state,Date.now());
@@ -239,7 +251,11 @@ export async function handlePlayerApi(request,env){
       }
       case "/api/player/control":{
         if(!['play','auto'].includes(body.mode))throw new Error('Choose Play or Auto.');
-        const now=Date.now();settlePlan(state,now);
+        const now=Date.now();
+        if(body.mode==='auto'&&state.controlMode==='auto'&&state.plan?.fishingWork?.batchUntil)return json(packet(row));
+        const motion=body.mode==='play'?await actorMotion(env,id):null;
+        await settleBeforeLeavingFishing(env,id,state,now,motion);
+        settlePlan(state,now);
         if(body.mode==='auto'){
           if(state.autoLesson==='required')throw new Error('Choose your starter exploration job in the Auto quest first.');
           if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
@@ -248,7 +264,6 @@ export async function handlePlayerApi(request,env){
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true},env);
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
-          const motion=await actorMotion(env,id);
           delete state.autoSwitch;state.controlMode='play';state.routineLastSeen=now;
           if(state.plan?.source==='rules')settlePlan(state,now,{stop:true});
           if(motion){state.location=motion.room;state.position={x:motion.x,y:motion.y};}
@@ -263,6 +278,7 @@ export async function handlePlayerApi(request,env){
         const now=Date.now();
         if(state.depthsRun||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Auto after finishing your current activity and leaving the dungeon.');
         const rules=simpleAutoRules(body.mode,body.options??{});
+        await settleBeforeLeavingFishing(env,id,state,now);
         saveAutoSettings(state,rules,now);
         if(state.plan?.source==='rules'){
           state.autoSwitch=true;settlePlan(state,now,{stop:true});touchPresence(state,now,{active:false},env);
@@ -276,6 +292,7 @@ export async function handlePlayerApi(request,env){
         startPlan(state,body,Date.now());
         break;
       case "/api/player/plan/stop":
+        await settleBeforeLeavingFishing(env,id,state,Date.now());
         settlePlan(state,Date.now(),{stop:true});
         break;
       case "/api/player/report/ack":

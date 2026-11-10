@@ -1,4 +1,4 @@
-import {settled} from './player-api.mjs';
+import {settled,packet} from './player-api.mjs';
 import {advanceAutoMotion} from './auto-motion.mjs';
 import {tokenHash} from './identity.mjs';
 import {sharedActivity} from '../public/world-activity.js';
@@ -12,7 +12,18 @@ import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.m
 
 export class AutoActor{
  constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};});}
- fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{const {playerId}=await request.json();if(typeof playerId!=='string'||playerId.length>128)return Response.json({error:'Invalid actor'},{status:400});if(new URL(request.url).pathname!=='/position'){this.actor.playerId=playerId;await this.tick(false);}return Response.json({motion:this.actor.active?this.actor.motion:null});});}
+ fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{
+  const {playerId}=await request.json(),path=new URL(request.url).pathname;
+  if(typeof playerId!=='string'||playerId.length>128)return Response.json({error:'Invalid actor'},{status:400});
+  let latest;
+  if(path!=='/position'){
+   this.actor.playerId=playerId;
+   const observed=path==='/observe';
+   const row=await this.tick(observed,observed);
+   if(observed&&row)latest=packet(row);
+  }
+  return Response.json({motion:this.actor.active?this.actor.motion:null,latest});
+ });}
  alarm(){return this.ctx.blockConcurrencyWhile(async()=>{try{await this.tick(true);}catch(error){console.warn('Auto actor retry',error.message);await this.ctx.storage.setAlarm(Date.now()+5000);}});}
  async relay(room,remove=false,state=null){
   if(!Object.hasOwn(socialRooms,room??''))return;
@@ -22,18 +33,20 @@ export class AutoActor{
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
   if(peer){
    peer.fishingSpot=!!state.plan?.fishingWork?.spot;
+   peer.fishingBatch=state.plan?.fishingWork?.batchUntil??null;
    peer.fishing=motion.moving?null:sharedFishingPose(state);
    if(state.plan?.physicalFishing&&peer.activity==='fishing'&&!peer.fishing)peer.activity='waiting-to-fish';
   }
   const now=Date.now(),signature=JSON.stringify(peer);
   if(!remove&&this.actor.publishedRoom===room&&this.actor.peerSignature===signature&&now-this.actor.lastRelayAt<60000)return;
-  const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until:now+90000})}));
+  const until=Math.max(now+90000,(peer?.fishingBatch??0)+15000);
+  const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until})}));
   if(!response.ok)throw new Error('Could not update the shared room');
   this.actor.peerSignature=signature;this.actor.lastRelayAt=now;
  }
- async tick(advance){
+ async tick(advance,observed=false){
   const id=this.actor.playerId;if(!id)return;
-  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.actor.motion}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.actor.motion,observed}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
   const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
   if(active){
    if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
@@ -54,10 +67,11 @@ export class AutoActor{
   // During long waits, the client renders the timestamped animation locally.
   // Wake for the next action or lease renewal instead of polling every two seconds.
   const wait=plan?.activeHunt?500:due>now?Math.min(due-now,60000):2000;
-  if(active)next=Math.min(plan.endAt??Infinity,now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,wait)));
+  if(active)next=fishing?.batchUntil??Math.min(plan.endAt??Infinity,now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,wait)));
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
   else if(existing!==null)await this.ctx.storage.deleteAlarm();
+  return row;
  }
 }
 
@@ -93,16 +107,24 @@ export async function wakeAutoDirector(env){
 }
 
 // Register from authenticated player responses; visitors cannot schedule somebody else's actor.
-export async function syncAutoActor(env,response){
+export async function syncAutoActor(env,response,{observe=false}={}){
  if(!response.ok)return response;
- const data=await response.clone().json().catch(()=>null);
+ let data=await response.clone().json().catch(()=>null);
  if(!data?.characterKey||!data?.state)return response;
  try{
   let motion=null;
-  if(env.AUTO_ACTORS){const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(data.characterKey));const result=await stub.fetch(new Request('https://actor.internal/sync',{method:'POST',body:JSON.stringify({playerId:data.characterKey})}));motion=(await result.json()).motion;if(motion)data.state.autoPresence=motion;}
+  let caughtUp=false;
+  if(env.AUTO_ACTORS){
+   const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(data.characterKey));
+   const path=observe&&data.state.plan?.fishingWork?.batchUntil?'observe':'sync';
+   const result=await stub.fetch(new Request('https://actor.internal/'+path,{method:'POST',body:JSON.stringify({playerId:data.characterKey})}));
+   const actor=await result.json();motion=actor.motion;
+   if(actor.latest){data=actor.latest;caughtUp=true;}
+   if(motion)data.state.autoPresence=motion;
+  }
   const room=motion?.room??data.state.location;
   if(env.SHARED_ROOMS&&forestTrees(room).length)data.state.sharedTrees=await roomTreeSnapshot(env.TOWER_DB,room);
-  if(motion||data.state.sharedTrees)return new Response(JSON.stringify(data),{status:response.status,headers:response.headers});
+  if(motion||data.state.sharedTrees||caughtUp)return new Response(JSON.stringify(data),{status:response.status,headers:response.headers});
  }
  catch(error){console.warn('Auto actor registration deferred',error.message);}
  return response;

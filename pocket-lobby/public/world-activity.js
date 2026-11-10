@@ -15,7 +15,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const timber=after.timberReceipt;
  if(timber?.id&&timber.id!==before.timberReceipt?.id)add('timber:'+timber.id,'timber','+'+timber.amount+' timber',timber.amount,timber.at??now,timber.room??room);
  const landed=receipt?.castId&&receipt.castId!==before.fishingReceipt?.castId;
- if(landed){
+ if(landed&&!receipt.batched){
   add('catch:'+receipt.castId,'catch','+1 '+(fishProducts[receipt.fish]?.name??'fish'),1,receipt.at??now,receipt.room??after.location);
   if(receipt.cast&&events.at(-1)?.id==='catch:'+receipt.castId)events.at(-1).fishing={...receipt.cast,room:receipt.room,spot:receipt.spot,landAt:receipt.at,fishId:receipt.fish};
  }

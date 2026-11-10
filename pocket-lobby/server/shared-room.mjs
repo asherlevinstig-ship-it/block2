@@ -57,7 +57,7 @@ export function sharedMoonTrail(state,room,route,now){
 }
 export class SharedRoom{
   constructor(ctx,env){
-    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.fishingSpots=new Map();this.treeSnapshot=null;this.room=null;
+    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.fishingSpots=new Map();this.observedBatches=new Map();this.treeSnapshot=null;this.room=null;
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
     ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));const spots=await ctx.storage.get('fishingSpots');if(Array.isArray(spots))this.fishingSpots=new Map(spots.filter(([,spot])=>spot.until>Date.now()));await this.loadTrees(this.sessions.values().next().value?.room??this.autoPeers.values().next().value?.room);});
   }
@@ -87,21 +87,41 @@ export class SharedRoom{
     const free=spot=>besideFishingStation(room,spot)&&!occupied.some(other=>other.playerId!==playerId&&other.x===spot.x&&other.y===spot.y);
     const spot=spots.find(s=>s.x===own?.x&&s.y===own?.y&&free(s))??spots.find(free);
     if(!spot)return json({spot:null});
-    this.fishingSpots.set(playerId,{...spot,until:now+120000});
+    const observed=this.sessions.size>0,leaseUntil=now+(observed?120000:240000);
+    this.fishingSpots.set(playerId,{...spot,until:leaseUntil});
     await this.ctx.storage.put('fishingSpots',[...this.fishingSpots]);
-    return json({spot});
+    return json({spot,observed,leaseUntil});
   }
   async autoPresence(request){
     const {playerId,peer,until,remove}=await request.json();
+    if(!peer?.fishingBatch)this.observedBatches.delete(playerId);
     if((remove||!peer?.fishingSpot)&&this.fishingSpots.delete(playerId))await this.ctx.storage.put('fishingSpots',[...this.fishingSpots]);
     if(peer?.room&&this.room!==peer.room)await this.loadTrees(peer.room);
     if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
     else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
-      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+90000)});
+      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+(peer.fishingBatch?255000:90000))});
       for(const [ws,meta] of this.sessions)if(meta.playerId===playerId){meta.serverAuto=true;ws.serializeAttachment?.(meta);}
     }
     await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();
+    if(peer?.fishingBatch)this.wakeObservedFishing([peer]);
     return json({ok:true});
+  }
+  wakeObservedFishing(peers){
+    const binding=this.env.AUTO_ACTORS;
+    if(!this.sessions.size||!binding)return;
+    for(const {playerId,fishingBatch} of peers){
+      if(!fishingBatch||this.observedBatches.get(playerId)===fishingBatch)continue;
+      this.observedBatches.set(playerId,fishingBatch);
+      // The actor publishes back here, so do not await it inside the room handler.
+      this.ctx.waitUntil((async()=>{
+        try{
+          const response=await binding.get(binding.idFromName(playerId)).fetch(new Request('https://actor.internal/observe',{method:'POST',body:JSON.stringify({playerId})}));
+          if(!response.ok)throw new Error('Fishing observer wake failed');
+        }catch{
+          if(this.observedBatches.get(playerId)===fishingBatch)this.observedBatches.delete(playerId);
+        }
+      })());
+    }
   }
   async activity(request){
     const {playerId,revision,events=[],room,treesChanged}=await request.json();
@@ -142,6 +162,7 @@ export class SharedRoom{
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();
+    this.wakeObservedFishing([...this.autoPeers.values()].filter(peer=>peer.until>now));
     if(meta.veilUntil>now||this.treeSnapshot)await this.scheduleVeilExpiry();
     return new Response(null,{status:101,webSocket:client});
   }

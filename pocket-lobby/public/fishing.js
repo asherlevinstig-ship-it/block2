@@ -60,7 +60,7 @@ function normalizeFishingGear(input){
 export { fishingCatalog, fishProducts, fishingLuckBonus, fishingChances, rollFishingCatch, normalizeFishingGear };
 export function sharedFishingPose(state,now=Date.now()){
  const receipt=state.fishingReceipt;
- if(receipt?.cast&&now>=receipt.at&&now<receipt.at+900){
+ if(receipt?.cast&&!receipt.batched&&now>=receipt.at&&now<receipt.at+900){
    return {...receipt.cast,room:receipt.room,spot:receipt.spot,landAt:receipt.at,fishId:receipt.fish};
  }
  const cast=state.plan?.fishingWork?.cast??state.fishingCast;

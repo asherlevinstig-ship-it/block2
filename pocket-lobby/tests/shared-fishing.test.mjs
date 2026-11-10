@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SharedRoom} from '../server/shared-room.mjs';
-import {advanceFishingWork} from '../server/fishing-work.mjs';
+import {advanceFishingWork,settleFishingBatch} from '../server/fishing-work.mjs';
 import {startRoutineQueue} from '../server/routine-queue.mjs';
 import {normalizeState,settlePlan} from '../server/player-state.mjs';
 import {sharedFishingPose} from '../public/fishing.js';
@@ -44,4 +44,33 @@ test('two Auto fishers reserve separate tiles and only the completed cast pays',
  assert.equal(events.length,1);assert.equal(events[0].fishing.fishId,a.fishingReceipt.fish);
  await advanceFishingWork(env,'a',a,cast.landAt+900,origin);
  assert.equal(a.fishingGear.bait,9);
+});
+
+test('empty-room fishing batches three casts with one spot reservation and flushes on observation',async()=>{
+ const now=Date.now(),motion={room:'pond',x:4,y:5};
+ let claims=0;
+ const env={SHARED_ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>{
+  claims++;
+  return Response.json({spot:{x:4,y:5},observed:false,leaseUntil:now+240000});
+ }})}};
+ const state=normalizeState({location:'pond',position:{x:4,y:5},adventure:{discovered:['pond']},fishingGear:{bait:10,ownedRods:['reed'],equippedRod:'reed'}});
+ const queue={enabled:true,repeats:1,budget:0,reserveGold:0,minHealth:60,steps:[{type:'fishing',amount:5}]};
+ startRoutineQueue(state,{queue},now,{source:'rules',routineCapAt:now+240000,keepBait:0,physicalFishing:true});
+ await advanceFishingWork(env,'a',state,now,motion);
+ const {batchUntil,cast}=state.plan.fishingWork;
+ assert(batchUntil>cast.landAt+900);
+ const early=structuredClone(state),stopping=structuredClone(state),firstDue=cast.landAt+900;
+ assert.equal(await settleFishingBatch(env,'a',state,firstDue,motion),false);
+ assert.equal(state.fishingGear.bait,10);
+ await settleFishingBatch(env,'a',state,batchUntil,motion,{random:()=>.5});
+ assert.equal(state.fishingGear.bait,7);assert.equal(state.stats.patienceXp,30);
+ assert.equal(state.plan.stepCount,3);assert.equal(claims,1);
+ assert.equal(await settleFishingBatch(env,'a',state,batchUntil,motion),false);
+ await settleFishingBatch(env,'a',early,firstDue+5000,motion,{observed:true,random:()=>.5});
+ assert.equal(early.fishingGear.bait,9);assert.equal(early.plan.fishingWork.batchUntil,undefined);
+ assert.equal(early.plan.fishingWork.cast.started,firstDue+1100);
+ assert.equal(worldActivityEvents(stopping,early,firstDue+5000).length,0);
+ assert.equal(worldActivityEvents(stopping,early,firstDue+200).length,0,'even a recent batched catch is not replayed');
+ await settleFishingBatch(env,'a',stopping,firstDue+5000,motion,{stopping:true,random:()=>.5});
+ assert.equal(stopping.fishingGear.bait,9);assert.equal(stopping.plan.fishingWork.cast,undefined);
 });
