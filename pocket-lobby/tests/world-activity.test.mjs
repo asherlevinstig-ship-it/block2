@@ -12,7 +12,7 @@ test('catch and combat numbers use receipts, preserve room of impact and never r
 test('room relay broadcasts a committed outcome once and ignores client-forged activity',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const now=Date.now(),playerId='test-player',meta={id:'public-id',playerId,room:'lounge',x:2,y:7,name:'Guest',expiresAt:now+100000,lastAuthAt:now,windowAt:now,packets:0};
  const ws={readyState:1,sent:[],deserializeAttachment:()=>meta,serializeAttachment:value=>Object.assign(meta,value),send(raw){this.sent.push(JSON.parse(raw));},close(){this.readyState=3;}};
- const ctx={getWebSockets:()=>[ws],storage:{get:async()=>[]},blockConcurrencyWhile:fn=>fn()};const room=new SharedRoom(ctx,{TOWER_DB:db});
+ const ctx={getWebSockets:()=>[ws],storage:{get:async()=>[],setAlarm:async()=>{}},blockConcurrencyWhile:fn=>fn()};const room=new SharedRoom(ctx,{TOWER_DB:db});
  const before={location:'lounge',health:100,credits:100,avatar:{name:'Guest'},gambling:{round:{id:'round',status:'playing',bet:5}}},after={...before,credits:105,gambling:{round:{id:'round',status:'complete',bet:5,payout:10}}};sql.prepare('INSERT INTO tower_players VALUES (?, ?, 2, ?, ?)').run(playerId,JSON.stringify(after),'save',now);
  const env={SHARED_ROOMS:{idFromName:name=>name,get:()=>({fetch:request=>room.fetch(request)})}};
  await publishWorldActivity(env,playerId,before,after,2);assert.equal(ws.sent.filter(m=>m.type==='activity').length,1);assert.equal(ws.sent.find(m=>m.type==='activity').events[0].label,'+5 gold');await publishWorldActivity(env,playerId,before,after,2);assert.equal(ws.sent.filter(m=>m.type==='activity').length,1);

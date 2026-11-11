@@ -15,6 +15,7 @@ import {miningPose} from '../public/mining.js';
 import {besideFishingStation} from '../public/region-catalog.js';
 import {sharedFishingPose} from '../public/fishing.js';
 import {autoWalkPosition} from '../public/auto-walk.js';
+import {recordPlayUsage} from './player-usage.mjs';
 
 function familiarProfile(state){
  const familiar=state.familiars?.equipped;
@@ -64,8 +65,9 @@ export function sharedMoonTrail(state,room,route,now){
 export class SharedRoom{
   constructor(ctx,env){
     this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.fishingSpots=new Map();this.observedBatches=new Map();this.treeSnapshot=null;this.room=null;
+    if(ctx.setWebSocketAutoResponse&&globalThis.WebSocketRequestResponsePair)ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}','{"type":"pong"}'));
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
-    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));const spots=await ctx.storage.get('fishingSpots');if(Array.isArray(spots))this.fishingSpots=new Map(spots.filter(([,spot])=>spot.until>Date.now()));await this.loadTrees(this.sessions.values().next().value?.room??this.autoPeers.values().next().value?.room);});
+    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));const spots=await ctx.storage.get('fishingSpots');if(Array.isArray(spots))this.fishingSpots=new Map(spots.filter(([,spot])=>spot.until>Date.now()));if(this.sessions.size)await this.loadTrees(this.sessions.values().next().value?.room);await this.scheduleVeilExpiry();});
   }
   peers(now=Date.now()){
     const peers=new Map([...this.sessions.values()].filter(meta=>!meta.serverAuto).map(meta=>[meta.playerId??meta.id,meta]));
@@ -79,11 +81,33 @@ export class SharedRoom{
     const data={type:'snapshot',players:this.peers(),trails,trees:this.treeSnapshot};for(const ws of this.sessions.keys())this.send(ws,data);}
   async scheduleVeilExpiry(){
     const now=Date.now(),expiries=[...this.sessions.values()].map(meta=>meta.veilUntil??0).filter(at=>at>now);
+    // One room-level check replaces every socket's heartbeat authentication.
+    // Revoked sessions still stop receiving updates within at most one minute.
+    for(const meta of this.sessions.values())if(Number.isFinite(meta.lastAuthAt))expiries.push(Math.max(now+100,Math.min(meta.expiresAt??Infinity,meta.lastAuthAt+60000)));
     for(const peer of this.autoPeers.values()){if(peer.until>now)expiries.push(peer.until);if(peer.veilUntil>now)expiries.push(peer.veilUntil);}
-    for(const tree of Object.values(this.treeSnapshot?.trees??{}))if(tree.regrowsAt>now)expiries.push(tree.regrowsAt);
+    if(this.sessions.size)for(const tree of Object.values(this.treeSnapshot?.trees??{}))if(tree.regrowsAt>now)expiries.push(tree.regrowsAt);
     if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
   }
-  async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);if(this.room)await this.loadTrees(this.room);this.snapshot();await this.scheduleVeilExpiry();}
+  async alarm(){
+    let changed=false;
+    const now=Date.now();
+    for(const [ws,meta] of this.sessions)if(now>=meta.expiresAt||now-meta.lastAuthAt>=60000){
+      if(!await this.authorized(meta)){recordPlayUsage(this.env,meta,now,{flush:true});ws.close(4003,'Your character session changed');this.sessions.delete(ws);changed=true;}
+      else{meta.lastAuthAt=now;recordPlayUsage(this.env,meta,now);ws.serializeAttachment?.(meta);}
+    }
+    let expired=false;
+    for(const [ws,meta] of this.sessions)if(meta.veilUntil>0&&meta.veilUntil<=now){meta.veilUntil=0;ws.serializeAttachment?.(meta);changed=true;}
+    for(const [id,peer] of this.autoPeers){
+      if(peer.until<=now){this.autoPeers.delete(id);expired=true;}
+      else if(peer.veilUntil>0&&peer.veilUntil<=now){peer.veilUntil=0;expired=true;}
+    }
+    if(expired)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);
+    const trees=JSON.stringify(this.treeSnapshot?.trees);
+    const regrowth=Object.values(this.treeSnapshot?.trees??{}).some(tree=>tree.regrowsAt>0&&tree.regrowsAt<=now);
+    if(this.room&&this.sessions.size&&regrowth)await this.loadTrees(this.room);
+    if(changed||expired||trees!==JSON.stringify(this.treeSnapshot?.trees))this.snapshot();
+    await this.scheduleVeilExpiry();
+  }
   fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{
     const path=new URL(request.url).pathname;
     if(path==='/trail-camp'&&request.method==='POST'){
@@ -110,31 +134,35 @@ export class SharedRoom{
   }
   async autoPresence(request){
     const {playerId,peer,until,remove}=await request.json();
-    if(!peer?.fishingBatch)this.observedBatches.delete(playerId);
+    if(!peer?.fishingBatch&&!peer?.workBatch)this.observedBatches.delete(playerId);
     if((remove||!peer?.fishingSpot)&&this.fishingSpots.delete(playerId))await this.ctx.storage.put('fishingSpots',[...this.fishingSpots]);
-    if(peer?.room&&this.room!==peer.room)await this.loadTrees(peer.room);
+    if(peer?.room&&this.room!==peer.room&&this.sessions.size)await this.loadTrees(peer.room);
+    const before=JSON.stringify(this.autoPeers.has(playerId)?publicPeer(this.autoPeers.get(playerId)):null);
     if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
     else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
-      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+(peer.fishingBatch?255000:90000))});
-      for(const [ws,meta] of this.sessions)if(meta.playerId===playerId){meta.serverAuto=true;ws.serializeAttachment?.(meta);}
+      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+(peer.fishingBatch?255000:peer.workBatch?135000:90000))});
+      for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&!meta.serverAuto){recordPlayUsage(this.env,meta,Date.now(),{flush:true});meta.serverAuto=true;ws.serializeAttachment?.(meta);}
     }
-    await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();
-    if(peer?.fishingBatch)this.wakeObservedFishing([peer]);
+    await this.ctx.storage.put('autoPeers',[...this.autoPeers]);
+    if(before!==JSON.stringify(this.autoPeers.has(playerId)?publicPeer(this.autoPeers.get(playerId)):null))this.snapshot();
+    await this.scheduleVeilExpiry();
+    if(peer?.fishingBatch||peer?.workBatch)this.wakeObservedFishing([peer]);
     return json({ok:true,observed:this.sessions.size>0});
   }
   wakeObservedFishing(peers){
     const binding=this.env.AUTO_ACTORS;
     if(!this.sessions.size||!binding)return;
-    for(const {playerId,fishingBatch} of peers){
-      if(!fishingBatch||this.observedBatches.get(playerId)===fishingBatch)continue;
-      this.observedBatches.set(playerId,fishingBatch);
+    for(const {playerId,fishingBatch,workBatch} of peers){
+      const batch=fishingBatch??workBatch;
+      if(!batch||this.observedBatches.get(playerId)===batch)continue;
+      this.observedBatches.set(playerId,batch);
       // The actor publishes back here, so do not await it inside the room handler.
       this.ctx.waitUntil((async()=>{
         try{
           const response=await binding.get(binding.idFromName(playerId)).fetch(new Request('https://actor.internal/observe',{method:'POST',body:JSON.stringify({playerId})}));
-          if(!response.ok)throw new Error('Fishing observer wake failed');
+          if(!response.ok)throw new Error('Auto observer wake failed');
         }catch{
-          if(this.observedBatches.get(playerId)===fishingBatch)this.observedBatches.delete(playerId);
+          if(this.observedBatches.get(playerId)===batch)this.observedBatches.delete(playerId);
         }
       })());
     }
@@ -148,7 +176,7 @@ export class SharedRoom{
       actor.activityRevision=revision;
       const fresh=events.filter(e=>e?.room===actor.room&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
       if(fresh.length&&!(actor.veilUntil>Date.now()))for(const ws of this.sessions.keys())this.send(ws,{type:'activity',player:actor.id,events:fresh});
-      await this.ctx.storage.put('autoPeers',[...this.autoPeers]);
+      if(fresh.length&&this.sessions.size)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);
     }
     if(!entry||actor)return json({ok:true});
     const [ws,meta]=entry;if(!Number.isInteger(revision)||revision<=(meta.activityRevision??0))return json({ok:true});
@@ -157,7 +185,9 @@ export class SharedRoom{
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
     const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
-    if(state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules'){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
+    const leaving=state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules';
+    recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});
+    if(leaving){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
     meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
     // Connected avatars report bounded visual movement; activity rewards use the saved server position.
     if(meta.auto)meta.seat=null;
@@ -168,18 +198,18 @@ export class SharedRoom{
   async join(request){
     let profile;try{profile=JSON.parse(decodeURIComponent(request.headers.get('X-Tower-Profile')));}catch{return json({error:'Invalid room identity.'},403);}
     if(!profile?.playerId||!profile.id||!Object.hasOwn(socialRooms,profile.room))return json({error:'Invalid room identity.'},403);
-    for(const [ws,meta] of this.sessions)if(meta.playerId===profile.playerId){ws.close(4001,'Character opened in another window');this.sessions.delete(ws);}
+    for(const [ws,meta] of this.sessions)if(meta.playerId===profile.playerId){recordPlayUsage(this.env,meta,Date.now(),{flush:true});ws.close(4001,'Character opened in another window');this.sessions.delete(ws);}
     if(this.sessions.size>=(profile.room==='home'?1:20))return json({error:'This room is full. Try another area.'},409);
     const [client,server]=Object.values(new WebSocketPair()),now=Date.now();
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
     await this.loadTrees(profile.room);
-    const meta={...profile,fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    const meta={...profile,usageAt:now,fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();
     this.wakeObservedFishing([...this.autoPeers.values()].filter(peer=>peer.until>now));
-    if(meta.veilUntil>now||this.treeSnapshot)await this.scheduleVeilExpiry();
+    await this.scheduleVeilExpiry();
     return new Response(null,{status:101,webSocket:client});
   }
   async authorized(meta){
@@ -198,7 +228,9 @@ export class SharedRoom{
   async webSocketMessage(ws,raw){
     const meta=this.sessions.get(ws);if(!meta)return;
     const now=Date.now();
-    if(now-meta.lastAuthAt>15000){if(!await this.authorized(meta)){ws.close(4003,'Your character session changed');this.sessions.delete(ws);this.snapshot();return;}meta.lastAuthAt=now;}
+    if(now>=meta.expiresAt||now-meta.lastAuthAt>15000){if(!await this.authorized(meta)){recordPlayUsage(this.env,meta,now,{flush:true});ws.close(4003,'Your character session changed');this.sessions.delete(ws);this.snapshot();return;}meta.lastAuthAt=now;}
+    recordPlayUsage(this.env,meta,now);
+    ws.serializeAttachment?.(meta);
     if(typeof raw!=='string'||raw.length>2048){ws.close(1009,'Message too large');return;}
     if(now-meta.windowAt>1000){meta.windowAt=now;meta.packets=0;}if(++meta.packets>30){ws.close(1008,'Too many messages');return;}
     let message;try{message=JSON.parse(raw);}catch{return;}
@@ -252,6 +284,6 @@ export class SharedRoom{
       ws.serializeAttachment(meta);for(const peer of this.sessions.keys())this.send(peer,{type:'chat',message:chat});
     }
   }
-  webSocketClose(ws){this.sessions.delete(ws);try{ws.close(1000,'Goodbye');}catch{}this.snapshot();}
+  webSocketClose(ws){const meta=this.sessions.get(ws);if(meta)recordPlayUsage(this.env,meta,Date.now(),{flush:true});this.sessions.delete(ws);try{ws.close(1000,'Goodbye');}catch{}this.snapshot();}
   webSocketError(ws){this.webSocketClose(ws);}
 }

@@ -7,11 +7,14 @@ import {choppingPose} from '../public/woodcutting.js';
 import {miningPose} from '../public/mining.js';
 import {publicRoomNamespace} from './shared-trees.mjs';
 import {sharedFishingPose} from '../public/fishing.js';
-export async function publishWorldActivity(env,playerId,before,after,revision,{fresh=true,usage=null,extraEvents=[]}={}){
+export async function publishWorldActivity(env,playerId,before,after,revision,{fresh=true,usage=null,extraEvents=[],autoRelay=false}={}){
  if(!env?.SHARED_ROOMS)return;
  const events=fresh?[...worldActivityEvents(before,after,Date.now()),...extraEvents]:[];
  const auto=after.plan?.source==='rules';
  const treesChanged=after.timberReceipt?.id!==before.timberReceipt?.id&&!!after.timberReceipt;
+ // AutoActor publishes the full visual pose after settlement. Only rewards and
+ // shared-tree changes require a separate activity delivery in that path.
+ if(autoRelay&&!treesChanged&&!events.length)return;
  const fishingChanged=JSON.stringify(sharedFishingPose(before))!==JSON.stringify(sharedFishingPose(after))||JSON.stringify(miningPose(before))!==JSON.stringify(miningPose(after));
  if(!treesChanged&&!events.length&&!fishingChanged&&JSON.stringify(choppingPose(before))===JSON.stringify(choppingPose(after))&&outfitVeilUntil(before)===outfitVeilUntil(after)&&before.location===after.location&&before.health===after.health&&sharedActivity(before)===sharedActivity(after)&&(before.plan?.source==='rules')===auto&&(!auto||before.position?.x===after.position?.x&&before.position?.y===after.position?.y))return;
  const rooms=new Set([before.location,after.location].filter(room=>Object.hasOwn(socialRooms,room)));

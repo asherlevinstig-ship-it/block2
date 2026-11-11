@@ -81,7 +81,7 @@ async function settleBeforeLeavingFishing(env,id,state,now,motion){
   await settleFishingBatch(env,id,state,now,motion??await actorMotion(env,id),{stopping:true});
   if(!state.plan)finishRoutineReport(state,now);
 }
-export async function settled(env,id,activities=false,{idle=false,motion=null,observed=false,usage=null}={}){
+export async function settled(env,id,activities=false,{idle=false,motion=null,observed=false,usage=null,autoRelay=false}={}){
   const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
@@ -98,8 +98,8 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
       const purchase=buyAutoWorkBread(state,state.plan,now,motion);
       if(purchase?.reason){finishAutoFoodWork(state,purchase.reason,now);finishRoutineReport(state,now);}
     }
-    let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false},env);planChanged=true;}
-    if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false},env);planChanged=planChanged||previous!==JSON.stringify(state);}
+    settlePlan(state,now);if(state.autoSwitch)touchPresence(state,now,{active:false},env);
+    if(idle)touchPresence(state,now,{active:false},env);
     enablePhysicalWork(state,env);
     const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
     const oreMutation=idle?await advanceMiningWork(db,state,now,motion):null;
@@ -118,17 +118,16 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
       completeTimberMarketTrip(state,now,timberSale);
       if(!state.plan)finishRoutineReport(state,now);
     }
-    planChanged=planChanged||initial!==JSON.stringify(state);
-    const activityChanged=activities&&settleActivities(state,now);
+    if(activities)settleActivities(state,now);
     const before=JSON.parse(row.state_json);
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
-    if(!planChanged&&!activityChanged&&!migrated)return row;
+    if(initial===JSON.stringify(state)&&!migrated)return row;
     const operation="settle:"+crypto.randomUUID();
     const updated=oreMutation?await writeOreStrike(db,row,state,operation,now,oreMutation)
       :timberSale.length?await writeAutoTimberSale(db,row,state,operation,now,timberSale):await write(db,id,row.revision,state,operation,null,treeMutation);
     if(updated){
       if(usage)usage.saves++;
-      await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{usage,fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});
+      await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{usage,autoRelay,fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});
       return updated;
     }
   }
@@ -353,7 +352,10 @@ export async function handlePlayerApi(request,env){
         settlePlan(state,now);
         if(body.mode==='auto'){
           if(state.autoLesson==='required')throw new Error('Choose your starter exploration job in the Auto quest first.');
-          if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
+          if(state.controlMode==='auto'&&state.plan?.source==='rules'){
+            if(JSON.stringify(state)===row.state_json)return json(packet(row));
+            break;
+          }
           if(state.report?.source==='rules')delete state.report;
           if(state.characterCreated===false||state.plan||state.report||state.depthsRun||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing'||state.fishingCast||state.timberCut)throw new Error('Choose Auto after finishing your activity, reading your report and leaving the dungeon.');
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true},env);

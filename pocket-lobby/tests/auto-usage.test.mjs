@@ -14,6 +14,8 @@ test('Auto usage attributes elapsed time to the preceding phase and caps it at t
  assert.equal(autoUsagePhase(state,{moving:false},'fishing'),'fishing');
  assert.equal(autoUsagePhase({plan:{treeWork:{}}},{},'woodcutting'),'woodcutting');
  assert.equal(autoUsagePhase({plan:{activeHunt:{}}},{},'hunt-boar'),'combat');
+ assert.equal(autoUsagePhase({plan:{miningWork:{}}},{},'mining'),'mining');
+ assert.equal(autoUsagePhase({plan:{miningWork:{}},hunting:{encounter:{enemy:'crystalGuardian'}}},{},'mining'),'combat');
 });
 
 test('production logs sample Auto ticks and omit character identifiers',t=>{

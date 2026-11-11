@@ -12,9 +12,10 @@ import {miningPose} from '../public/mining.js';
 import {sharedFishingPose} from '../public/fishing.js';
 import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 import {autoUsage,autoUsagePhase,recordAutoUsage} from './auto-usage.mjs';
+import {autoWorkDue,quietWorkDeadline,PRESENCE_RENEW_MS} from './auto-cadence.mjs';
 
 export class AutoActor{
- constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};});}
+ constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};this.savedActor=JSON.stringify(this.actor);});}
  fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{
   const {playerId}=await request.json(),path=new URL(request.url).pathname;
   if(typeof playerId!=='string'||playerId.length>128)return Response.json({error:'Invalid actor'},{status:400});
@@ -46,11 +47,13 @@ export class AutoActor{
    peer.fishingSpot=!!state.plan?.fishingWork?.spot&&!state.plan?.foodTrip;
    peer.fishingBatch=state.plan?.fishingWork?.batchUntil??null;
    peer.fishing=motion.moving?null:sharedFishingPose(state);
+   peer.workBatch=quietWorkDeadline(state,motion,this.actor.audience,Date.now(),this.actor.quietUntil);
+   this.actor.quietUntil=peer.workBatch;
    if(state.plan?.physicalFishing&&peer.activity==='fishing'&&!peer.fishing)peer.activity='waiting-to-fish';
   }
   const now=Date.now(),signature=JSON.stringify(peer);
-  if(!remove&&this.actor.publishedRoom===room&&this.actor.peerSignature===signature&&now-this.actor.lastRelayAt<60000)return;
-  const until=Math.max(now+90000,(peer?.fishingBatch??0)+15000);
+  if(!remove&&this.actor.publishedRoom===room&&this.actor.peerSignature===signature&&now-this.actor.lastRelayAt<PRESENCE_RENEW_MS)return;
+  const until=Math.max(now+90000,(peer?.fishingBatch??peer?.workBatch??0)+15000);
   if(usage)usage.presence++;
   const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until})}));
   if(!response.ok)throw new Error('Could not update the shared room');
@@ -63,9 +66,12 @@ export class AutoActor{
  async tick(advance,observed=false){
   const id=this.actor.playerId;if(!id)return;
   const started=Date.now(),previousUsage=this.actor.usage;
-  const usage=autoUsage(this.env,previousUsage,observed?'observe':advance?'alarm':'sync',started);
-  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),observed,usage}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  if(advance&&this.actor.quietUntil<=started)delete this.actor.quietUntil;
+  if(observed){this.actor.audience='observed';delete this.actor.quietUntil;}
+  let usage=advance?autoUsage(this.env,previousUsage,observed?'observe':'alarm',started):null;
+  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),observed,usage,autoRelay:true}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
   const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
+  if(!advance&&!active&&previousUsage)usage=autoUsage(this.env,previousUsage,'stop',started);
   if(active){
    if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
    const destination=[state.location,state.position?.x,state.position?.y].join(':');
@@ -81,6 +87,7 @@ export class AutoActor{
   }else{
    if(previous)await this.relay(previous,true,null,usage);delete this.actor.publishedRoom;
    delete this.actor.audience;
+   delete this.actor.quietUntil;
    delete this.actor.walk;delete this.actor.destination;
    this.actor.motion=state?{room:state.location,...(state.position??{x:5,y:7}),direction:'right',back:false}:null;
   }
@@ -88,7 +95,7 @@ export class AutoActor{
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
   const plan=state?.plan,fishing=plan?.fishingWork;
-  const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??plan?.fishingLandingUntil??plan?.miningWork?.cut?.endsAt??plan?.miningWork?.readyAt??plan?.treeWork?.cut?.endsAt??plan?.treeWork?.readyAt??plan?.nextAt??plan?.nextRoundAt??plan?.nextCutAt??plan?.nextCatchAt;
+  const due=autoWorkDue(plan);
   // During long waits, the client renders the timestamped animation locally.
   // Wake for the next action or lease renewal instead of polling every two seconds.
   const wait=plan?.activeHunt||state?.hunting?.encounter?500:due>now?Math.min(due-now,60000):2000;
@@ -96,16 +103,17 @@ export class AutoActor{
    const walk=this.actor.walk;
    const boundary=walk?Math.max(now+50,walk.endsAt):now+(this.actor.motion.blocked?5000:Math.max(100,wait));
    const workDue=walk&&(plan.activeHunt||due>now)?now+Math.max(100,wait):Infinity;
-   next=fishing?.batchUntil??Math.min(plan.endAt??Infinity,boundary,workDue);
+   next=fishing?.batchUntil??this.actor.quietUntil??Math.min(plan.endAt??Infinity,boundary,workDue);
   }
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
-  if(active){
+  if(active&&(advance||!previousUsage)){
    const audience=this.actor.audience??'unknown';
    const phase=autoUsagePhase(state,this.actor.motion,sharedActivity(state));
    this.actor.usage={at:started,until:plan.endAt??next,phase,audience};
    if(usage&&!previousUsage){usage.phase=phase;usage.audience=audience;}
-  }else delete this.actor.usage;
-  await this.ctx.storage.put('actor',this.actor);
+  }else if(!active)delete this.actor.usage;
+  const saved=JSON.stringify(this.actor);
+  if(saved!==this.savedActor){await this.ctx.storage.put('actor',this.actor);this.savedActor=saved;}
   if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
   else if(existing!==null)await this.ctx.storage.deleteAlarm();
   if(active||previousUsage)recordAutoUsage(usage);
@@ -154,7 +162,7 @@ export async function syncAutoActor(env,response,{observe=false}={}){
   let caughtUp=false;
   if(env.AUTO_ACTORS){
    const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(data.characterKey));
-   const path=observe&&data.state.plan?.fishingWork?.batchUntil?'observe':'sync';
+   const path=observe&&data.state.plan?.source==='rules'?'observe':'sync';
    const result=await stub.fetch(new Request('https://actor.internal/'+path,{method:'POST',body:JSON.stringify({playerId:data.characterKey})}));
    const actor=await result.json();motion=actor.motion;
    if(actor.latest){data=actor.latest;caughtUp=true;}

@@ -13,9 +13,10 @@ export function autoUsage(env,previous,trigger,now){
 
 export function autoUsagePhase(state,motion,activity){
  if(motion.moving)return 'travel';
+ if(state.hunting?.encounter||state.plan?.activeHunt||state.plan?.kind==='dungeon'||activity==='combat'||activity==='hunting')return 'combat';
+ if(state.plan?.miningWork||activity==='mining')return 'mining';
  if(state.plan?.physicalFishing&&state.location==='pond')return 'fishing';
  if(state.plan?.treeWork||activity==='regrowth')return 'woodcutting';
- if(state.plan?.activeHunt||state.plan?.kind==='dungeon'||activity==='combat'||activity==='hunting')return 'combat';
  return ['fishing','woodcutting','gambling','rest'].includes(activity)?activity:'other';
 }
 

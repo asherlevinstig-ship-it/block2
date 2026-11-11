@@ -1,0 +1,165 @@
+{
+  "description": "Local one-hour simulations using real AutoActor alarms and SQLite player settlement. Room transport is simulated. Each gambling case returns to the game at the end and must complete 120 rounds per player. This measures operation counts, not production capacity, latency or dollars.",
+  "rows": [
+    {
+      "players": 1,
+      "observed": true,
+      "kind": "gambling",
+      "minutes": 60,
+      "playerHours": 1,
+      "counts": {
+        "alarms": 120,
+        "reads": 122,
+        "writes": 120,
+        "actorWrites": 121,
+        "presence": 61,
+        "activity": 120
+      },
+      "rounds": 120,
+      "perPlayerHour": {
+        "alarms": 120,
+        "reads": 122,
+        "writes": 120,
+        "actorWrites": 121,
+        "presence": 61,
+        "activity": 120
+      }
+    },
+    {
+      "players": 1,
+      "observed": false,
+      "kind": "gambling",
+      "minutes": 60,
+      "playerHours": 1,
+      "counts": {
+        "alarms": 30,
+        "reads": 32,
+        "writes": 31,
+        "actorWrites": 32,
+        "presence": 32,
+        "activity": 31
+      },
+      "rounds": 120,
+      "perPlayerHour": {
+        "alarms": 30,
+        "reads": 32,
+        "writes": 31,
+        "actorWrites": 32,
+        "presence": 32,
+        "activity": 31
+      }
+    },
+    {
+      "players": 10,
+      "observed": true,
+      "kind": "gambling",
+      "minutes": 60,
+      "playerHours": 10,
+      "counts": {
+        "alarms": 1200,
+        "reads": 1220,
+        "writes": 1200,
+        "actorWrites": 1210,
+        "presence": 610,
+        "activity": 1200
+      },
+      "rounds": 1200,
+      "perPlayerHour": {
+        "alarms": 120,
+        "reads": 122,
+        "writes": 120,
+        "actorWrites": 121,
+        "presence": 61,
+        "activity": 120
+      }
+    },
+    {
+      "players": 10,
+      "observed": false,
+      "kind": "gambling",
+      "minutes": 60,
+      "playerHours": 10,
+      "counts": {
+        "alarms": 300,
+        "reads": 320,
+        "writes": 310,
+        "actorWrites": 320,
+        "presence": 320,
+        "activity": 310
+      },
+      "rounds": 1200,
+      "perPlayerHour": {
+        "alarms": 30,
+        "reads": 32,
+        "writes": 31,
+        "actorWrites": 32,
+        "presence": 32,
+        "activity": 31
+      }
+    },
+    {
+      "players": 100,
+      "observed": true,
+      "kind": "gambling",
+      "minutes": 60,
+      "playerHours": 100,
+      "counts": {
+        "alarms": 12000,
+        "reads": 12200,
+        "writes": 12000,
+        "actorWrites": 12100,
+        "presence": 6100,
+        "activity": 12000
+      },
+      "rounds": 12000,
+      "perPlayerHour": {
+        "alarms": 120,
+        "reads": 122,
+        "writes": 120,
+        "actorWrites": 121,
+        "presence": 61,
+        "activity": 120
+      }
+    },
+    {
+      "players": 100,
+      "observed": false,
+      "kind": "gambling",
+      "minutes": 60,
+      "playerHours": 100,
+      "counts": {
+        "alarms": 3000,
+        "reads": 3200,
+        "writes": 3100,
+        "actorWrites": 3200,
+        "presence": 3200,
+        "activity": 3100
+      },
+      "rounds": 12000,
+      "perPlayerHour": {
+        "alarms": 30,
+        "reads": 32,
+        "writes": 31,
+        "actorWrites": 32,
+        "presence": 32,
+        "activity": 31
+      }
+    },
+    {
+      "players": 1,
+      "observed": false,
+      "kind": "rest",
+      "minutes": 2,
+      "playerHours": 0.03333333333333333,
+      "counts": {
+        "alarms": 1,
+        "reads": 3,
+        "writes": 1,
+        "actorWrites": 2,
+        "presence": 2,
+        "activity": 0
+      },
+      "rounds": 0
+    }
+  ]
+}
