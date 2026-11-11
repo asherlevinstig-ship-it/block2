@@ -39,3 +39,17 @@ This simulates one hour for 1, 10 and 100 gambling players, observed and unobser
 The recorded run in `benchmarks/auto-2026-11-11.json` completed all three populations. Per gambling player-hour, observed/unbatched mode used 120 alarms and 120 player-state writes; quiet mode used 30 alarms and 31 player-state writes, including final return settlement. All cases resolved 120 rounds per player. The two-minute resting case completed with one alarm. These figures exclude real transport, session checks and contention between shared resources.
 
 Compare production resource units per player-hour over matching windows before projecting a monthly cost. Cloudflare bills Durable Object requests and duration above plan allowances; included usage, rounding, storage and other products affect the final invoice. Pricing reference: https://developers.cloudflare.com/durable-objects/platform/pricing/
+
+## Combat scheduling
+
+Auto combat now uses the same event clock as server combat replay: player/enemy strikes, attack-warning locks, burns, enemy thinking, add waves and add actions, mana/cooldown-based spells, dodges and retreat decisions. It sleeps until the next event instead of checking every 500 ms. A 50 ms delivery window groups closely spaced events; the replay engine still applies each event at its exact original timestamp. Walking boundaries and presence lease renewal still bound long waits.
+
+An expired Auto session cap requests that the current fight finish. It is no longer reused as a past alarm deadline while that fight resolves. Combat player-time measurement includes this finishing period. Manual combat/input and the dungeon's zone transitions are unchanged.
+
+```
+node pocket-lobby/scripts/benchmark-combat.mjs --output combat-benchmark.json
+```
+
+The recorded local run in `benchmarks/combat-2026-11-11.json` compares real actor/SQLite settlement with the previous 500 ms schedule. The starter boar used 8 rather than 10 alarms and 9 rather than 11 state reads, with identical health, combat outcome, XP and loot. Actor storage writes fell from 11 to 9; player-state writes were 8 rather than 7 because events are delivered more promptly. Safety retreat delivery took 200 rather than 500 ms with the same logical action time and outcome. Tests also compare exact combat-event sequences for seven enemy types, including reinforcement waves and the final guardian, and enforce an operation-count budget for starter combat.
+
+This is not a promise that every encounter is cheaper: a busy boss may have meaningful events more frequently than the old poll. Production combat cost must be measured separately from other phases over a comparable traffic window. These local counts are not an invoice or an Internet latency measurement.

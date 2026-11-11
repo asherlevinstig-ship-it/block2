@@ -1,0 +1,306 @@
+{
+  "description": "Local simulations using the real AutoActor and SQLite settlement. The baseline overrides its next fighting alarm to the previous fixed 500 ms interval; the event-driven version uses the shared combat clock with a 50 ms delivery window. Room transport is simulated. Counts measure operations, not Cloudflare billing or concurrent-player capacity. All paired outcomes/rewards are checked for equality.",
+  "rows": [
+    {
+      "fixedPolling": true,
+      "scenario": "starter boar",
+      "counts": {
+        "alarms": 10,
+        "reads": 11,
+        "writes": 7,
+        "actorWrites": 11,
+        "presence": 4,
+        "activity": 4
+      },
+      "elapsedMs": 5000,
+      "outcome": "queue-complete",
+      "health": 51,
+      "stats": {
+        "strengthXp": 15,
+        "agilityXp": 10,
+        "vitalityXp": 15,
+        "patienceXp": 0,
+        "luckXp": 0,
+        "leadershipXp": 0
+      },
+      "loot": {
+        "boar": 1
+      },
+      "hunts": {
+        "started": 1,
+        "wins": 1,
+        "escapes": 0,
+        "defeats": 0,
+        "xp": {
+          "strengthXp": 15,
+          "agilityXp": 10,
+          "vitalityXp": 15
+        },
+        "loot": {
+          "boar": 1
+        },
+        "stones": {},
+        "mastery": {},
+        "recent": [
+          {
+            "enemy": "boar",
+            "outcome": "victory",
+            "at": 1800000019850,
+            "health": 51
+          }
+        ],
+        "byEnemy": {
+          "boar": {
+            "started": 1,
+            "wins": 1,
+            "escapes": 0,
+            "defeats": 0,
+            "xp": 40,
+            "loot": 1,
+            "duration": 4850
+          }
+        }
+      }
+    },
+    {
+      "fixedPolling": false,
+      "scenario": "starter boar",
+      "counts": {
+        "alarms": 8,
+        "reads": 9,
+        "writes": 8,
+        "actorWrites": 9,
+        "presence": 5,
+        "activity": 3
+      },
+      "elapsedMs": 4900,
+      "outcome": "queue-complete",
+      "health": 51,
+      "stats": {
+        "strengthXp": 15,
+        "agilityXp": 10,
+        "vitalityXp": 15,
+        "patienceXp": 0,
+        "luckXp": 0,
+        "leadershipXp": 0
+      },
+      "loot": {
+        "boar": 1
+      },
+      "hunts": {
+        "started": 1,
+        "wins": 1,
+        "escapes": 0,
+        "defeats": 0,
+        "xp": {
+          "strengthXp": 15,
+          "agilityXp": 10,
+          "vitalityXp": 15
+        },
+        "loot": {
+          "boar": 1
+        },
+        "stones": {},
+        "mastery": {},
+        "recent": [
+          {
+            "enemy": "boar",
+            "outcome": "victory",
+            "at": 1800000019850,
+            "health": 51
+          }
+        ],
+        "byEnemy": {
+          "boar": {
+            "started": 1,
+            "wins": 1,
+            "escapes": 0,
+            "defeats": 0,
+            "xp": 40,
+            "loot": 1,
+            "duration": 4850
+          }
+        }
+      }
+    },
+    {
+      "fixedPolling": true,
+      "scenario": "safety retreat",
+      "counts": {
+        "alarms": 1,
+        "reads": 2,
+        "writes": 1,
+        "actorWrites": 2,
+        "presence": 2,
+        "activity": 0
+      },
+      "elapsedMs": 500,
+      "outcome": "hunt-escaped",
+      "health": 30,
+      "stats": {
+        "strengthXp": 0,
+        "agilityXp": 0,
+        "vitalityXp": 0,
+        "patienceXp": 0,
+        "luckXp": 0,
+        "leadershipXp": 0
+      },
+      "loot": {},
+      "hunts": {
+        "started": 1,
+        "wins": 0,
+        "escapes": 1,
+        "defeats": 0,
+        "xp": {},
+        "loot": {},
+        "stones": {},
+        "mastery": {},
+        "recent": [
+          {
+            "decision": {
+              "at": 1800000015150,
+              "style": "balanced",
+              "action": "flee",
+              "reason": "Retreating: health reached your 79 HP safety line."
+            },
+            "enemy": "boar",
+            "outcome": "escaped",
+            "at": 1800000015150,
+            "health": 30
+          }
+        ],
+        "byEnemy": {
+          "boar": {
+            "started": 1,
+            "wins": 0,
+            "escapes": 1,
+            "defeats": 0,
+            "xp": 0,
+            "loot": 0,
+            "duration": 150
+          }
+        }
+      }
+    },
+    {
+      "fixedPolling": false,
+      "scenario": "safety retreat",
+      "counts": {
+        "alarms": 1,
+        "reads": 2,
+        "writes": 1,
+        "actorWrites": 2,
+        "presence": 2,
+        "activity": 0
+      },
+      "elapsedMs": 200,
+      "outcome": "hunt-escaped",
+      "health": 30,
+      "stats": {
+        "strengthXp": 0,
+        "agilityXp": 0,
+        "vitalityXp": 0,
+        "patienceXp": 0,
+        "luckXp": 0,
+        "leadershipXp": 0
+      },
+      "loot": {},
+      "hunts": {
+        "started": 1,
+        "wins": 0,
+        "escapes": 1,
+        "defeats": 0,
+        "xp": {},
+        "loot": {},
+        "stones": {},
+        "mastery": {},
+        "recent": [
+          {
+            "decision": {
+              "at": 1800000015150,
+              "style": "balanced",
+              "action": "flee",
+              "reason": "Retreating: health reached your 79 HP safety line."
+            },
+            "enemy": "boar",
+            "outcome": "escaped",
+            "at": 1800000015150,
+            "health": 30
+          }
+        ],
+        "byEnemy": {
+          "boar": {
+            "started": 1,
+            "wins": 0,
+            "escapes": 1,
+            "defeats": 0,
+            "xp": 0,
+            "loot": 0,
+            "duration": 150
+          }
+        }
+      }
+    },
+    {
+      "fixedPolling": false,
+      "scenario": "session expires during fight",
+      "counts": {
+        "alarms": 9,
+        "reads": 10,
+        "writes": 9,
+        "actorWrites": 10,
+        "presence": 5,
+        "activity": 3
+      },
+      "elapsedMs": 4900,
+      "outcome": "away-cap",
+      "health": 51,
+      "stats": {
+        "strengthXp": 15,
+        "agilityXp": 10,
+        "vitalityXp": 15,
+        "patienceXp": 0,
+        "luckXp": 0,
+        "leadershipXp": 0
+      },
+      "loot": {
+        "boar": 1
+      },
+      "hunts": {
+        "started": 1,
+        "wins": 1,
+        "escapes": 0,
+        "defeats": 0,
+        "xp": {
+          "strengthXp": 15,
+          "agilityXp": 10,
+          "vitalityXp": 15
+        },
+        "loot": {
+          "boar": 1
+        },
+        "stones": {},
+        "mastery": {},
+        "recent": [
+          {
+            "enemy": "boar",
+            "outcome": "victory",
+            "at": 1800000019850,
+            "health": 51
+          }
+        ],
+        "byEnemy": {
+          "boar": {
+            "started": 1,
+            "wins": 1,
+            "escapes": 0,
+            "defeats": 0,
+            "xp": 40,
+            "loot": 1,
+            "duration": 4850
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {cinderPounce} from './familiars.mjs';
-import {initializeAdds,addDueAt,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds,chooseAutoAddTarget} from '../public/dungeon-adds.js';
+import {initializeAdds,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
 import {activateVeil,outfitVeilUntil,readyOutfitPower} from '../public/outfit-magic.js';
 import {combatStamina} from '../public/hunting.js';
-import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
+import {arenaEnemy,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
+import {combatSchedule} from './combat-schedule.mjs';
 import {enemyAttack} from '../public/hunting.js';
 import {useHunger,exertionDuration,isExhausted} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
@@ -128,12 +129,8 @@ function result(state,event,now,random=Math.random){
 export function advanceServerCombat(state,now,random=Math.random){
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
-    const encounter=state.hunting.encounter;
-    if(encounter.addsVersion===1&&!encounter.manualTarget&&state.characterRules?.combat?.enabled)encounter.combatTarget=chooseAutoAddTarget(encounter,encounter.tacticsAt??0);
-    const addsDue=addDueAt(encounter);
-    const coreDue=Math.min(addsDue,encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
-    const tactic=nextCombatTactic(state),automatic=tactic&&tactic.at<coreDue;
-    const due=automatic?tactic.at:coreDue,warningAt=arenaWarningAt(encounter,enemyAttack(encounter));
+    const {encounter,addsDue,tactic,automatic,due,warningAt}=combatSchedule(state);
+    state.hunting.encounter=encounter;
     if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
     if(due>now)break;
     let event;

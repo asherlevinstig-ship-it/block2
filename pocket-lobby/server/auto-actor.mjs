@@ -13,6 +13,7 @@ import {sharedFishingPose} from '../public/fishing.js';
 import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 import {autoUsage,autoUsagePhase,recordAutoUsage} from './auto-usage.mjs';
 import {autoWorkDue,quietWorkDeadline,PRESENCE_RENEW_MS} from './auto-cadence.mjs';
+import {combatWakeAt} from './combat-schedule.mjs';
 
 export class AutoActor{
  constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};this.savedActor=JSON.stringify(this.actor);});}
@@ -95,21 +96,26 @@ export class AutoActor{
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
   const plan=state?.plan,fishing=plan?.fishingWork;
-  const due=autoWorkDue(plan);
+  const fighting=!!state?.hunting?.encounter;
+  const due=fighting?combatWakeAt(state):autoWorkDue(plan);
   // During long waits, the client renders the timestamped animation locally.
   // Wake for the next action or lease renewal instead of polling every two seconds.
-  const wait=plan?.activeHunt||state?.hunting?.encounter?500:due>now?Math.min(due-now,60000):2000;
+  const wait=Number.isFinite(due)&&due>now?Math.min(due-now,60000):fighting?100:plan?.activeHunt?500:2000;
   if(active){
    const walk=this.actor.walk;
-   const boundary=walk?Math.max(now+50,walk.endsAt):now+(this.actor.motion.blocked?5000:Math.max(100,wait));
-   const workDue=walk&&(plan.activeHunt||due>now)?now+Math.max(100,wait):Infinity;
-   next=fishing?.batchUntil??this.actor.quietUntil??Math.min(plan.endAt??Infinity,boundary,workDue);
+   const workWait=Math.max(fighting?1:100,wait);
+   const boundary=walk?Math.max(now+50,walk.endsAt):now+(this.actor.motion.blocked&&!fighting?5000:workWait);
+   const workDue=walk&&(fighting||plan.activeHunt||due>now)?now+workWait:Infinity;
+   // A session cap requests a retreat/finish; a fight may still be resolving.
+   // Reusing the expired cap as its next alarm would create a tight wake loop.
+   const cap=fighting&&plan.endAt<=now?Infinity:plan.endAt??Infinity;
+   next=fishing?.batchUntil??this.actor.quietUntil??Math.min(cap,boundary,workDue);
   }
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(active&&(advance||!previousUsage)){
    const audience=this.actor.audience??'unknown';
    const phase=autoUsagePhase(state,this.actor.motion,sharedActivity(state));
-   this.actor.usage={at:started,until:plan.endAt??next,phase,audience};
+   this.actor.usage={at:started,until:fighting?Math.max(plan.endAt??next,next):plan.endAt??next,phase,audience};
    if(usage&&!previousUsage){usage.phase=phase;usage.audience=audience;}
   }else if(!active)delete this.actor.usage;
   const saved=JSON.stringify(this.actor);
