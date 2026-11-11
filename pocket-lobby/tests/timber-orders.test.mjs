@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {testDatabase} from './db-helper.mjs';
-import {handlePlayerApi} from '../server/player-api.mjs';
-import {normalizeState} from '../server/player-state.mjs';
+import {handlePlayerApi,settled} from '../server/player-api.mjs';
+import {normalizeState,settlePlan} from '../server/player-state.mjs';
 import {readRankings} from '../server/rankings.mjs';
+import {matchAutoTimberOrders,writeAutoTimberSale} from '../server/timber-orders.mjs';
+import {touchPresence} from '../server/routines.mjs';
+import {simpleAutoRules} from '../public/simple-auto.js';
+import {woodRules} from '../public/woodcutting.js';
 
 const origin='https://tower.test';
 function client(db,vars={}){
@@ -107,4 +111,41 @@ test('refundable escrow counts toward wealth and character reset clears outstand
   assert.equal(reset.state.characterCreated,false);
   assert.equal(sql.prepare('SELECT COUNT(*) AS count FROM tower_timber_orders').get().count,0);
   assert.equal((await seller.request('state')).state.credits,70);
+});
+test('an unmatched visit keeps timber, and a trip cancelled before arrival never sells',async t=>{
+  const {db,sql}=testDatabase();t.after(()=>sql.close());
+  const now=Date.now();t.mock.method(Date,'now',()=>now);
+  const buyer=await marketPlayer(db,sql,'Buyer',200,0);
+  const {board}=await buyer.trade({kind:'post',quantity:20,price:5});
+  const seller='auto-seller',startedAt=now-3*woodRules.offlineInterval;
+  const state=normalizeState({location:'logging',controlMode:'auto',woodcutting:{axeOwned:true,equipped:true,timber:10},characterRules:simpleAutoRules('woodcutting',{risk:'safe'})});
+  touchPresence(state,startedAt,{active:false,forceStart:true});settlePlan(state,now);
+  assert.equal(state.plan.timberMarketTrip,true);
+  const write=()=>sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?,?,1,?,?)').run(seller,JSON.stringify(state),'fixture',now);
+  const env={TOWER_DB:db},counter={room:'market',x:4,y:3};
+  write();
+  const before=await settled(env,seller,true,{idle:true,motion:{room:'market',x:2,y:3}});
+  assert.equal(JSON.parse(before.state_json).plan.timberSales,undefined);
+  const after=JSON.parse((await settled(env,seller,true,{idle:true,motion:counter})).state_json);
+  assert.deepEqual(after.plan.timberSales,{quantity:0,gold:0,sales:0,visits:1});
+  assert.equal(after.woodcutting.timber,13);
+  assert.equal(after.credits,100);
+  state.plan.timberMarket.minimumPrice=5;settlePlan(state,now,{stop:true});write();
+  const cancelled=JSON.parse((await settled(env,seller,true,{idle:true,motion:counter})).state_json);
+  assert.equal(cancelled.report.reason,'returned');
+  assert.equal(cancelled.woodcutting.timber,13);
+  assert.equal(sql.prepare('SELECT ready FROM tower_timber_orders WHERE order_id=?').get(board.own[0].id).ready,0);
+});
+test('an order changing after Auto matches aborts the whole settlement, including other orders',async t=>{
+  const {db,sql}=testDatabase();t.after(()=>sql.close());
+  const buyer=await marketPlayer(db,sql,'Buyer',200,0),seller=await marketPlayer(db,sql,'Seller',100,4);
+  const first=await buyer.trade({kind:'post',quantity:2,price:8});
+  const second=await buyer.trade({kind:'post',quantity:2,price:7});
+  const row=sql.prepare('SELECT * FROM tower_players WHERE player_id=?').get(seller.packet.characterKey);
+  const matches=await matchAutoTimberOrders(db,row.player_id,6,4,100);
+  assert.deepEqual(matches.map(match=>match.price),[8,7]);
+  await buyer.trade({kind:'cancel',id:first.board.own[0].id});
+  assert.equal(await writeAutoTimberSale(db,row,{credits:130},'settle:stale',Date.now(),matches),null);
+  assert.equal((await seller.request('state')).state.credits,100);
+  assert.equal(sql.prepare('SELECT ready FROM tower_timber_orders WHERE order_id=?').get(second.board.own.find(order=>order.price===7).id).ready,0);
 });

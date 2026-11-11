@@ -4,7 +4,8 @@ import {AutoActor,AutoDirector,wakeAutoDirector} from '../server/auto-actor.mjs'
 import {planAutoWalk,autoTilePath} from '../server/auto-motion.mjs';
 import {autoWalkPosition} from '../public/auto-walk.js';
 import {SharedRoom} from '../server/shared-room.mjs';
-import {normalizeState} from '../server/player-state.mjs';
+import {normalizeState,settlePlan} from '../server/player-state.mjs';
+import {autoRecapView} from '../public/auto-recap.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {touchPresence} from '../server/routines.mjs';
 import {testDatabase} from './db-helper.mjs';
@@ -75,6 +76,43 @@ test('idle deadline activates saved rules without an owner heartbeat',async t=>{
  sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'test',Date.now());
  const ctx=context(),env={TOWER_DB:db,SHARED_ROOMS:{idFromName:n=>n,get:()=>({fetch:async()=>Response.json({ok:true})})}},actor=new AutoActor(ctx,env);
  await actor.fetch(sync(id));assert(await ctx.storage.getAlarm());await actor.alarm();assert(actor.actor.active);
+});
+
+test('Auto Woodcut walks its timber to the market before filling the best player orders',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const now=Date.now(),id='woodcutter';let clock=now;t.mock.method(Date,'now',()=>clock);
+ const state=normalizeState({location:'logging',position:{x:5,y:5},woodcutting:{axeOwned:true,equipped:true,timber:10},characterRules:simpleAutoRules('woodcutting',{risk:'safe'})});
+ const read=()=>JSON.parse(sql.prepare('SELECT state_json FROM tower_players WHERE player_id=?').get(id).state_json);
+ const save=()=>sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?) ON CONFLICT(player_id) DO UPDATE SET state_json=excluded.state_json').run(id,JSON.stringify(state),'fixture',clock);
+ save();
+ const order=sql.prepare('INSERT INTO tower_timber_orders VALUES(?,?,?,?,?,?,0,?,?)');
+ for(const [buyer,price,quantity] of [['best',8,2],['next',6,3],['cheap',5,10],[id,20,10]]){
+  if(buyer!==id)sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?)').run(buyer,JSON.stringify(normalizeState({credits:200-price*quantity})),'order',now);
+  order.run(buyer,buyer,buyer,price,quantity,quantity,now,buyer);
+ }
+ const sent=[],ctx=context(),prepare=db.prepare.bind(db);let orderReads=0;
+ db.prepare=query=>{if(query.includes('price>=?'))orderReads++;return prepare(query);};
+ const env={TOWER_DB:db,SHARED_ROOMS:{idFromName:name=>name,get:room=>({fetch:async req=>{sent.push({room,...await req.json()});return Response.json({ok:true});}})}};
+ const actor=new AutoActor(ctx,env);await actor.fetch(sync(id));
+ state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true,physicalTimber:true});save();await actor.fetch(sync(id));
+ for(let i=0;i<55&&!read().plan?.timberSales;i++){
+  clock=await ctx.storage.getAlarm();assert(clock);
+  if(actor.actor.motion.room!=='market')assert.equal(orderReads,0);
+  await actor.alarm();
+ }
+ const after=read();
+ assert.deepEqual(after.plan.timberSales,{quantity:3,gold:22,sales:2,visits:1});
+ assert.equal(orderReads,1);
+ assert.equal(after.credits,122);assert.equal(after.woodcutting.timber,10);
+ assert.equal(actor.actor.motion.room,'market');assert.deepEqual({x:actor.actor.motion.x,y:actor.actor.motion.y},{x:4,y:3});
+ const rows=sql.prepare('SELECT order_id,ready FROM tower_timber_orders ORDER BY order_id').all();
+ assert.deepEqual(rows.map(row=>[row.order_id,row.ready]),[['best',2],['cheap',0],['next',1],[id,0]]);
+ assert(sent.some(event=>event.room==='forest-v1:logging'&&event.peer?.chopping));
+ assert(sent.some(event=>event.room==='public:hub'&&event.peer?.activity==='walking'));
+ assert(sent.some(event=>event.room==='market'&&event.events?.some(event=>event.label==='+22 gold')));
+ settlePlan(after,clock,{stop:true});
+ assert.equal(autoRecapView(after,null,room=>room).market,'Sold 3 timber for 22 gold across 2 player sales. 10 timber in your bag.');
+ assert.equal(after.activityLog.at(-1).timberSales.kept,10);
 });
 
 test('room shows an offline Auto peer once, relays catches, and expires abandoned leases',async()=>{

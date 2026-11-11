@@ -232,6 +232,7 @@
     if(running){const row=document.createElement('li');row.textContent=(plan.adaptive?'Auto choice '+(plan.cycle+1)+' · ':'Cycle '+(plan.cycle+1)+' / '+plan.queue.repeats+' · Step '+(plan.stepIndex+1)+' / '+plan.queue.steps.length+' · ')+(plan.currentLabel??'Getting ready');list.append(row);}
     for(const entry of plan.entries.slice(-8)){const row=document.createElement('li');row.textContent='Cycle '+entry.cycle+' · '+queueActions[entry.type]+' · '+entry.note;list.append(row);}
     if(plan.entries.length>8){const row=document.createElement('li');row.textContent='Showing the most recent 8 completed steps.';list.append(row);}
+    if(plan.timberSales){const row=document.createElement('li');row.textContent=timberSalesText(plan.timberSales,state.woodcutting.timber);list.append(row);}
     if(plan.goalResult){const goal=plan.goalResult,row=document.createElement('li');row.textContent=goal.name+' · '+(goal.status==='purchased'?'Purchased and equipped for '+goal.spent+' gold':goal.status==='owned'?'Already in your Inventory':'Gold and stat requirements met · Ready to buy')+(goal.reason==='spending-limit'?' · Automatic purchase skipped: queue spending limit':goal.reason==='gold-reserve'?' · Automatic purchase skipped: gold reserve protected':'');list.append(row);}
     appendFoodReport(list,plan);
     if(plan.cookedMeals){const row=document.createElement('li');row.textContent='Cooked '+Object.entries(plan.cookedMeals).map(([id,n])=>n+' × '+id.replace(/([A-Z])/g,' $1')).join(', ')+' · +'+plan.cookingXp+' Cooking XP';list.append(row);}

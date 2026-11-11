@@ -21,6 +21,40 @@ export function atTradingPost(state){
   return state.location==='market'&&state.characterCreated!==false;
 }
 
+export async function matchAutoTimberOrders(db,sellerId,minimumPrice,surplus,wallet){
+  if(!surplus||wallet<minimumPrice)return [];
+  const {results}=await db.prepare(`SELECT order_id,price,remaining,mutation FROM tower_timber_orders
+    WHERE remaining>0 AND buyer_id<>? AND price>=? ORDER BY price DESC,created_at,order_id LIMIT 5`).bind(sellerId,minimumPrice).all();
+  const matches=[];
+  for(const order of results){
+    const quantity=Math.min(surplus,order.remaining,Math.floor(wallet/order.price));
+    if(!quantity)continue;
+    matches.push({id:order.order_id,mutation:order.mutation,price:order.price,quantity});
+    surplus-=quantity;wallet-=quantity*order.price;
+    if(!surplus)break;
+  }
+  return matches;
+}
+
+export async function writeAutoTimberSale(db,row,state,operation,now,matches){
+  const payload=JSON.stringify(matches);
+  // A changed order or seller revision aborts the whole sale before any order is filled.
+  const [saved]=await db.batch([
+    db.prepare(`UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=?
+      WHERE player_id=? AND revision=? AND NOT EXISTS (
+        SELECT 1 FROM json_each(?) AS m LEFT JOIN tower_timber_orders AS o ON o.order_id=json_extract(m.value,'$.id')
+        WHERE o.order_id IS NULL OR o.mutation<>json_extract(m.value,'$.mutation') OR o.remaining<json_extract(m.value,'$.quantity')
+      ) RETURNING *`).bind(JSON.stringify(state),operation,now,row.player_id,row.revision,payload),
+    db.prepare(`WITH matches AS (
+        SELECT json_extract(value,'$.id') AS id,json_extract(value,'$.quantity') AS quantity FROM json_each(?)
+      )
+      UPDATE tower_timber_orders SET remaining=remaining-matches.quantity,ready=ready+matches.quantity,mutation=?
+      FROM matches WHERE order_id=matches.id AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=? AND last_request=?)
+      RETURNING order_id`).bind(payload,operation,row.player_id,row.revision+1,operation)
+  ]);
+  return saved.results[0]??null;
+}
+
 export async function changeTimberOrder(db,row,state,body,now){
   if(!atTradingPost(state)||state.controlMode==='auto'||state.plan||state.report||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0){
     throw invalid('Visit the Trading Post in Play mode to trade.');

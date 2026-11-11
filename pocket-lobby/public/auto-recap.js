@@ -1,9 +1,10 @@
 import {autoStatus} from './auto-mode.js';
+import {timberSalesText} from './simple-auto.js';
 
 const routine=state=>state?.plan?.source==='rules'?state.plan:state?.report?.source==='rules'?state.report:null;
 const sum=values=>Object.values(values??{}).reduce((total,value)=>total+value,0);
 const format=new Intl.NumberFormat();
-const foodJobs=['fishing','battle','hunting','random'];
+const foodJobs=['fishing','woodcutting','battle','hunting','random'];
 const foodStops=['out-of-food','food-budget','food-funds','food-reserve'];
 export const autoRecapAwayMs=60000;
 
@@ -13,6 +14,7 @@ export function autoRecapSnapshot(state){
  return {id:String(plan.routineId??plan.startedAt),fish:sum(plan.catches),timber:plan.timber??0,wins:plan.hunts?.wins??0,
   places:plan.explored??plan.visited?.length??0,rounds:plan.rounds??0,meals:sum(plan.cookedMeals),
   earned:plan.goldEarned??0,spent:plan.goldSpent??0,bread:plan.rationGoldSpent??0,banked:plan.bankedGold??0,
+  marketQuantity:plan.timberSales?.quantity??0,marketGold:plan.timberSales?.gold??0,marketSales:plan.timberSales?.sales??0,marketVisits:plan.timberSales?.visits??0,
  };
 }
 
@@ -29,8 +31,9 @@ export function autoRecapView(state,baseline,roomName){
   .map(([key,label])=>({label,value:gained(key)})).filter(item=>item.value>0);
  const earned=gained('earned'),spent=gained('spent'),bread=gained('bread'),banked=gained('banked');
  const wallet=[earned&&'+'+format.format(earned)+' gold earned',spent&&'−'+format.format(spent)+' gold spent'+(bread?' · '+format.format(bread)+' on bread':''),banked&&format.format(banked)+' gold banked'].filter(Boolean);
+ const market=timberSalesText({quantity:gained('marketQuantity'),gold:gained('marketGold'),sales:gained('marketSales'),visits:gained('marketVisits')},state.woodcutting?.timber??0);
  return {rewards,wallet,location,running,returning:info.returning===true,summary:same?'Since you stepped away':'This Auto session',
-  status:running?activity:info.reason,completion:running?null:totals.id+':'+plan.endedAt,
+  status:running?activity:info.reason,completion:running?null:totals.id+':'+plan.endedAt,market,
   startedAt:plan.startedAt,food:!!plan.foodTrip||foodStops.includes(plan.reason)||(plan.simpleMode?foodJobs.includes(plan.simpleMode):[undefined,'fishing','woodcutting','queue'].includes(plan.kind)),
  };
 }
@@ -63,6 +66,8 @@ export function initializeAutoRecap({doc,getPacket,roomName,takeControl,openFood
   rewards.hidden=!view.rewards.length;
   byId('autoRecapWallet').textContent=view.wallet.join('  •  ');
   byId('autoRecapWallet').hidden=!view.wallet.length;
+  byId('autoRecapMarket').textContent=view.market;
+  byId('autoRecapMarket').hidden=!view.market;
   error.textContent='';
   if(!dialog.open)dialog.showModal();
  }

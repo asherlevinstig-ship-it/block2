@@ -22,6 +22,8 @@ import {skillLevel,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {harvestTimber,woodRules} from '../public/woodcutting.js';
 import {recordQuest} from '../public/quests.js';
 export const QUEUE_ACTION_MS=15000;
+export const timberMarketCounter={x:4,y:3};
+export const timberMarketSurplus=(state,plan)=>Math.max(0,state.woodcutting.timber-Math.max(plan.timberMarket.keepTimber,state.bank?.vault?.rules?.timber??0));
 const huntTimeBuffer=30000;
 const needsWorkFood=type=>type==='fishing'||type==='buyBait'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type);
 export function startRoutineQueue(state,rules,startedAt,metadata){
@@ -29,6 +31,7 @@ export function startRoutineQueue(state,rules,startedAt,metadata){
 }
 export function finishRoutineQueue(state,plan,reason,endedAt){
   delete plan.foodTrip;
+  delete plan.timberMarketTrip;
   state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
   state.location='home';state.position={x:5,y:7};return true;
 }
@@ -39,6 +42,18 @@ function nextStep(plan,at,note){
   if(plan.adaptive)plan.entries=plan.entries.slice(-64);
   plan.cursorAt=at;plan.nextAt=null;plan.stepCount=0;plan.stepIndex++;
   if(plan.stepIndex===plan.queue.steps.length){plan.stepIndex=0;plan.cycle++;}
+}
+export function completeTimberMarketTrip(state,at,matches){
+ const quantity=matches.reduce((sum,order)=>sum+order.quantity,0);
+ const gold=matches.reduce((sum,order)=>sum+order.quantity*order.price,0);
+ const p=state.plan,totals=p.timberSales??={quantity:0,gold:0,sales:0,visits:0};
+ totals.visits++;totals.quantity+=quantity;totals.gold+=gold;totals.sales+=matches.length;
+ state.woodcutting.timber-=quantity;
+ state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;
+ p.stepCount=quantity;delete p.timberMarketTrip;
+ if(quantity)autoBankGold(state,p,at);
+ nextStep(p,at,quantity?'Sold '+quantity+' timber to players for '+gold+' gold':'No timber sold at your price · Kept your timber');
+ if(!quantity&&state.woodcutting.timber>=1000000)finish(state,p,'inventory-full',at);
 }
 export function completeRoutineTimber(state,amount,xp,at){
  const p=state.plan;p.woodXp+=xp;p.timber+=amount;p.stepCount+=amount;p.cursorAt=at;p.nextAt=null;autoStoreVault(state,p,at);
@@ -52,6 +67,10 @@ export function completeRoutineFish(state,fish,xp,at){
 }
 export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={}){
   const p=state.plan,until=Math.min(now,p.endAt);let changed=false;
+  if(p.timberMarketTrip){
+    if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
+    return false;
+  }
   if(!p.adaptive&&!p.activeHunt&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
   if(p.adaptive)p.preflightComplete=true;
   if(!p.preflightComplete){
@@ -133,10 +152,23 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       return changed;
     }
     if(type!=='woodcutting')delete p.treeWork;
+    if(p.timberMarket&&type==='sellTimber'){
+      if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
+      if(!timberMarketSurplus(state,p)){
+        if(state.woodcutting.timber>=1000000)return finish(state,p,'inventory-full',p.cursorAt);
+        nextStep(p,p.cursorAt,'Timber reserve kept');changed=true;continue;
+      }
+      p.timberMarketTrip=true;p.currentLabel='Checking player timber orders';
+      state.location='market';state.position={...timberMarketCounter};
+      return true;
+    }
     if(p.physicalTimber&&type==='woodcutting'&&(stop||now>=p.endAt))return finish(state,p,stop?'returned':'away-cap',until);
     if(p.physicalTimber&&type==='woodcutting'&&!stop&&now<p.endAt){
       if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return finish(state,p,'requirements',p.cursorAt);
-      if(state.woodcutting.timber>=1000000)return finish(state,p,'inventory-full',p.cursorAt);
+      if(state.woodcutting.timber>=1000000){
+        if(!p.timberMarket)return finish(state,p,'inventory-full',p.cursorAt);
+        delete p.treeWork;nextStep(p,p.cursorAt,'Bag full · Checking player orders');changed=true;continue;
+      }
       if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){delete p.treeWork;nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
       if(!p.treeWork){p.treeWork={phase:'choose'};state.location='logging';state.position={x:5,y:5};changed=true;}
       p.nextAt=null;

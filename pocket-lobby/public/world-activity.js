@@ -5,6 +5,8 @@ export function worldActivityEvents(before,after,now=Date.now()){
  if(!before||!after)return [];
  const events=[],room=after.location,p=plan(after),b=plan(before),same=p&&b&&(p.routineId??p.startedAt)===(b.routineId??b.startedAt);
  const add=(id,kind,label,amount=0,at=now,eventRoom=room)=>{if(now-at>=0&&now-at<5000)events.push({id,kind,label,amount,at,room:eventRoom});};
+ const timberGold=same?(p.timberSales?.gold??0)-(b.timberSales?.gold??0):0;
+ if(timberGold>0)add('timber-sale:'+p.startedAt+':'+p.timberSales.visits,'gold','+'+timberGold+' gold',timberGold,p.cursorAt,'market');
  if(p?.kind==='gambling'){
   if(same&&(p.rounds??0)>(b.rounds??0))for(const r of p.recent??[])if(r.at>(b.recent?.at(-1)?.at??0))add('gamble:'+p.startedAt+':'+r.at,r.net<0?'loss':r.net>0?'gold':'push',(r.net<0?'−'+Math.abs(r.net):r.net>0?'+'+r.net:'±0')+' gold',r.net,r.at,'lounge');
  }else{

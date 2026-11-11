@@ -1,7 +1,7 @@
 import {addThreats,combatTargetTile} from './dungeon-adds.js';
 import {advanceOnEnemy} from './enemy-brain.js';
-import {simpleAutoModes,simpleAutoRisks} from './simple-auto.js';
-export {simpleAutoModes,simpleAutoRules,simpleAutoRisks,simpleAutoRiskDetail} from './simple-auto.js';
+import {simpleAutoModes,simpleAutoRisks,normalizeTimberMarket} from './simple-auto.js';
+export {simpleAutoModes,simpleAutoRules,simpleAutoRisks,simpleAutoRiskDetail,normalizeTimberMarket,timberSalesText} from './simple-auto.js';
 import {armourSelection,armourProfile} from './hunting.js';
 import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
@@ -49,11 +49,11 @@ export function normalizeCharacterRules(input={}){
   if(!Object.hasOwn(combatStyles,style)||typeof dodge!=='boolean'||typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
   if(strategy==='routine'&&queue?.enabled&&queue.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
-  return {...(input.simpleMode?{simpleMode:input.simpleMode,simpleRisk:input.simpleRisk??'safe'}:{}),enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
+  return {...(input.simpleMode?{simpleMode:input.simpleMode,simpleRisk:input.simpleRisk??'safe'}:{}),...(input.simpleMode==='woodcutting'?{timberMarket:normalizeTimberMarket(input.timberMarket)}:{}),enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
 }
 export function describeCharacterRules(input){
   const r=normalizeCharacterRules(input);
-  if(r.simpleMode)return simpleAutoModes[r.simpleMode].name+' · '+simpleAutoRisks[r.simpleRisk].name+': '+simpleAutoModes[r.simpleMode].loop+'. '+(r.enabled?'Starts after 3 minutes idle or offline.':'Starts when you choose Auto.');
+  if(r.simpleMode)return simpleAutoModes[r.simpleMode].name+' · '+simpleAutoRisks[r.simpleRisk].name+': '+simpleAutoModes[r.simpleMode].loop+'. '+(r.timberMarket?'Keep '+r.timberMarket.keepTimber+' timber and sell for at least '+r.timberMarket.minimumPrice+' gold each. ':'')+(r.enabled?'Starts after 3 minutes idle or offline.':'Starts when you choose Auto.');
   if(!r.enabled)return 'Automatic away actions are off. Your character stays where you leave them.';
   if(r.strategy==='gambling')return 'Auto '+r.gambling.game+' · Fixed '+r.gambling.bet+' gold bet · Stop before total losses exceed '+r.gambling.lossLimit+' gold, keep '+r.gambling.reserveGold+' gold, stop at +'+r.gambling.profitTarget+' net gold or '+r.gambling.maxRounds+' rounds. Winnings do not reset the loss limit.';
   if(r.strategy==='earnGold')return 'Earn gold safely: choose work from your gear and health, sell surplus, keep your item reserves, spend at most '+r.goldPolicy.budget+' gold and protect '+r.goldPolicy.reserveGold+' gold.';

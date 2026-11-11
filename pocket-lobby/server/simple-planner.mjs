@@ -49,7 +49,11 @@ export function chooseSimpleTask(state,p,random=Math.random){
     tasks.push(step(beetle?'huntBeetles':'huntBoars',mode==='battle'?battleBatchLimit:1));
    }
    tasks.push(sale);
-  }else if(job==='woodcutting'){tasks=[step('woodcutting',profile.batch),step('sellTimber',mode==='random'?policy.keepTimber:0)];}
+  }else if(job==='woodcutting'){
+   if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return {stop:'requirements',reason:'Collect and equip an axe at Timber Hollow to start Auto Woodcutting.'};
+   const sale=step('sellTimber',mode==='random'?policy.keepTimber:0);
+   tasks=p.timberMarket&&state.woodcutting.timber>=1000000?[sale]:[step('woodcutting',profile.batch),sale];
+  }
   else if(job==='rest')tasks=[step('rest',0)];
   else{
    tasks=Array.from({length:5},()=>step('explore',1));
