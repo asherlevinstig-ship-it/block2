@@ -53,3 +53,17 @@ node pocket-lobby/scripts/benchmark-combat.mjs --output combat-benchmark.json
 The recorded local run in `benchmarks/combat-2026-11-11.json` compares real actor/SQLite settlement with the previous 500 ms schedule. The starter boar used 8 rather than 10 alarms and 9 rather than 11 state reads, with identical health, combat outcome, XP and loot. Actor storage writes fell from 11 to 9; player-state writes were 8 rather than 7 because events are delivered more promptly. Safety retreat delivery took 200 rather than 500 ms with the same logical action time and outcome. Tests also compare exact combat-event sequences for seven enemy types, including reinforcement waves and the final guardian, and enforce an operation-count budget for starter combat.
 
 This is not a promise that every encounter is cheaper: a busy boss may have meaningful events more frequently than the old poll. Production combat cost must be measured separately from other phases over a comparable traffic window. These local counts are not an invoice or an Internet latency measurement.
+
+## Unobserved solo hunts
+
+Queued solo Wild Boar and Stoneback Beetle hunts can now settle three seconds of combat together when the character is stationary and its room has confirmed that no player is watching. The normal combat engine processes every due action in timestamp order, including damage, mana, spell cooldowns, dodges, retreat attempts, defeat and victory rewards. No damage or loot is estimated from a rate.
+
+The actor publishes the batch deadline through the existing room-observer protocol. A returning owner or a player entering the room wakes it immediately, settles only actions already due, and restores event scheduling. Recovery reads preserve the deadline instead of extending it. Taking control catches up due combat before requesting the current hunt to finish. A time cap interrupts batching; the finishing fight remains on event scheduling.
+
+Only the encounter owned by the matching active queued hunt is eligible. Dungeon encounters, guardians, reinforcements, mining battles, other enemy types, travel, unknown audience, food trips and requested returns do not batch. This does not enable batching for future shared multiplayer battles. An unobserved result may reach storage up to three seconds later than its logical event time; returning or observing forces an immediate catch-up.
+
+```
+node pocket-lobby/scripts/benchmark-quiet-hunting.mjs --output quiet-hunting-benchmark.json
+```
+
+The recorded local comparison in `benchmarks/quiet-hunting-2026-11-12.json` checks identical outcomes, HP, XP, loot, spell cooldowns and mana between watched and unobserved runs. Starter boar alarms/player-state writes fall from 8/8 to 3/3; the spell build falls from 8/8 to 2/2; the beetle falls from 5/5 to 3/3. Immediate retreat remains 1/1 and reaching the time cap retains live scheduling. These are per-fixture operation counts, not measured production bill savings. Tests also cover room entry/exit, owner return, taking control, actor recovery, scarce mana, failed escapes, defeat and repeated hunts separated by rest.

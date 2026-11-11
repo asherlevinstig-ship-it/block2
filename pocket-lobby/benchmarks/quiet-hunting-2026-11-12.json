@@ -1,0 +1,145 @@
+{
+  "description": "Local real-actor/SQLite comparison of watched event-driven combat and unobserved three-second solo hunt batches. Every paired outcome, HP, XP, loot, spell cooldown and mana state is checked for equality. Room transport is simulated. Operation counts are not a production bill or capacity test.",
+  "rows": [
+    {
+      "scenario": "starter boar",
+      "watched": {
+        "alarms": 8,
+        "reads": 9,
+        "writes": 8,
+        "actorWrites": 9,
+        "presence": 5,
+        "activity": 3
+      },
+      "quiet": {
+        "alarms": 3,
+        "reads": 4,
+        "writes": 3,
+        "actorWrites": 4,
+        "presence": 4,
+        "activity": 3
+      },
+      "outcome": "queue-complete",
+      "health": 51,
+      "loot": {
+        "boar": 1
+      }
+    },
+    {
+      "scenario": "boar with spells",
+      "watched": {
+        "alarms": 8,
+        "reads": 9,
+        "writes": 8,
+        "actorWrites": 9,
+        "presence": 2,
+        "activity": 0
+      },
+      "quiet": {
+        "alarms": 2,
+        "reads": 3,
+        "writes": 2,
+        "actorWrites": 3,
+        "presence": 3,
+        "activity": 0
+      },
+      "outcome": "queue-complete",
+      "health": 100,
+      "loot": {
+        "boar": 1
+      }
+    },
+    {
+      "scenario": "beetle",
+      "watched": {
+        "alarms": 5,
+        "reads": 6,
+        "writes": 5,
+        "actorWrites": 6,
+        "presence": 3,
+        "activity": 1
+      },
+      "quiet": {
+        "alarms": 3,
+        "reads": 4,
+        "writes": 3,
+        "actorWrites": 4,
+        "presence": 4,
+        "activity": 1
+      },
+      "outcome": "queue-complete",
+      "health": 80,
+      "loot": {
+        "stonebackShell": 1
+      }
+    },
+    {
+      "scenario": "safety retreat",
+      "watched": {
+        "alarms": 1,
+        "reads": 2,
+        "writes": 1,
+        "actorWrites": 2,
+        "presence": 2,
+        "activity": 0
+      },
+      "quiet": {
+        "alarms": 1,
+        "reads": 2,
+        "writes": 1,
+        "actorWrites": 2,
+        "presence": 2,
+        "activity": 0
+      },
+      "outcome": "hunt-escaped",
+      "health": 30,
+      "loot": {}
+    },
+    {
+      "scenario": "failed retreat and defeat",
+      "watched": {
+        "alarms": 7,
+        "reads": 8,
+        "writes": 7,
+        "actorWrites": 8,
+        "presence": 3,
+        "activity": 3
+      },
+      "quiet": {
+        "alarms": 2,
+        "reads": 3,
+        "writes": 2,
+        "actorWrites": 3,
+        "presence": 3,
+        "activity": 2
+      },
+      "outcome": "hunt-defeat",
+      "health": 0,
+      "loot": {}
+    },
+    {
+      "scenario": "session cap during combat",
+      "watched": {
+        "alarms": 9,
+        "reads": 10,
+        "writes": 9,
+        "actorWrites": 10,
+        "presence": 5,
+        "activity": 3
+      },
+      "quiet": {
+        "alarms": 9,
+        "reads": 10,
+        "writes": 9,
+        "actorWrites": 10,
+        "presence": 7,
+        "activity": 3
+      },
+      "outcome": "away-cap",
+      "health": 51,
+      "loot": {
+        "boar": 1
+      }
+    }
+  ]
+}
