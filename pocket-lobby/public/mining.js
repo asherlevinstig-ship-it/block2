@@ -1,5 +1,11 @@
 import {skillLevel,MAX_SKILL_XP} from './skill-curve.js';
 export const quarryRoom='quarry';
+export const deepMiningRoom='crystaldeep';
+export const miningRooms=[quarryRoom,deepMiningRoom];
+export const depositRoom=node=>node.room??quarryRoom;
+export const miningDestination=policy=>policy?.area===deepMiningRoom?deepMiningRoom:quarryRoom;
+export const deepMiningRequirement=state=>miningLevel(state.mining)<3?'Reach Mining 3 before mining Crystaldeep veins.':!['copper','iron'].includes(state.mining?.pick)?'Equip a Copper or Iron Pickaxe for Crystaldeep veins.':'';
+export const miningGuardAwake=(state,now)=>now>=(state.hunting?.crystalRespawnAt??0);
 export const quarryMiner={x:3,y:3};
 export const miningRules={duration:4500,hits:3,respawnMs:45000};
 export const miningFinds={
@@ -34,7 +40,10 @@ export const oreDeposits=[
  {id:'copper-north',x:6,y:2,ore:'copperOre'},
  {id:'copper-east',x:8,y:5,ore:'copperOre'},
  {id:'iron-north',x:9,y:2,ore:'ironOre'},
- {id:'iron-south',x:6,y:7,ore:'ironOre'}
+ {id:'iron-south',x:6,y:7,ore:'ironOre'},
+ {id:'deep-copper',room:deepMiningRoom,x:3,y:2,ore:'copperOre',yield:2},
+ {id:'deep-iron-east',room:deepMiningRoom,x:8,y:5,ore:'ironOre',yield:2,guarded:true},
+ {id:'deep-iron-south',room:deepMiningRoom,x:7,y:7,ore:'ironOre',yield:2,guarded:true}
 ];
 export function normalizeMining(input={}){
  const {pickOwned=false,equipped=false,xp=0}=input;
@@ -48,9 +57,10 @@ export const equippedPickaxe=mining=>pickaxes[mining?.pick??'basic'];
 export const miningDuration=mining=>equippedPickaxe(mining).duration;
 export function normalizeAutoMining(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Choose valid Auto Mining settings.');
- const {ore='copperOre',keep=0}=input;
+ const {ore='copperOre',keep=0,area=quarryRoom}=input;
+ if(!miningRooms.includes(area))throw new Error('Choose the safe quarry or dangerous Crystaldeep Tunnels.');
  if(!Object.hasOwn(oreProducts,ore)||!Number.isSafeInteger(keep)||keep<0||keep>1000000)throw new Error('Choose copper or iron and 0–1,000,000 ore to keep.');
- return {ore,keep};
+ return {ore,keep,...(area===deepMiningRoom?{area}:{})};
 }
 export function miningReportText(plan,state){
  const id=plan.mining?.ore;if(!id)return '';
@@ -60,7 +70,7 @@ export function miningReportText(plan,state){
 }
 export function miningPose(state){
  const cut=state.plan?.miningWork?.cut??state.miningCut,node=oreDeposits.find(node=>node.id===cut?.node);
- return cut&&node?{...cut,pick:state.mining?.pick??'basic',x:node.x,y:node.y,room:quarryRoom}:null;
+ return cut&&node?{...cut,pick:state.mining?.pick??'basic',x:node.x,y:node.y,room:depositRoom(node)}:null;
 }
 export const besideDeposit=(position,node)=>!!position&&Math.abs(position.x-node.x)+Math.abs(position.y-node.y)===1;
 export function drawOreDeposit(item,time,{point,polygon,ctx,reduced},state={}){

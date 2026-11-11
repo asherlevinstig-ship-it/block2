@@ -3,8 +3,8 @@ import {moonbackSite} from './moonback.js';
 
 // Shared geometry and attack footprints. Rendering and server damage use the same cells.
 export const dungeonRooms=['depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'];
-export const isCombatArena=room=>dungeonRooms.includes(room)||room==='millCellar';
-export const dungeonMobTypes=['depthsSkitter','depthsWarden','depthsSeer','depthsSentinel','depthsColossus'];
+export const isCombatArena=room=>dungeonRooms.includes(room)||room==='millCellar'||room==='crystaldeep';
+export const dungeonMobTypes=['crystalGuardian','depthsSkitter','depthsWarden','depthsSeer','depthsSentinel','depthsColossus'];
 export const isDungeonMob=type=>dungeonMobTypes.includes(type);
 export const dungeonCover=[{x:4,y:3},{x:3,y:6}];
 export function dungeonFloor(room,x,y){

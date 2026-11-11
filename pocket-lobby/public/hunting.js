@@ -28,6 +28,7 @@ const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'cha
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
 export const huntEnemies={
   boar,beetle,
+  crystalGuardian:{...beetle,id:'crystalGuardian',name:'Shardback Guardian',room:'crystaldeep',prop:'crystalGuardian',archetype:'armoured',health:185,damage:20,shellArmor:5,firstAttack:2800,respawn:120000,loot:'runicFragment',lootName:'Runic Fragment',sellPrice:20,xp:[40,25,40],masteryXp:25,tactic:'SHARDBACK GUARDIAN · Leave the marked stomp, dodge hurled stone, and punish its recovery. Victory opens the rich iron veins for two minutes.'},
   millCustodian:{id:'millCustodian',name:'Clockwork Custodian',room:'millCellar',prop:'cellarCustodian',archetype:'armoured',move:'wardenSlam',health:110,firstAttack:2400,interval:3400,damage:14,shellArmor:3,exposureMs:2000,loot:'stonebackShell',lootName:'Salvaged plating',sellPrice:45,xp:[22,18,25],masteryXp:15,tactic:'CLOCKWORK CUSTODIAN · Leave the marked slam, move behind a pillar to block thrown cogs, then punish its recovery.'},
   moonbackStag:{id:'moonbackStag',name:'Moonback Stag',room:'grove',prop:'moonbackStag',move:'moonrush',health:132,firstAttack:2700,interval:3100,damage:17,loot:'deer',lootName:'Forest deer',sellPrice:24,xp:[35,30,35],masteryXp:20,tactic:'MOONRUSH · Watch the bright lane. Dodge just before the charge lands, then counter.'},
   thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
@@ -60,7 +61,7 @@ export function transitionVaultPhase(event,before,now){
   encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
  event.phaseChange={index:next.index,name:next.name,hint:next.hint,color:next.color};return event;
 }
-export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='millCustodian'?0:enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
+export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='crystalGuardian'?hunting.crystalRespawnAt??0:enemy?.id==='millCustodian'?0:enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 
 const enemyMoves={
   moonrush:{id:'moonrush',name:'Moonrush',tell:1550,damage:4,shape:'lane',opensShell:false},
@@ -232,6 +233,7 @@ export function normalizeHunting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid hunting state.');
   const time=value=>{if(value===undefined)return 0;if(!Number.isSafeInteger(value)||value<0)throw new Error('Invalid hunting time.');return value;};
   const result={respawnAt:time(input.respawnAt),recoveryUntil:time(input.recoveryUntil),encounter:null};
+  if(input.crystalRespawnAt!==undefined)result.crystalRespawnAt=time(input.crystalRespawnAt);
   if(input.thornRespawnAt!==undefined)result.thornRespawnAt=time(input.thornRespawnAt);
   if(input.beetleRespawnAt!==undefined)result.beetleRespawnAt=time(input.beetleRespawnAt);
   if(input.moonbackSighting!==undefined)result.moonbackSighting=time(input.moonbackSighting);

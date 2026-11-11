@@ -9,9 +9,9 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const timberGold=same?(p.timberSales?.gold??0)-(b.timberSales?.gold??0):0;
  const mined=after.miningReceipt;
  if(mined?.id&&mined.id!==before.miningReceipt?.id){
-  add('ore:'+mined.id,'timber','+1 '+oreProducts[mined.ore].name,1,mined.at,'quarry');
+  add('ore:'+mined.id,'timber','+'+(mined.amount??1)+' '+oreProducts[mined.ore].name,mined.amount??1,mined.at,mined.room??'quarry');
   if(events.at(-1)?.id==='ore:'+mined.id)events.at(-1).mining={node:mined.node,at:mined.at,broken:mined.broken===true,find:mined.find};
-  if(miningFinds[mined.find])add('find:'+mined.id,'catch','Discovered '+miningFinds[mined.find].name+'!',1,mined.at,'quarry');
+  if(miningFinds[mined.find])add('find:'+mined.id,'catch','Discovered '+miningFinds[mined.find].name+'!',1,mined.at,mined.room??'quarry');
  }
  if(timberGold>0)add('timber-sale:'+p.startedAt+':'+p.timberSales.visits,'gold','+'+timberGold+' gold',timberGold,p.cursorAt,'market');
  const oreGold=same?sum(Object.values(p.oreSales??{}).map(sale=>sale.gold))-sum(Object.values(b.oreSales??{}).map(sale=>sale.gold)):0;

@@ -88,7 +88,7 @@ export function brainThinkEvent(state,enemy,move,now){
 }
 export function normalizeBrain(e,base){
  if(e.brainVersion===undefined)return {};
- if(e.brainVersion!==2||e.arenaVersion!==1||!(base.room.startsWith('depths')||base.room==='millCellar')||e.brainMaxHealth!==smartProfile(base).health||!smartAttacks[e.brainMove])throw new Error('Invalid enemy intelligence.');
+ if(e.brainVersion!==2||e.arenaVersion!==1||!(base.room.startsWith('depths')||base.room==='millCellar'||base.room==='crystaldeep')||e.brainMaxHealth!==smartProfile(base).health||!smartAttacks[e.brainMove])throw new Error('Invalid enemy intelligence.');
  if(!Array.isArray(e.brainRecentMoves??[])||!Array.isArray(e.brainPlayerHistory??[])||!e.brainCooldowns||typeof e.brainCooldowns!=='object'||Array.isArray(e.brainCooldowns))throw new Error('Invalid enemy memory.');
  const time=v=>{if(v===undefined)return 0;if(!Number.isSafeInteger(v)||v<0)throw new Error('Invalid enemy clock.');return v;};
  const tile=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&p.x>=1&&p.x<=10&&p.y>=1&&p.y<=8&&dungeonFloor(base.room,p.x,p.y);

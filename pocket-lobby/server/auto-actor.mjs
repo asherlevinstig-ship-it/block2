@@ -91,7 +91,7 @@ export class AutoActor{
   const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??plan?.fishingLandingUntil??plan?.miningWork?.cut?.endsAt??plan?.miningWork?.readyAt??plan?.treeWork?.cut?.endsAt??plan?.treeWork?.readyAt??plan?.nextAt??plan?.nextRoundAt??plan?.nextCutAt??plan?.nextCatchAt;
   // During long waits, the client renders the timestamped animation locally.
   // Wake for the next action or lease renewal instead of polling every two seconds.
-  const wait=plan?.activeHunt?500:due>now?Math.min(due-now,60000):2000;
+  const wait=plan?.activeHunt||state?.hunting?.encounter?500:due>now?Math.min(due-now,60000):2000;
   if(active){
    const walk=this.actor.walk;
    const boundary=walk?Math.max(now+50,walk.endsAt):now+(this.actor.motion.blocked?5000:Math.max(100,wait));

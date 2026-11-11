@@ -96,9 +96,10 @@ export function incomingCombatDamage(state){
  return damage;
 }
 export function nextCombatTactic(state){
- const saved=state.characterRules?.combat,queued=state.plan?.kind==='queue'&&state.plan.activeHunt;
+ const saved=state.characterRules?.combat,deepMining=!!state.plan?.miningWork&&state.hunting?.encounter?.enemy==='crystalGuardian',queued=state.plan?.kind==='queue'&&(state.plan.activeHunt||deepMining);
  const rules=queued?{...saved,enabled:true,q:!!saved?.enabled&&saved.q,e:!!saved?.enabled&&saved.e,dodge:!!saved?.enabled&&saved.dodge}:saved,e=state.hunting?.encounter;
  if(!rules?.enabled||!e||!Number.isSafeInteger(e.tacticsAt))return null;
+ if(deepMining){rules.fleeBelow=Math.max(45,rules.fleeBelow??0);rules.dodge=true;}
  const style=Object.hasOwn(combatStyles,rules.style)?rules.style:'balanced',policy=combatStyles[style],earliest=e.tacticsAt+COMBAT_REACTION_MS;
  const make=(at,action,reason,priority=0,slot)=>({at,action,reason,style,priority,...(slot?{slot}:{})});
  if(!e.autoRetreatDisabled&&rules.fleeBelow>0&&state.health<=rules.fleeBelow)return make(Math.max(earliest,e.nextFleeAt??0),'flee','Retreating: health reached your '+rules.fleeBelow+' HP safety line.',100);
@@ -171,4 +172,3 @@ export function nextCombatTactic(state){
  }
  return next;
 }
-

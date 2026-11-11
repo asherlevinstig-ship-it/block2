@@ -605,7 +605,7 @@ function addWorldFloat(actor,event){
 function receiveWorldActivity(actor,events){
   for(const event of events.slice(-16)){
     const peer=remotePeers.get(actor);
-    if(peer&&event.mining&&event.room==='quarry')peer.miningImpact=event.mining;
+    if(peer&&event.mining&&miningRooms.includes(event.room))peer.miningImpact=event.mining;
     if(peer&&event.kind==='catch'&&event.fishing?.room===currentRoom)peer.fishingLanding=event.fishing;
     addWorldFloat(actor,event);
   }
@@ -1811,7 +1811,7 @@ function updateDungeonArenaHud(){
  }
 
  const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
- panel.hidden=!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
+ panel.hidden=currentRoom===deepMiningRoom?!e:!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
  panel.dataset.adds=String(e?.addsVersion===1);
  const selected=e&&activeAdd(e),targetEnemy=selected?addKinds[selected.kind]:enemy;
  $('dungeonEnemyName').textContent=(selected?'Target · ':enemy.elite?'Elite · ':'')+targetEnemy.name;
@@ -2653,7 +2653,7 @@ function object(item,highlight=false,time=0) {
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       let facing=player;
-      if(['depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
+      if(['crystalGuardian','depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
         pose.now=combatNow();
         pose.lastAttack=(combatArt.bursts??[]).findLast(effect=>effect.action==='enemy'&&!effect.targetId);
         if(type==='depthsColossus'&&pose.lastAttack?.time<combatArt.phaseAt)pose.lastAttack=null;
@@ -3138,7 +3138,7 @@ const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
   Willowmere:[...willowmereRooms,'millCellar'],
   Beaconwatch:watchRooms,
-  Moonwood:['trail',wildlifeRoom,'logging','quarry','clearing','grove','shrine','creek','pond','ruins','roots']
+  Moonwood:['trail',wildlifeRoom,'logging','quarry','crystaldeep','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null,trackedMoonTrail=null,roomMoonTrails=[],trailListKey='';
 function openMoonTrail(trail){
@@ -3199,7 +3199,7 @@ function updateWorldLabels(){
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
   const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
-  const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(currentRoom===quarryRoom?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -3284,6 +3284,13 @@ function updateWorldLabels(){
       if(node.id!=='copper-west'&&node.id!=='iron-north')continue;
       const ore=oreProducts[node.ore],depleted=oreState[node.id]?.readyAt>combatNow();
       add(ore.name,...point(node.x+.5,node.y+.5,34),'npc',()=>use(node),depleted?'Depleted · recovering':miningLevel(mining)<ore.level?'Mining '+ore.level:'Mine deposit');
+    }
+  }
+  if(currentRoom===deepMiningRoom){
+    for(const node of roomFurniture().filter(item=>item.type==='oreDeposit')){
+      if(node.id==='deep-iron-south'||player.inCombat)continue;
+      const ore=oreProducts[node.ore],depleted=oreState[node.id]?.readyAt>combatNow();
+      add('Rich '+ore.name,...point(node.x+.5,node.y+.5,34),'npc',()=>use(node),depleted?'Depleted · recovering':node.guarded&&miningGuardAwake({hunting},combatNow())?'Guarded · 2 ore per swing':'2 ore per swing');
     }
   }
   if(currentRoom===moonwood.trailCamp.room){
@@ -3450,7 +3457,7 @@ function draw(time){
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
     if(window.millRaidClient?.striking)Object.assign(pose,playerCombatPose({time,now:combatNow(),encounter:{nextPlayerAt:0},events:{...combatArt,...window.millRaidClient.pose},reduced:reducedMotion.matches}));
     const autoMine=window.playerCloud?.initial?.plan?.miningWork?.cut;
-    const miningSwing=currentRoom===quarryRoom&&!step&&!autoServerWalking&&(miningCut??autoMine);
+    const miningSwing=miningRooms.includes(currentRoom)&&!step&&!autoServerWalking&&(miningCut??autoMine);
     const spritePose=miningSwing?{...pose,chop:choppingPhase(miningSwing,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
@@ -4598,6 +4605,7 @@ async function startMining(node){
   try{
     const packet=await serverGameplay('mineStart',{node:node.id});
     if(packet.deposits)oreState=packet.deposits;
+    if(packet.state.hunting?.encounter){miningTarget=null;note('The Shardback Guardian noticed you. Move out of its attack warnings!');}
     Object.assign(player,timberFacing({cx:player.cx,cy:player.cy},node));
     canvas.focus({preventScroll:true});
   }catch(error){miningTarget=null;note(error.message);refreshMining();}
@@ -4605,8 +4613,8 @@ async function startMining(node){
 }
 function updateMining(time){
   const panel=$('miningProgress');
-  panel.hidden=!miningCut||currentRoom!==quarryRoom;
-  if(currentRoom!==quarryRoom)return;
+  panel.hidden=!miningCut||!miningRooms.includes(currentRoom);
+  if(!miningRooms.includes(currentRoom))return;
   if(!document.hidden&&time-miningReadAt>6000)refreshMining();
   if(!miningCut)return;
   const node=oreDeposits.find(node=>node.id===miningCut.node);
@@ -4619,8 +4627,10 @@ function updateMining(time){
   miningBusy=true;
   serverGameplay('mineHit',{cutId:cut.id}).then(packet=>{
     if(packet.deposits)oreState=packet.deposits;
-    const receipt=packet.state.miningReceipt,ore=oreProducts[receipt.ore];
-    note('+1 '+ore.name+' · +'+receipt.xp+' Mining XP');
+    const receipt=packet.state.miningReceipt;
+    if(receipt?.id!==cut.id){miningTarget=null;miningBusy=false;note('The Shardback Guardian noticed you. Move out of its attack warnings!');return;}
+    const ore=oreProducts[receipt.ore];
+    note('+'+(receipt.amount??1)+' '+ore.name+' · +'+receipt.xp+' Mining XP');
     const depleted=oreState[target.id]?.readyAt>combatNow();
     if(depleted){miningTarget=null;note(receipt.find?'Discovered '+miningFinds[receipt.find].name+'! Kept in your bag.':'Deposit broken · Choose another rock while it recovers.');}
     miningBusy=false;
@@ -4841,7 +4851,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -5766,6 +5776,10 @@ function castEquippedEssence(slot='q'){
   if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
 function currentActivityPrompt(){
+  if(currentRoom===deepMiningRoom&&!miningCut&&!player.inCombat){
+    const awake=miningGuardAwake({hunting},combatNow());
+    return {label:'CRYSTALDEEP · DANGEROUS MINING',title:awake?'Choose your approach':'The rich veins are clear',text:awake?'Outer copper is quiet. Fight the guardian or use Veilstep for rich iron. Mining 3 and an upgraded pick required.':'Guardian returns in '+Math.ceil(Math.max(0,hunting.crystalRespawnAt-combatNow())/1000)+'s. Rich veins give 2 ore per swing. Exit west to the quarry.'};
+  }
   if(currentRoom===quarryRoom&&!miningCut){
     const progress=skillProgress(mining.xp);
     return {label:'MINING '+progress.level+' · '+progress.progress+' / '+progress.target+' XP',title:mining.pickOwned?'Choose a deposit':'Collect your free pickaxe',text:mining.pickOwned?'Break deposits for a chance at quartz, fossils and runic fragments. Iron unlocks at Mining 3.':'Speak to the quarry miner to get started.'};
@@ -6413,7 +6427,7 @@ function renderSimpleAuto(){
  $('simpleAutoTimber').hidden=!timber;
  $('simpleAutoTimberPrice').disabled=$('simpleAutoTimberKeep').disabled=!timber;
  $('simpleAutoMining').hidden=!miningMode;
- $('simpleAutoMiningOre').disabled=$('simpleAutoMiningKeep').disabled=!miningMode;
+ $('simpleAutoMiningArea').disabled=$('simpleAutoMiningOre').disabled=$('simpleAutoMiningKeep').disabled=!miningMode;
  for(const button of $('simpleAutoChoices').children)button.setAttribute('aria-pressed',String(button.dataset.mode===simpleAutoChoice));
  $('simpleAutoStart').disabled=$('simpleAutoSave').disabled=simpleAutoBusy;$('simpleAutoStart').textContent=simpleAutoBusy?'Starting…':window.playerCloud?.initial?.plan?'Switch Auto':'Start Auto';
 }
@@ -6430,8 +6444,8 @@ function openCharacterRules(options={}){
  const timber=rules.timberMarket??normalizeTimberMarket();
  $('simpleAutoTimberPrice').value=timber.minimumPrice;$('simpleAutoTimberKeep').value=timber.keepTimber;
  const miningPolicy=rules.mining??normalizeAutoMining();
- $('simpleAutoMiningOre').value=miningPolicy.ore;$('simpleAutoMiningKeep').value=miningPolicy.keep;
- $('simpleAutoMiningAdvice').textContent='Mining '+miningLevel(mining)+' · Copper needs Mining 1 · Iron needs Mining 3. Equip a pickaxe in Inventory.';
+ $('simpleAutoMiningArea').value=miningPolicy.area??quarryRoom;$('simpleAutoMiningOre').value=miningPolicy.ore;$('simpleAutoMiningKeep').value=miningPolicy.keep;
+ $('simpleAutoMiningAdvice').textContent='Mining '+miningLevel(mining)+' · Quarry is safe. Crystaldeep gives 2 ore per swing; needs Mining 3, an upgraded pick and a weapon. Auto fights guardians, retreats at 45 HP, and returns to the quarry below 75 HP.';
  $('simpleAutoStatus').textContent=rules.simpleMode?'':state.autoConfigured?'Choose a loop to replace your existing custom plan.':'';
  const list=$('simpleAutoChoices');list.replaceChildren();
  for(const [id,mode] of Object.entries(simpleAutoModes)){
@@ -6449,7 +6463,7 @@ function openCharacterRules(options={}){
 }
 function simpleAutoOptions(){
  const timberMarket=simpleAutoChoice==='woodcutting'?{minimumPrice:$('simpleAutoTimberPrice').valueAsNumber,keepTimber:$('simpleAutoTimberKeep').valueAsNumber}:undefined;
- const miningPolicy=simpleAutoChoice==='mining'?{ore:$('simpleAutoMiningOre').value,keep:$('simpleAutoMiningKeep').valueAsNumber}:undefined;
+ const miningPolicy=simpleAutoChoice==='mining'?{area:$('simpleAutoMiningArea').value,ore:$('simpleAutoMiningOre').value,keep:$('simpleAutoMiningKeep').valueAsNumber}:undefined;
  return {food:characterRules.food,breadBudget:Number($('simpleAutoBreadBudget').value),risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value),timberMarket,mining:miningPolicy};
 }
 async function saveSimpleAuto(start){

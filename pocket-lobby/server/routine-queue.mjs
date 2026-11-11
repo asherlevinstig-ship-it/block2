@@ -21,7 +21,7 @@ import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js
 import {skillLevel,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {harvestTimber,woodRules} from '../public/woodcutting.js';
 import {recordQuest} from '../public/quests.js';
-import {quarryRoom,oreProducts,miningLevel} from '../public/mining.js';
+import {quarryRoom,oreProducts,miningLevel,miningDestination,deepMiningRoom,deepMiningRequirement} from '../public/mining.js';
 export const QUEUE_ACTION_MS=15000;
 export const timberMarketCounter={x:4,y:3};
 export const timberMarketSurplus=(state,plan)=>Math.max(0,state.woodcutting.timber-Math.max(plan.timberMarket.keepTimber,state.bank?.vault?.rules?.timber??0));
@@ -68,10 +68,10 @@ export function completeRoutineFish(state,fish,xp,at){
  p.fishingLandingUntil=at+1100;
  if(p.stepCount>=p.queue.steps[p.stepIndex].amount){delete p.fishingWork;nextStep(p,at,'Caught '+p.stepCount+' fish');}
 }
-export function completeRoutineOre(state,ore,xp,at){
+export function completeRoutineOre(state,ore,xp,at,amount=1){
  const p=state.plan;
- p.ores??={};p.ores[ore]=(p.ores[ore]??0)+1;p.miningXp=(p.miningXp??0)+xp;
- p.stepCount++;p.cursorAt=at;p.nextAt=null;delete p.miningWork;
+ p.ores??={};p.ores[ore]=(p.ores[ore]??0)+amount;p.miningXp=(p.miningXp??0)+xp;
+ p.stepCount+=amount;p.cursorAt=at;p.nextAt=null;delete p.miningWork;
  autoStoreVault(state,p,at);
  if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,at,'Mined '+p.stepCount+' '+oreProducts[ore].name);
 }
@@ -102,6 +102,8 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     p.preflightComplete=true;changed=true;
   }
   for(let guard=0;guard<10000;guard++){
+    if(p.miningWork&&state.hunting.encounter?.enemy==='crystalGuardian'){if(stop||now>=p.endAt)p.returnRequested=true;return changed;}
+    if(p.miningWork&&p.returnRequested&&!state.hunting.encounter)return finish(state,p,now>=p.endAt?'away-cap':'returned',now);
     if(p.fishingLandingUntil>now&&!stop&&now<p.endAt)return changed;
     if(p.physicalFishing&&p.fishingWork?.cast&&!stop&&now<p.endAt)return changed;
     if(p.physicalTimber&&p.treeWork?.cut&&!stop&&now<p.endAt)return changed;
@@ -177,11 +179,12 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     if(type==='mining'){
       if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
       const ore=oreProducts[p.mining.ore];
+      if(miningDestination(p.mining)===deepMiningRoom&&deepMiningRequirement(state))return finish(state,p,'requirements',now);
       if(!state.mining?.pickOwned||!state.mining.equipped||miningLevel(state.mining)<ore.level)return finish(state,p,'requirements',now);
-      if((state.huntingLoot[p.mining.ore]??0)>=1000000){
+      if((state.huntingLoot[p.mining.ore]??0)>=(miningDestination(p.mining)===deepMiningRoom?999999:1000000)){
         nextStep(p,now,'Ore bag full · Finished gathering');changed=true;continue;
       }
-      if(!p.miningWork){p.miningWork={phase:'choose'};state.location=quarryRoom;state.position={x:5,y:5};changed=true;}
+      if(!p.miningWork){p.miningWork={phase:'choose'};state.location=miningDestination(p.mining);state.position={x:4,y:5};changed=true;}
       p.nextAt=null;return changed;
     }
     if(type==='sellOre'){

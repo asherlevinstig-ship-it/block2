@@ -4,7 +4,7 @@ import {beetleHuntUnlocked,canUseWeapon,huntEnemies} from '../public/hunting.js'
 import {fishingCatalog} from '../public/fishing.js';
 import {skillLevel} from '../public/skill-curve.js';
 import {randomNeed,randomSurplusSale} from './random-needs.mjs';
-import {miningLevel,oreProducts} from '../public/mining.js';
+import {miningLevel,oreProducts,miningDestination,deepMiningRoom,deepMiningRequirement} from '../public/mining.js';
 const step=(type,amount=1)=>({type,amount});
 export const battleLootFull=(state,enemy)=>(state.huntingLoot[enemy.loot]??0)>=1000000;
 
@@ -53,9 +53,11 @@ export function chooseSimpleTask(state,p,random=Math.random){
   }else if(job==='mining'){
    const policy=p.mining,ore=oreProducts[policy.ore];
    if(!state.mining?.pickOwned||!state.mining.equipped||miningLevel(state.mining)<ore.level)return {stop:'requirements',reason:'Equip your pickaxe. '+ore.name+' needs Mining '+ore.level+'.'};
+   if(miningDestination(policy)===deepMiningRoom&&deepMiningRequirement(state))return {stop:'requirements',reason:deepMiningRequirement(state)};
    const sale=step('sellOre',policy.keep);
-   if((state.huntingLoot[policy.ore]??0)>=1000000){
-    if(policy.keep>=1000000||(state.bank?.vault?.rules?.['loot:'+policy.ore]??0)>=1000000)return {stop:'inventory-full',reason:'Your ore inventory is full and protected by your keep amount.'};
+   const fullAt=miningDestination(policy)===deepMiningRoom?999999:1000000;
+   if((state.huntingLoot[policy.ore]??0)>=fullAt){
+    if(policy.keep>=fullAt||(state.bank?.vault?.rules?.['loot:'+policy.ore]??0)>=fullAt)return {stop:'inventory-full',reason:'Your ore inventory is full and protected by your keep amount.'};
     tasks=[sale];
    }else tasks=[step('mining',profile.batch),sale];
   }else if(job==='woodcutting'){
