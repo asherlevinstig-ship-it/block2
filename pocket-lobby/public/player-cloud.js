@@ -516,6 +516,13 @@
         balances:()=>window.towerTimberOrderBalances?.()??{credits:0,timber:0},
         apply:(state,receipt)=>window.towerApplyTimberOrder?.(state,receipt)
       });
+      const {initializeQuarryForge}=await import('./forge-ui.js');
+      window.quarryForgeUI=initializeQuarryForge({
+        state:()=>window.towerForgeHooks.state(),
+        ready:()=>window.towerForgeHooks?.ready()===true,
+        change:(action,body)=>window.towerForgeHooks.change(action,body),
+        feedback:message=>window.towerForgeHooks.feedback(message)
+      });
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         const {initializeMillRaid}=await import('./mill-raid-ui.js');

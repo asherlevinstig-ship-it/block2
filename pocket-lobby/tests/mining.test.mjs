@@ -83,5 +83,5 @@ test('mining honours equipment, level, movement cancellation and protected saves
  now=swing.state.miningCut.endsAt;
  assert.equal((await a.action('mineHit',{cutId:swing.state.miningCut.id})).status,400);
  assert.equal((await a.action('mineEquip',{equipped:false})).state.mining.equipped,false);
- assert.deepEqual(normalizeMining(),{pickOwned:false,equipped:false,xp:0});
+ assert.deepEqual(normalizeMining(),{pickOwned:false,equipped:false,xp:0,upgrades:[],pick:'basic'});
 });

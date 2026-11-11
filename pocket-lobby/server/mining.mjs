@@ -1,4 +1,5 @@
-import {quarryRoom,quarryMiner,oreDeposits,oreProducts,miningRules,miningLevel,besideDeposit} from '../public/mining.js';
+import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit} from '../public/mining.js';
+import {quarryForge,barProducts,forgeCraftReason} from '../public/forge.js';
 import {exertionDuration,useHunger} from '../public/player-vitals.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 const invalid=message=>Object.assign(new Error(message),{status:400});
@@ -32,9 +33,32 @@ export async function mineAction(db,row,state,body,action,now){
  if(action==='mineEquip'){
   if(!state.mining.pickOwned)throw invalid('Collect your free pickaxe from the quarry miner.');
   if(typeof body.equipped!=='boolean')throw invalid('Choose whether to equip your pickaxe.');
+  if(body.pick!==undefined){
+   if(!Object.hasOwn(pickaxes,body.pick)||body.pick!=='basic'&&!state.mining.upgrades.includes(body.pick))throw invalid('Choose a pickaxe you own.');
+   state.mining.pick=body.pick;
+  }
   state.mining.equipped=body.equipped;delete state.miningCut;return {state};
  }
  if(state.location!==quarryRoom)throw invalid('Travel to the quarry to mine.');
+ if(action==='mineSmelt'||action==='mineCraft'){
+  if(state.miningCut)throw invalid('Stop mining before using the forge.');
+  if(!besideDeposit(state.position,quarryForge))throw invalid('Walk beside the quarry forge first.');
+  if(action==='mineSmelt'){
+   const bar=Object.hasOwn(barProducts,body.id)?barProducts[body.id]:null,quantity=body.quantity;
+   if(!bar||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000)throw invalid('Choose a bar and a whole quantity greater than zero.');
+   if(miningLevel(state.mining)<bar.level)throw invalid('This bar needs Mining '+bar.level+'.');
+   if((state.huntingLoot[bar.ore]??0)<quantity*bar.amount)throw invalid('Bring '+quantity*bar.amount+' '+bar.oreName+' to smelt these bars.');
+   if((state.huntingLoot[body.id]??0)+quantity>1000000)throw invalid('Make room in your bag for these bars.');
+   state.huntingLoot[bar.ore]-=quantity*bar.amount;
+   state.huntingLoot[body.id]=(state.huntingLoot[body.id]??0)+quantity;
+  }else{
+   const reason=forgeCraftReason(state,body.id);if(reason)throw invalid(reason);
+   const pick=pickaxes[body.id];
+   state.huntingLoot[pick.bar]-=pick.bars;state.woodcutting.timber-=pick.timber;
+   state.mining.pickOwned=true;state.mining.upgrades.push(body.id);state.mining.pick=body.id;state.mining.equipped=true;
+  }
+  return {state};
+ }
  if(action==='minePick'){
   if(!besideDeposit(state.position,quarryMiner))throw invalid('Walk beside the quarry miner first.');
   state.mining.pickOwned=true;state.mining.equipped=true;return {state};
@@ -52,7 +76,7 @@ export async function mineAction(db,row,state,body,action,now){
  const hits=saved.ready_at?0:saved.hits;
  if(action==='mineStart'){
   if(state.miningCut)return {state};
-  state.miningCut={id:crypto.randomUUID(),node:node.id,revision:saved.revision,started:now,endsAt:now+exertionDuration(miningRules.duration,state.vitals)};
+  state.miningCut={id:crypto.randomUUID(),node:node.id,revision:saved.revision,started:now,endsAt:now+exertionDuration(miningDuration(state.mining),state.vitals)};
   return {state};
  }
  const cut=state.miningCut;

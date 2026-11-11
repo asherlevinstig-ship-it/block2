@@ -1,4 +1,4 @@
-import {oreDeposits,oreProducts,miningRules,quarryRoom,besideDeposit} from '../public/mining.js';
+import {oreDeposits,oreProducts,miningRules,miningDuration,quarryRoom,besideDeposit} from '../public/mining.js';
 import {exertionDuration} from '../public/player-vitals.js';
 import {autoTilePath} from './auto-motion.mjs';
 import {readOreDeposits,awardOreStrike} from './mining.mjs';
@@ -42,7 +42,7 @@ export async function advanceMiningWork(db,state,now,motion){
   await db.prepare('INSERT OR IGNORE INTO tower_ore_deposits (node_id) VALUES (?)').bind(work.node).run();
   const snapshot=(await readOreDeposits(db,now))[work.node];
   if(snapshot.readyAt>now){work.phase='choose';return null;}
-  work.cut={id:crypto.randomUUID(),node:work.node,revision:snapshot.revision,started:now,endsAt:now+exertionDuration(miningRules.duration,state.vitals)};
+  work.cut={id:crypto.randomUUID(),node:work.node,revision:snapshot.revision,started:now,endsAt:now+exertionDuration(miningDuration(state.mining),state.vitals)};
   work.phase='mining';plan.currentLabel='Mining '+oreProducts[plan.mining.ore].name;
  }
  return null;

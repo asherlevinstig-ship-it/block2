@@ -1,6 +1,7 @@
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
 import {trailCamp,trailCampPhase} from './trail-camp.js';
 import {oreDeposits,quarryMiner,drawQuarryCliffs} from './mining.js';
+import {quarryForge} from './forge.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
@@ -40,6 +41,7 @@ export const moonwood=(()=>{
   const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.oreDeposit=28;
+  heights.quarryForge=48;
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -143,6 +145,7 @@ export const moonwood=(()=>{
     if(dungeonRooms.includes(id)){const main=['depthsGate','depthsGallery','depthsVault'].includes(id);for(const [type,x,y] of [['dungeonCover',4,3],['dungeonCover',3,6],...(main?[['dungeonArch',1,4],['dungeonExit',10,5]]:[]),['dungeonChain',10,2],['dungeonBones',2,6]])scenery.push({id:type+':'+x+','+y,type,x,y,rot:0});}
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     if(id===trailCamp.room)scenery.push({id:'trailCamp',type:'trailCamp',x:trailCamp.x,y:trailCamp.y,rot:0});
+    if(id==='quarry')scenery.push({id:'quarryForge',type:'quarryForge',...quarryForge,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
   const layouts=Object.fromEntries(Object.keys(areas).map(id=>[id,generate(id)]));

@@ -1,0 +1,14 @@
+.quarry-forge-window{width:min(820px,calc(100vw - 28px));max-height:90dvh;overflow:auto}
+.forge-stock{color:#f4d99d;padding:10px 12px;background:#102139;border:1px solid #475a72;border-radius:8px;margin:16px 0 10px}
+.forge-status{color:#ffdc9d}.forge-status:empty{display:none}
+.forge-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.forge-columns h3{color:#f8ddb0;font-size:16px;margin:5px 0}
+.forge-columns p{color:#b7c8df;font-size:13px;line-height:1.5;margin:5px 0 10px}
+.forge-recipe{border:1px solid #4c5b72;background:#17263b;border-radius:9px;margin-top:10px;padding:12px}
+.forge-recipe h4{margin:0;color:#ffe7bd;font-size:16px}.forge-recipe small{display:block;color:#b8c8dc;line-height:1.45;margin-top:8px}
+.forge-recipe b{font-size:13px;color:#e9c58b}.forge-recipe button{min-width:0;padding:8px 12px;white-space:normal}
+.forge-smelt{display:flex;gap:10px;align-items:end}.forge-smelt label{display:grid;gap:5px;flex:1;min-width:0;font-size:12px;color:#c8d5e5}
+.forge-smelt input{width:100%;min-width:0;box-sizing:border-box}.forge-smelt button{flex:0 0 auto}
+.forge-art{float:right;width:55px;height:55px}.forge-art svg{width:100%;height:100%}
+.forge-pick>button{display:block;width:100%;margin-top:10px}
+@media(max-width:620px){.forge-columns{grid-template-columns:1fr}.forge-columns>section{min-width:0}}

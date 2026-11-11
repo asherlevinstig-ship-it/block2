@@ -105,6 +105,7 @@ let characterRules=normalizeCharacterRules(savedPlayerState?.characterRules);
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
   ...oreProducts,
+  ...barProducts,
   ...fishProducts,
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
   boar:{name:'Boar Meat',price:30,icon:'♧',group:'hunting'},
@@ -644,7 +645,7 @@ function drawRemote(peer,time){
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
   const raidPose=currentRoom==='millbrook'&&time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?'basicPick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
   const activity=chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
@@ -2579,6 +2580,7 @@ function dimensions(item) {
 }
 function object(item,highlight=false,time=0) {
   const {x,y,type,rot}=item;
+  if(type==='quarryForge'){drawQuarryForge(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches});return;}
   const [w,d]=dimensions(item);
   if(highlight)surface(x,y,w,d,1,'#f9c48968','#ffd18a');
   if(currentRoom==='hub'&&type==='plant'&&x===16&&y===1){
@@ -3274,6 +3276,8 @@ function updateWorldLabels(){
   if(currentRoom===quarryRoom){
     const miner=roomFurniture().find(item=>item.type==='woodcutter');
     add('Quarry miner',...point(miner.x+.5,miner.y+.5,45),'npc',()=>use(miner),mining.pickOwned?'Pickaxe supplies':'Free starter pickaxe');
+    const forge=roomFurniture().find(item=>item.type==='quarryForge');
+    add('Quarry forge',...point(forge.x+.5,forge.y+.5,53),'npc',()=>use(forge),'Smelt ore · Craft pickaxes');
     for(const node of roomFurniture().filter(item=>item.type==='oreDeposit')){
       if(node.id!=='copper-west'&&node.id!=='iron-north')continue;
       const ore=oreProducts[node.ore],depleted=oreState[node.id]?.readyAt>combatNow();
@@ -3450,7 +3454,7 @@ function draw(time){
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?'basicPick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     const familiar=drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
     renderedActors.push({id:'self',name:avatar.name,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
@@ -4275,8 +4279,10 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='quarryForge'){window.quarryForgeUI?.open();return;}
   if(item.type==='oreDeposit'){startMining(item);return;}
   if(currentRoom===quarryRoom&&item.type==='woodcutter'){
+    if(mining.pickOwned){note('Use the Quarry forge to smelt ore and craft faster pickaxes.');return;}
     serverGameplay('minePick').then(()=>{note('Basic Pickaxe collected and equipped. Click a copper deposit to start mining.');showTransaction('Ready to mine',[{icon:'◆',text:'Basic Pickaxe · Yours to keep'}]);}).catch(error=>note(error.message));return;
   }
   if(item.type==='cellarCrack'){visitMillCellar('millCellarEnter');return;}
@@ -4728,7 +4734,15 @@ async function eatMeal(id){
 const vaultedItem=(kind,id)=>!!(window.playerCloud?.initial??savedPlayerState)?.bank?.vault?.items?.[kind+':'+id];
 function bagEntries(){
   const entries=[];
-  if(mining.pickOwned)entries.push({key:'pickaxe',name:'Basic Pickaxe',category:'gear',art:pickaxeArt(),quantity:1,equipped:mining.equipped,description:'A sturdy pickaxe for quarry deposits.',stats:'Mining '+miningLevel(mining)+' · '+mining.xp+' XP',note:'Copper at Mining 1 · Iron at Mining 3',action:mining.equipped?'Unequip':'Equip',run:()=>serverGameplay('mineEquip',{equipped:!mining.equipped}).catch(error=>note(error.message))});
+  if(mining.pickOwned)for(const id of ['basic',...mining.upgrades]){
+    const pick=pickaxes[id],equipped=mining.equipped&&mining.pick===id;
+    entries.push({key:id==='basic'?'pickaxe':'pickaxe:'+id,name:pick.name,category:'gear',art:pickaxeArt(id),quantity:1,equipped,description:'A sturdy pickaxe for quarry deposits.',stats:pick.duration/1000+'s per swing · Mining '+miningLevel(mining),note:'Copper at Mining 1 · Iron at Mining 3',action:equipped?'Unequip':'Equip',run:()=>serverGameplay('mineEquip',{pick:id,equipped:!equipped}).catch(error=>note(error.message))});
+  }
+  for(const [id,bar] of Object.entries(barProducts))if(huntingLoot[id]>0)entries.push({
+    key:'bar:'+id,name:bar.name,category:'materials',art:barArt(id),quantity:huntingLoot[id],
+    description:'Smelted at the quarry forge.',stats:bar.price+' gold each',
+    note:'Use the Quarry forge to craft '+(id==='copperBar'?'Copper':'Iron')+' Pickaxes.'
+  });
   const outfit=wardrobe.outfits.find(outfit=>outfit.id===bagOutfitTarget)??wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active);
   for(const id of combatGear.ownedWeapons.filter(id=>!vaultedItem('weapon',id))){
     const w=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),equipped=combatGear.equippedWeapon===id;
@@ -4774,7 +4788,7 @@ function bagEntries(){
       note:busy?'Finish your current activity before eating.':'Eat between fights.',
       action:(health>=100||!recipe.healing)&&playerVitals.hunger>=100?'Already full':id===towerBread.id?'Eat bread':'Eat meal',disabled:busy||(health>=100||!recipe.healing)&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
-  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
+  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id]&&!barProducts[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
 }
 function renderBag(){
@@ -5488,7 +5502,7 @@ function updateTradingPost(){
     if(quantity===0&&(item.group==='fish'&&item.quality!=='common'||id===moonwellShard.id))continue;
     const title=document.createElement('b'),detail=document.createElement('p'),actions=document.createElement('div');
     card.className='rod-offer trade-card';card.dataset.loot=id;
-    const art=document.createElement('div');art.className='trade-art';art.innerHTML=windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':id===moonwellShard.id?'shard':'loot');card.append(art);
+    const art=document.createElement('div');art.className='trade-art';art.innerHTML=barProducts[id]?barArt(id):windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':id===moonwellShard.id?'shard':'loot');card.append(art);
     title.textContent=item.name;
     detail.textContent=item.price+' credits each · '+quantity+' in inventory';
     actions.className='trade-actions';
@@ -6767,6 +6781,7 @@ function updateRoomLabel(){
 }
 function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   if(miningCut&&next!==currentRoom){stopMining().then(ok=>{if(ok)enterRoom(next,arrival,{automatic,explore});});return;}
+  if(next!==currentRoom)window.quarryForgeUI?.close();
   if(window.playerCloud?.gameplay&&next!==currentRoom&&(next==='millCellar'||currentRoom==='millCellar')&&window.playerCloud.initial.location!==next){
     if(next==='millCellar')visitMillCellar('millCellarEnter');
     else if(next==='millbrook')visitMillCellar('millCellarLeave');
@@ -7136,6 +7151,12 @@ window.towerVisitSafe=()=>{
   use(safe);
 };
 window.towerBankFeedback=message=>showTransaction('Home safe',[{icon:'◈',text:message}]);
+window.towerForgeHooks={
+  state:()=>({mining,huntingLoot,woodcutting}),
+  ready:()=>currentRoom===quarryRoom&&!unavailable()&&!miningCut&&besideDeposit({x:player.cx,y:player.cy},quarryForge),
+  change:(action,body)=>serverGameplay(action,body),
+  feedback:message=>showTransaction('Quarry forge',[{icon:'♨',text:message}])
+};
 window.towerTimberOrderBalances=()=>({credits,timber:woodcutting.timber});
 window.towerApplyTimberOrder=(state,receipt)=>{
   applyServerGameplay(state);updateInventory();
