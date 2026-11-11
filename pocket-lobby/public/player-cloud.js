@@ -523,6 +523,8 @@
         change:(action,body)=>window.towerForgeHooks.change(action,body),
         feedback:message=>window.towerForgeHooks.feedback(message)
       });
+      const {initializeCourtyardEnvironment}=await import('./courtyard-environment.js');
+      window.courtyardEnvironment=initializeCourtyardEnvironment();
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         const {initializeMillRaid}=await import('./mill-raid-ui.js');

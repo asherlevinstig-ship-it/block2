@@ -2446,7 +2446,17 @@ function drawCourtyard(){
     }
   }
   polygon([point(-.3,-.2,-8),point(cols+.35,-.2,-9),point(cols+.4,rows+.42,-10),point(-.3,rows+.4,-9)],'#0c142385');
-  block(0,0,cols,rows,-8,8,['#727984','#45495e','#373e52']);
+  block(0,0,cols,rows,-42,42,['#727984','#414b62','#303f56']);
+  // Masonry and trailing ivy tie the terrace into the surrounding valley cliffs.
+  for(let z=-36;z<-2;z+=7){
+    polygon([point(0,rows,z),point(cols,rows,z),point(cols,rows,z+1),point(0,rows,z+1)],'#71819566');
+    polygon([point(cols,0,z),point(cols,rows,z),point(cols,rows,z+1),point(cols,0,z+1)],'#71819555');
+  }
+  for(const [x,y] of [[1,rows],[3,rows],[9,rows],[12,rows],[cols,2],[cols,5],[cols,9]]){
+    const [vx,vy]=point(x,y,-3),length=23+(x*3+y*5)%13;
+    rect(vx,vy,1,length,'#3c685f');
+    for(let n=0;n<length;n+=4){rect(vx-3,vy+n,3,2,n%8?'#587f6a':'#789370');rect(vx+1,vy+n+2,3,2,'#3b685f');}
+  }
   const coolStone=['#75828d','#687886','#72818f','#79848e'];
   const warmStone=['#aa9695','#b29c98','#9d8e92','#b6a39a'];
   for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
@@ -2840,6 +2850,8 @@ function object(item,highlight=false,time=0) {
     part(.405,.405,.19,.19,44,7,'cream');
     part(.32,.32,.36,.36,51,2,'black');
     part(.43,.43,.14,.14,53,2,'gold');
+    lobbyLight(px,py,14,'#ffd98b66');
+    rect(px-1,py-4,2,5,'#ffe3a1');
   } else if(type==='fountain'){
     const stone=['#aab6bf','#687185','#8791a1'];
     part(.035,.035,1.93,1.93,0,4,stone);
@@ -3358,6 +3370,7 @@ function updateWorldLabels(){
   }
 }
 function draw(time){
+  window.courtyardEnvironment?.update();
   renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
   const victory=time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300;
@@ -3369,6 +3382,10 @@ function draw(time){
   ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   const layer=currentRoom==='hub'&&!lobbyRoutesOpen()?'hubIntro':currentRoom;
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
+  if(currentRoom==='outside')for(const lamp of courtyardFurniture.filter(item=>item.type==='streetlamp')){
+    const [lx,ly]=point(lamp.x+.5,lamp.y+.5,.5);
+    lobbyLight(lx,ly,24,'#ffc87748',.45);
+  }
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
     const [wx,wy]=point(10.5,3.5);
     lobbyLight(wx,wy,25,'#efc87955',.48);
@@ -6824,6 +6841,7 @@ function enterRoom(next,arrival,{automatic=false,explore=false}={}){
     if(next===moonwood.trailCamp.room)campReadAt=-Infinity;
   }
   currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
+  window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;
   const exploring=moonwood.has(next);
   const nextView=next===wildlifeRoom?wildlifeView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
@@ -6902,6 +6920,7 @@ $('fishingSound').onclick=()=>{
   $('fishingSound').setAttribute('aria-pressed',String(fishingSound));
   if(fishingSound)fishingMoments.sound('catch');
 };
+window.courtyardEnvironment?.setRoom(currentRoom);
 movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location]){const motion=savedPlayerState.autoPresence;enterRoom(motion?.room??savedPlayerState.location,motion?{x:motion.x,y:motion.y}:savedPlayerState.position);}
 if(hunting.encounter&&!savedPlayerState?.plan?.activeHunt){
