@@ -1,5 +1,5 @@
 import {fishProducts} from './fishing.js';
-import {oreProducts} from './mining.js';
+import {oreProducts,miningFinds} from './mining.js';
 const plan=s=>s?.plan?.source==='rules'?s.plan:s?.report?.source==='rules'?s.report:null;
 const sum=o=>Object.values(o??{}).reduce((a,b)=>a+b,0);
 export function worldActivityEvents(before,after,now=Date.now()){
@@ -8,7 +8,11 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const add=(id,kind,label,amount=0,at=now,eventRoom=room)=>{if(now-at>=0&&now-at<5000)events.push({id,kind,label,amount,at,room:eventRoom});};
  const timberGold=same?(p.timberSales?.gold??0)-(b.timberSales?.gold??0):0;
  const mined=after.miningReceipt;
- if(mined?.id&&mined.id!==before.miningReceipt?.id)add('ore:'+mined.id,'timber','+1 '+oreProducts[mined.ore].name,1,mined.at,'quarry');
+ if(mined?.id&&mined.id!==before.miningReceipt?.id){
+  add('ore:'+mined.id,'timber','+1 '+oreProducts[mined.ore].name,1,mined.at,'quarry');
+  if(events.at(-1)?.id==='ore:'+mined.id)events.at(-1).mining={node:mined.node,at:mined.at,broken:mined.broken===true,find:mined.find};
+  if(miningFinds[mined.find])add('find:'+mined.id,'catch','Discovered '+miningFinds[mined.find].name+'!',1,mined.at,'quarry');
+ }
  if(timberGold>0)add('timber-sale:'+p.startedAt+':'+p.timberSales.visits,'gold','+'+timberGold+' gold',timberGold,p.cursorAt,'market');
  const oreGold=same?sum(Object.values(p.oreSales??{}).map(sale=>sale.gold))-sum(Object.values(b.oreSales??{}).map(sale=>sale.gold)):0;
  if(oreGold>0)add('ore-sale:'+p.startedAt+':'+p.cursorAt,'gold','+'+oreGold+' gold',oreGold,p.cursorAt,'market');

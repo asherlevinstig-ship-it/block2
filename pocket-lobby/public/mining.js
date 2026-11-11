@@ -2,6 +2,24 @@ import {skillLevel,MAX_SKILL_XP} from './skill-curve.js';
 export const quarryRoom='quarry';
 export const quarryMiner={x:3,y:3};
 export const miningRules={duration:4500,hits:3,respawnMs:45000};
+export const miningFinds={
+ uncutQuartz:{name:'Uncut Quartz',price:50,color:'#bce9ff',chance:.04,icon:'◇',group:'materials'},
+ ancientFossil:{name:'Ancient Fossil',price:35,color:'#efcea0',chance:.03,icon:'◎',group:'materials'},
+ runicFragment:{name:'Runic Fragment',price:20,color:'#c2afff',chance:.05,icon:'✦',group:'materials'}
+};
+// A server-created swing ID keeps the reward stable across transaction retries.
+export function miningFind(id,luckXp=0){
+ let hash=2166136261;for(const c of id)hash=Math.imul(hash^c.charCodeAt(0),16777619)>>>0;
+ const roll=hash/4294967296,bonus=Math.min(4,Math.max(0,skillLevel(luckXp)-1))*.01;
+ let threshold=0;
+ for(const [key,item] of Object.entries(miningFinds)){threshold+=item.chance+bonus/3;if(roll<threshold)return key;}
+ return null;
+}
+export function miningFindArt(id){
+ const item=miningFinds[id];
+ const shape=id==='uncutQuartz'?'<path d="m32 7 17 16-7 29-21 3-9-29z"/><path d="m32 7 3 24 14-8M35 31l7 21M12 26l23 5-14 24" fill="none" stroke="#f3fbff"/>':id==='ancientFossil'?'<path d="M10 17 43 9l13 32-15 14-29-6z"/><path d="M42 37c-17 19-29-6-14-13 14-6 20 13 7 15-8 1-9-9-2-9" fill="none" stroke="#7d654d" stroke-width="4"/>':'<path d="m23 8 25 7 6 23-23 17-19-19z"/><path d="m27 18 11 3-10 9 12 2-9 13M19 27l4 12" fill="none" stroke="#eee0ff" stroke-width="3"/>';
+ return '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="'+item.color+'" stroke="#44536b" stroke-width="2">'+shape+'</g></svg>';
+}
 export const pickaxes={
  basic:{name:'Basic Pickaxe',duration:4500,level:1,color:'#b8ced8'},
  copper:{name:'Copper Pickaxe',duration:3600,level:2,color:'#e9ac76',bars:3,timber:2,bar:'copperBar'},
@@ -37,7 +55,8 @@ export function normalizeAutoMining(input={}){
 export function miningReportText(plan,state){
  const id=plan.mining?.ore;if(!id)return '';
  const count=plan.ores?.[id]??0,sale=plan.oreSales?.[id]??{quantity:0,gold:0};
- return 'Mined '+count+' '+oreProducts[id].name+' · +'+(plan.miningXp??0)+' Mining XP · Sold '+sale.quantity+' for '+sale.gold+' gold · '+(state.huntingLoot?.[id]??0)+' in your bag.';
+ const finds=Object.entries(plan.miningFinds??{}).filter(([key])=>miningFinds[key]).map(([key,n])=>n+' '+miningFinds[key].name);
+ return 'Mined '+count+' '+oreProducts[id].name+' · +'+(plan.miningXp??0)+' Mining XP · Sold '+sale.quantity+' for '+sale.gold+' gold · '+(state.huntingLoot?.[id]??0)+' in your bag.'+(finds.length?' Discoveries kept: '+finds.join(', ')+'.':'');
 }
 export function miningPose(state){
  const cut=state.plan?.miningWork?.cut??state.miningCut,node=oreDeposits.find(node=>node.id===cut?.node);
@@ -45,7 +64,7 @@ export function miningPose(state){
 }
 export const besideDeposit=(position,node)=>!!position&&Math.abs(position.x-node.x)+Math.abs(position.y-node.y)===1;
 export function drawOreDeposit(item,time,{point,polygon,ctx,reduced},state={}){
- const depleted=state.readyAt>Date.now(),[x,y]=point(item.x+.5,item.y+.5),ore=oreProducts[item.ore];
+ const depleted=state.readyAt>Date.now()||state.broken&&state.hitAge<1200,[x,y]=point(item.x+.5,item.y+.5),ore=oreProducts[item.ore];
  const h=depleted?5:20;
  polygon([[x-16,y],[x-14,y-h],[x-2,y-h-8],[x+12,y-h+1],[x+16,y],[x+3,y+7]],'#455666','#20333f');
  polygon([[x-14,y-h],[x-2,y-h-8],[x+12,y-h+1],[x-1,y-4]],'#73858c');
@@ -53,6 +72,16 @@ export function drawOreDeposit(item,time,{point,polygon,ctx,reduced},state={}){
   ctx.fillStyle=ore.color;
   for(const [dx,dy] of [[-8,-13],[2,-18],[7,-8],[-2,-7]])ctx.fillRect(Math.round(x+dx),Math.round(y+dy),4,3);
   if(state.hits){ctx.strokeStyle='#26323e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-2,y-23);ctx.lineTo(x+1,y-12);ctx.lineTo(x-5,y-6);if(state.hits>1){ctx.moveTo(x+1,y-12);ctx.lineTo(x+9,y-16);}ctx.stroke();}
+ }
+ if(state.broken&&state.hitAge>=0&&state.hitAge<1100){
+  const t=state.hitAge/1100;ctx.save();ctx.globalAlpha=(1-t)*.65;
+  ctx.strokeStyle=state.find?miningFinds[state.find].color:ore.color;ctx.lineWidth=2;
+  ctx.beginPath();ctx.ellipse(x,y+2,18+(reduced?0:t*24),7+(reduced?0:t*9),0,0,Math.PI*2);ctx.stroke();
+  if(!reduced)for(let i=0;i<14;i++){
+   const angle=i*2.399,spread=t*(15+i%4*6),px=x+Math.cos(angle)*spread,py=y+Math.sin(angle)*spread*.42-Math.sin(t*Math.PI)*(12+i%3*7);
+   ctx.fillStyle=i%3?ore.color:'#9eaeb5';ctx.fillRect(Math.round(px),Math.round(py),i%3+2,i%3+2);
+  }
+  ctx.restore();
  }
  if(!reduced&&state.hitAge>=0&&state.hitAge<650){
   const t=state.hitAge/650;ctx.save();ctx.globalAlpha=1-t;

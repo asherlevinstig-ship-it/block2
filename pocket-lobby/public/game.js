@@ -104,7 +104,7 @@ let magicState=savedPlayerState?.magic?normalizeMagic(savedPlayerState.magic):nu
 let characterRules=normalizeCharacterRules(savedPlayerState?.characterRules);
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
-  ...oreProducts,
+  ...oreProducts,...miningFinds,
   ...barProducts,
   ...fishProducts,
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
@@ -605,6 +605,7 @@ function addWorldFloat(actor,event){
 function receiveWorldActivity(actor,events){
   for(const event of events.slice(-16)){
     const peer=remotePeers.get(actor);
+    if(peer&&event.mining&&event.room==='quarry')peer.miningImpact=event.mining;
     if(peer&&event.kind==='catch'&&event.fishing?.room===currentRoom)peer.fishingLanding=event.fishing;
     addWorldFloat(actor,event);
   }
@@ -2643,7 +2644,8 @@ function object(item,highlight=false,time=0) {
   }
   if(Object.hasOwn(moonwood.heights,type)){
     if(type==='oreDeposit'){
-      drawOreDeposit(item,time,{point,polygon,ctx,reduced:reducedMotion.matches},{...oreState[item.id],hitAge:miningReceipt?.node===item.id?combatNow()-miningReceipt.at:Infinity});return;
+      const impact=[miningReceipt,...[...remotePeers.values()].map(peer=>peer.miningImpact)].filter(r=>r?.node===item.id).sort((a,b)=>b.at-a.at)[0];
+      drawOreDeposit(item,time,{point,polygon,ctx,reduced:reducedMotion.matches},{...oreState[item.id],broken:impact?.broken,find:impact?.find,hitAge:impact?combatNow()-impact.at:Infinity});return;
     }else if(isTimberTree(item)){
       drawTimberTree(item,time);
     }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
@@ -4620,7 +4622,7 @@ function updateMining(time){
     const receipt=packet.state.miningReceipt,ore=oreProducts[receipt.ore];
     note('+1 '+ore.name+' · +'+receipt.xp+' Mining XP');
     const depleted=oreState[target.id]?.readyAt>combatNow();
-    if(depleted){miningTarget=null;note('Deposit depleted · Choose another rock while it recovers.');}
+    if(depleted){miningTarget=null;note(receipt.find?'Discovered '+miningFinds[receipt.find].name+'! Kept in your bag.':'Deposit broken · Choose another rock while it recovers.');}
     miningBusy=false;
     if(miningTarget===target&&!depleted)startMining(target);
   }).catch(async error=>{
@@ -4734,6 +4736,7 @@ async function eatMeal(id){
 const vaultedItem=(kind,id)=>!!(window.playerCloud?.initial??savedPlayerState)?.bank?.vault?.items?.[kind+':'+id];
 function bagEntries(){
   const entries=[];
+  for(const [id,item] of Object.entries(miningFinds))if(huntingLoot[id]>0)entries.push({key:'find:'+id,name:item.name,category:'materials',art:miningFindArt(id),quantity:huntingLoot[id],description:id==='uncutQuartz'?'An uncut mineral crystal, uncovered inside a broken deposit.':id==='ancientFossil'?'A trace of ancient life, preserved deep in quarry stone.':'A fragment of carved stone with a faint magical shimmer.',stats:'Rare mining find · '+item.price+' gold each',note:'Keep as a discovery or sell at the Trading Post. Luck improves discovery chances.'});
   if(mining.pickOwned)for(const id of ['basic',...mining.upgrades]){
     const pick=pickaxes[id],equipped=mining.equipped&&mining.pick===id;
     entries.push({key:id==='basic'?'pickaxe':'pickaxe:'+id,name:pick.name,category:'gear',art:pickaxeArt(id),quantity:1,equipped,description:'A sturdy pickaxe for quarry deposits.',stats:pick.duration/1000+'s per swing · Mining '+miningLevel(mining),note:'Copper at Mining 1 · Iron at Mining 3',action:equipped?'Unequip':'Equip',run:()=>serverGameplay('mineEquip',{pick:id,equipped:!equipped}).catch(error=>note(error.message))});
@@ -4788,7 +4791,7 @@ function bagEntries(){
       note:busy?'Finish your current activity before eating.':'Eat between fights.',
       action:(health>=100||!recipe.healing)&&playerVitals.hunger>=100?'Already full':id===towerBread.id?'Eat bread':'Eat meal',disabled:busy||(health>=100||!recipe.healing)&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
-  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id]&&!barProducts[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
+  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id]&&!barProducts[id]&&!miningFinds[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
 }
 function renderBag(){
@@ -5502,7 +5505,7 @@ function updateTradingPost(){
     if(quantity===0&&(item.group==='fish'&&item.quality!=='common'||id===moonwellShard.id))continue;
     const title=document.createElement('b'),detail=document.createElement('p'),actions=document.createElement('div');
     card.className='rod-offer trade-card';card.dataset.loot=id;
-    const art=document.createElement('div');art.className='trade-art';art.innerHTML=barProducts[id]?barArt(id):windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':id===moonwellShard.id?'shard':'loot');card.append(art);
+    const art=document.createElement('div');art.className='trade-art';art.innerHTML=miningFinds[id]?miningFindArt(id):barProducts[id]?barArt(id):windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':id===moonwellShard.id?'shard':'loot');card.append(art);
     title.textContent=item.name;
     detail.textContent=item.price+' credits each · '+quantity+' in inventory';
     actions.className='trade-actions';
@@ -5765,7 +5768,7 @@ function castEquippedEssence(slot='q'){
 function currentActivityPrompt(){
   if(currentRoom===quarryRoom&&!miningCut){
     const progress=skillProgress(mining.xp);
-    return {label:'MINING '+progress.level+' · '+progress.progress+' / '+progress.target+' XP',title:mining.pickOwned?'Choose a deposit':'Collect your free pickaxe',text:mining.pickOwned?'Copper trains Mining. Iron unlocks at Mining 3. Sell ore at the Trading Post.':'Speak to the quarry miner to get started.'};
+    return {label:'MINING '+progress.level+' · '+progress.progress+' / '+progress.target+' XP',title:mining.pickOwned?'Choose a deposit':'Collect your free pickaxe',text:mining.pickOwned?'Break deposits for a chance at quartz, fossils and runic fragments. Iron unlocks at Mining 3.':'Speak to the quarry miner to get started.'};
   }
   if(playerVitals.hunger<=LOW_HUNGER&&(meals[towerBread.id]??0)>0&&!fishingSession&&!woodSession&&!player.inCombat)
     return {label:'FOOD FOR THE ROAD',title:playerVitals.hunger===0?'You’re exhausted':'You’re hungry',text:'Tower Bread restores 25 hunger. Open your bag to eat a ration.',action:'rationBag'};

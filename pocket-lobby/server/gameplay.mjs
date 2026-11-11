@@ -9,7 +9,7 @@ import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/p
 import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
 import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
 import {startTrailCampRest,stopTrailCampRest} from './trail-camp.mjs';
-import {oreProducts} from '../public/mining.js';
+import {oreProducts,miningFinds} from '../public/mining.js';
 import {barProducts} from '../public/forge.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {activateVeil,awardVeilCloak,awardChallengeClothing,readyOutfitPower,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
@@ -36,7 +36,7 @@ import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread} fro
 import {moonwood} from '../public/moonwood.js';
 
 const besideRiverTrader=state=>state.position&&Math.abs(state.position.x-3)+Math.abs(state.position.y-4)===1;
-const prices={...Object.fromEntries(Object.entries({...oreProducts,...barProducts}).map(([id,ore])=>[id,ore.price])),boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
+const prices={...Object.fromEntries(Object.entries({...oreProducts,...barProducts,...miningFinds}).map(([id,ore])=>[id,ore.price])),boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
 const earn=(state,gold)=>{
   if(state.credits+gold>100000000)throw new Error('Invalid balance. Make room in your wallet.');
   state.credits+=gold;

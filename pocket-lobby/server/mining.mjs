@@ -1,13 +1,19 @@
-import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit} from '../public/mining.js';
+import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit,miningFind} from '../public/mining.js';
 import {quarryForge,barProducts,forgeCraftReason} from '../public/forge.js';
 import {exertionDuration,useHunger} from '../public/player-vitals.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 const invalid=message=>Object.assign(new Error(message),{status:400});
-export function awardOreStrike(state,node,cut,now){
+export function awardOreStrike(state,node,cut,now,broken=false){
  const ore=oreProducts[node.ore],before=state.mining.xp;
  state.huntingLoot[node.ore]=(state.huntingLoot[node.ore]??0)+1;
  state.mining.xp=Math.min(MAX_SKILL_XP,before+ore.xp);useHunger(state);
- state.miningReceipt={id:cut.id,ore:node.ore,xp:state.mining.xp-before,at:now,node:node.id};
+ const find=broken?miningFind(cut.id,state.stats?.luckXp??0):null;
+ const awarded=find&&(state.huntingLoot[find]??0)<1000000?find:null;
+ if(awarded){
+  state.huntingLoot[awarded]=(state.huntingLoot[awarded]??0)+1;
+  if(state.plan){state.plan.miningFinds??={};state.plan.miningFinds[awarded]=(state.plan.miningFinds[awarded]??0)+1;}
+ }
+ state.miningReceipt={id:cut.id,ore:node.ore,xp:state.mining.xp-before,at:now,node:node.id,broken,find:awarded};
  return state.miningReceipt.xp;
 }
 export async function writeOreStrike(db,row,state,operation,now,{node,revision,hits,readyAt}){
@@ -82,7 +88,7 @@ export async function mineAction(db,row,state,body,action,now){
  const cut=state.miningCut;
  if(cut.id!==body.cutId||now<cut.endsAt)throw invalid('Finish the pickaxe swing before collecting ore.');
  if(cut.revision!==saved.revision)throw invalid('Another miner struck this deposit. Start a new swing.');
- awardOreStrike(state,node,cut,now);
+ awardOreStrike(state,node,cut,now,hits+1===miningRules.hits);
  delete state.miningCut;
  const nextHits=hits+1,readyAt=nextHits===miningRules.hits?now+miningRules.respawnMs:0;
  const updated=await writeOreStrike(db,row,state,body.operation,now,{node:node.id,revision:saved.revision,hits:nextHits,readyAt});

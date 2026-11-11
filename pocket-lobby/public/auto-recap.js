@@ -1,6 +1,6 @@
 import {autoStatus} from './auto-mode.js';
 import {timberSalesText} from './simple-auto.js';
-import {oreProducts} from './mining.js';
+import {oreProducts,miningFinds} from './mining.js';
 
 const routine=state=>state?.plan?.source==='rules'?state.plan:state?.report?.source==='rules'?state.report:null;
 const sum=values=>Object.values(values??{}).reduce((total,value)=>total+value,0);
@@ -13,7 +13,7 @@ export function autoRecapSnapshot(state){
  const plan=routine(state);
  if(!plan)return null;
  const sales=Object.values(plan.oreSales??{});
- return {id:String(plan.routineId??plan.startedAt),fish:sum(plan.catches),timber:plan.timber??0,ore:sum(plan.ores),miningXp:plan.miningXp??0,oreSold:sales.reduce((total,sale)=>total+sale.quantity,0),oreGold:sales.reduce((total,sale)=>total+sale.gold,0),wins:plan.hunts?.wins??0,
+ return {...Object.fromEntries(Object.keys(miningFinds).map(id=>['find_'+id,plan.miningFinds?.[id]??0])),id:String(plan.routineId??plan.startedAt),fish:sum(plan.catches),timber:plan.timber??0,ore:sum(plan.ores),miningXp:plan.miningXp??0,oreSold:sales.reduce((total,sale)=>total+sale.quantity,0),oreGold:sales.reduce((total,sale)=>total+sale.gold,0),wins:plan.hunts?.wins??0,
   places:plan.explored??plan.visited?.length??0,rounds:plan.rounds??0,meals:sum(plan.cookedMeals),
   earned:plan.goldEarned??0,spent:plan.goldSpent??0,bread:plan.rationGoldSpent??0,banked:plan.bankedGold??0,
   marketQuantity:plan.timberSales?.quantity??0,marketGold:plan.timberSales?.gold??0,marketSales:plan.timberSales?.sales??0,marketVisits:plan.timberSales?.visits??0,
@@ -31,6 +31,7 @@ export function autoRecapView(state,baseline,roomName){
  const activity=state.autoPresence?.blocked?'Waiting for a clear path':state.autoPresence?.moving?'Walking to '+(roomName(state.location)??info.location):info.current;
  const rewards=[['fish','Fish caught'],['timber','Timber gathered'],['ore','Ore mined'],['miningXp','Mining XP'],['wins','Fights won'],['places','Places visited'],['rounds','Table rounds'],['meals','Meals cooked']]
   .map(([key,label])=>({label,value:gained(key)})).filter(item=>item.value>0);
+ for(const [id,item] of Object.entries(miningFinds)){const value=gained('find_'+id);if(value)rewards.push({label:item.name,value});}
  const earned=gained('earned'),spent=gained('spent'),bread=gained('bread'),banked=gained('banked');
  const wallet=[earned&&'+'+format.format(earned)+' gold earned',spent&&'−'+format.format(spent)+' gold spent'+(bread?' · '+format.format(bread)+' on bread':''),banked&&format.format(banked)+' gold banked'].filter(Boolean);
  const mined=plan.mining&&oreProducts[plan.mining.ore],sold=gained('oreSold');

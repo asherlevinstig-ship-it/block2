@@ -15,7 +15,7 @@ export async function advanceMiningWork(db,state,now,motion){
   delete work.cut;work.phase='choose';
   if(!arrived()||!besideDeposit(motion,node)||snapshot.readyAt>now||snapshot.revision!==cut.revision)return null;
   if((state.huntingLoot[node.ore]??0)>=1000000)return null;
-  const xp=awardOreStrike(state,node,cut,now),hits=snapshot.hits+1;
+  const hits=snapshot.hits+1,xp=awardOreStrike(state,node,cut,now,hits===miningRules.hits);
   completeRoutineOre(state,node.ore,xp,now);
   return {node:node.id,revision:snapshot.revision,hits,readyAt:hits===miningRules.hits?now+miningRules.respawnMs:0};
  }
