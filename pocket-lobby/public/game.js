@@ -90,6 +90,7 @@ const maxHealth=()=>100;
 let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
 let playerVitals=normalizeVitals(savedPlayerState?.vitals);
 let homeBedRest=savedPlayerState?.bedRest??null,bedRestPolling=false,nextBedPoll=0;
+let campRest=savedPlayerState?.campRest??null,campState=null,campRead=null,campReadAt=-Infinity,campLastPhase=null;
 const fishingGear=normalizeFishingGear(savedPlayerState?.fishingGear);
 const fishStock={...savedPlayerState?.fishStock};
 if(!savedPlayerState?.fishStock&&adventure.silverfin>0)fishStock.silverfin=adventure.silverfin;
@@ -1380,15 +1381,23 @@ function beginBedRest(item){
   serverGameplay('bedRest',{id:item.id}).then(()=>{nextBedPoll=performance.now()+700;note('Resting in your '+bedProfiles[item.type].name+'. Get up whenever you’re ready.');}).catch(error=>note(error.message));
 }
 function updateRiverBenchRest(){
- const seated=currentRoom==='millbrook'&&player.seat?.type==='riverBench';$('riverBenchRestPanel').hidden=!seated;
+ const camping=player.seat?.type==='campSeat';
+ const seated=camping||currentRoom==='millbrook'&&player.seat?.type==='riverBench';$('riverBenchRestPanel').hidden=!seated;
  if(!seated)return;
  const seconds=Math.max(0,Math.ceil((hunting.recoveryUntil-combatNow())/1000));
- $('riverBenchRestStatus').textContent=seconds?'Recovering · '+seconds+'s · '+health+' / 100 HP':'Fully rested · Enjoy the river';
+ $('riverBenchRestPanel').setAttribute('aria-label',camping?'Trail camp rest':'Millbrook bench rest');
+ $('riverBenchRestPanel').dataset.seat=camping?'camp':'bench';
+ $('riverBenchRestLabel').textContent=camping?'TRAIL CAMP':'RESTING BY THE MILL';
+ $('riverBenchRestStatus').textContent=camping?(campRest?'Resting by the fire · '+seconds+'s':'Fully rested · Health and mana restored'):seconds?'Recovering · '+seconds+'s · '+health+' / 100 HP':'Fully rested · Enjoy the river';
  $('riverBenchGetUp').disabled=serverActionBusy||activityBusy;
 }
 async function standFromRiverBench(){
  if(serverActionBusy||activityBusy)return false;
- try{if(currentRoom==='millbrook'&&hunting.recoveryUntil)await serverGameplay('riverRestStop');player.seat=null;updateRiverBenchRest();updateCombatPanel();savePlayerState();return true;}
+ try{
+  if(campRest)await serverGameplay('campStand');
+  else if(currentRoom==='millbrook'&&hunting.recoveryUntil)await serverGameplay('riverRestStop');
+  player.seat=null;updateRiverBenchRest();updateCombatPanel();savePlayerState();return true;
+ }
  catch(error){note(error.message);return false;}
 }
 $('riverBenchGetUp').onclick=()=>standFromRiverBench();
@@ -1440,7 +1449,7 @@ function updateCombatPanel(){
   $('restAtTower').disabled=!!hunting.recoveryUntil;
   $('restAtTower').textContent=hunting.recoveryUntil?'Resting · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s':'Rest · restore hearts';
   const notice=$('combatNotice');
-  notice.hidden=!hunting.recoveryUntil||!!homeBedRest||player.seat?.type==='riverBench';
+  notice.hidden=!hunting.recoveryUntil||!!homeBedRest||['riverBench','campSeat'].includes(player.seat?.type);
   if(hunting.recoveryUntil)notice.textContent=(currentRoom==='millbrook'?'Resting by the mill · ':'Recovering at the Tower · ')+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
   const attack=enemyAttack(encounter,enemy);
   const ironTrialFight=firstUpgrade.ironTrialPending&&encounter?.enemy==='beetle'&&combatGear.equippedWeapon==='ironSword';
@@ -2668,7 +2677,7 @@ function object(item,highlight=false,time=0) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -3182,7 +3191,7 @@ function updateWorldLabels(){
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
   const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
-  const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel;
+  const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -3257,6 +3266,10 @@ function updateWorldLabels(){
   if(currentRoom==='trail'){
     const campfire=roomFurniture().find(item=>item.type==='campfire');
     add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
+  }
+  if(currentRoom===moonwood.trailCamp.room){
+    const fire=roomFurniture().find(item=>item.type==='trailCamp'),phase=campFirePhase();
+    add('Trail camp',...point(fire.x+.5,fire.y+.5,30),'npc',()=>use(fire),({cold:'Cold fire',embers:'Fading embers',burning:'Fire lit'})[phase]);
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
   if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name);
@@ -3591,6 +3604,7 @@ function walkTo(tile){
     combatMoveGoal={...tile};interaction=null;return;
   }
   if(routineControlled()){note('Your routine is running. Use Take control to move.');return;}
+  if(campRest){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(player.seat?.type==='riverBench'&&currentRoom==='millbrook'&&hunting.recoveryUntil){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
@@ -3631,6 +3645,7 @@ $('loungeDressGuideAction').onclick=()=>isSmartlyDressed(wardrobe)?continueToLou
 function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
   if(routineControlled()){note('Use Take control before travelling.');return;}
+  if(campRest){standFromRiverBench().then(ok=>{if(ok)travelDoor(door);});return;}
   if(player.seat?.type==='riverBench'&&currentRoom==='millbrook'&&hunting.recoveryUntil){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(!doorAvailable(door))return;
@@ -4075,6 +4090,7 @@ function useMoonfinPool(){
   route=paths[0];target=route.at(-1)??null;interaction={type:'moonfinPool'};
 }
 function seatAnchor(item){
+  if(item.type==='campSeat')return point(item.x+.5,item.y+.5,1);
   const [w,d]=dimensions(item);
   const offsets=[[w/2,.63],[.63,d/2],[w/2,.37],[.37,d/2]];
   const [x,y]=offsets[item.rot];
@@ -4291,6 +4307,8 @@ function finishInteraction(){
     openCampfire();
   }else if(item.type==='campfire'){
     openCampfire();
+  }else if(item.type==='trailCamp'){
+    if(pendingCookingId)openCampfire();else openTrailCamp();
   }else if(isGamingTable(item)&&currentRoom==='lounge'){
     openLoungeGame(item.type);
   }else if(item.type==='workbench'){
@@ -4388,6 +4406,7 @@ function finishInteraction(){
 }
 let lastFrameError='';
 function animation(time){
+  updateTrailCamp(time);
   // Keep the next frame alive even if optional feedback fails in this one.
   requestAnimationFrame(animation);
   try{advanceAnimation(time);lastFrameError='';}
@@ -4527,6 +4546,58 @@ for(const button of $('foodStallDialog').querySelectorAll('[data-bread-quantity]
   };
 }
 let pendingCookingId=null;
+function campFirePhase(){return moonwood.trailCampPhase(campState?.litUntil??0,combatNow());}
+function receiveTrailCamp(camp){
+  if(camp&&camp.revision>=(campState?.revision??-1))campState=camp;
+}
+function refreshTrailCamp(){
+  if(campRead||!window.towerReadTrailCamp)return campRead;
+  campReadAt=performance.now();
+  campRead=window.towerReadTrailCamp().then(receiveTrailCamp).catch(error=>{
+    if($('trailCampDialog').open)$('trailCampError').textContent=error.message;
+  }).finally(()=>{campRead=null;});
+  return campRead;
+}
+function updateTrailCamp(time){
+  if(currentRoom!==moonwood.trailCamp.room)return;
+  if(!document.hidden&&time-campReadAt>45000)refreshTrailCamp();
+  const camp=moonwood.trailCamp,phase=campFirePhase(),remaining=Math.max(0,(campState?.litUntil??0)-combatNow());
+  if(campLastPhase!==phase&&$('campfireDialog').open)renderCampfire();
+  campLastPhase=phase;
+  if(!$('trailCampDialog').open)return;
+  const seconds=Math.ceil(remaining/1000);
+  const duration=Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
+  const status=!campState?'Checking the fire…':phase==='cold'?'Cold · Add timber to light it':(phase==='embers'?'Fading embers':'Fire lit')+' · '+duration+' left';
+  if($('trailCampStatus').textContent!==status)$('trailCampStatus').textContent=status;
+  $('trailCampFuel').disabled=serverActionBusy||!campState||woodcutting.timber<camp.fuelCost||remaining>camp.maxMs-camp.burnMs;
+  $('trailCampRest').disabled=serverActionBusy||remaining<camp.restMs;
+  $('trailCampCook').disabled=serverActionBusy||phase==='cold';
+}
+function openTrailCamp(){
+  if(unavailable()||!window.towerReadTrailCamp)return;
+  $('trailCampError').textContent='';
+  if(!$('trailCampDialog').open)$('trailCampDialog').showModal();
+  refreshTrailCamp();updateTrailCamp(performance.now());
+}
+function sitAtTrailCamp(){
+  player.seat={type:'campSeat',x:player.cx,y:player.cy,rot:0};
+  player.direction=player.cx-player.cy>moonwood.trailCamp.x-moonwood.trailCamp.y?'left':'right';
+  player.back=false;
+}
+$('trailCampFuel').onclick=async()=>{
+  $('trailCampError').textContent='';
+  try{
+    const {camp}=await serverGameplay('campRefuel');receiveTrailCamp(camp);
+    showTransaction('Campfire fueled',[{icon:'▤',text:'−2 timber · +3 minutes of fire'}]);
+    updateTrailCamp(performance.now());
+  }catch(error){$('trailCampError').textContent=error.message;refreshTrailCamp();}
+};
+$('trailCampRest').onclick=async()=>{
+  $('trailCampError').textContent='';
+  try{await serverGameplay('campRest');$('trailCampDialog').close();updateRiverBenchRest();}
+  catch(error){$('trailCampError').textContent=error.message;refreshTrailCamp();}
+};
+$('trailCampCook').onclick=()=>{$('trailCampDialog').close();openCampfire();};
 function openCampfire(){
   if(unavailable())return;
   const dialog=$('campfireDialog');
@@ -4537,7 +4608,8 @@ function openCampfire(){
 }
 function renderCampfire(){
   const state={stats:playerStats,fishStock,huntingLoot,woodcutting,meals},progress=skillProgress(playerStats.cookingXp??0);
-  $('campfireTitle').textContent=atHome()?'Your home kitchen':currentRoom===factionHall?'Field kitchen':'Campfire cooking';$('cookingPlace').textContent=atHome()?'HOME · COOKING STOVE':currentRoom===factionHall?'FACTION HALL':'LANTERN TRAIL';
+  const camping=currentRoom===moonwood.trailCamp.room,cold=camping&&campFirePhase()==='cold';
+  $('campfireTitle').textContent=atHome()?'Your home kitchen':currentRoom===factionHall?'Field kitchen':'Campfire cooking';$('cookingPlace').textContent=atHome()?'HOME · COOKING STOVE':currentRoom===factionHall?'FACTION HALL':camping?'MOONWELL TRAIL CAMP':'LANTERN TRAIL';
   $('cookingSkill').textContent='Cooking '+progress.level;$('cookingXp').textContent=progress.progress+' / '+progress.target+' XP';$('cookingProgress').max=progress.target;$('cookingProgress').value=progress.progress;
   $('cookingNext').textContent=progress.level<2?'Cooking 2 unlocks Hearty Stew · 60 HP':progress.level<4?'Cooking 4 unlocks Silverfin Feast · 80 HP':'All recipes unlocked · Keep preparing for your next adventure.';
   const cards=$('campfireRecipes');cards.replaceChildren();
@@ -4546,14 +4618,14 @@ function renderCampfire(){
     const art=document.createElement('div');art.className='campfire-meal-art';art.innerHTML=mealArt(id);
     const content=document.createElement('div'),title=document.createElement('h3'),cost=document.createElement('p'),supply=document.createElement('small');
     title.textContent=recipe.name;cost.textContent=recipe.amount+' '+recipe.ingredient+' + '+recipe.timber+' timber';
-    supply.textContent=locked?'Unlock at Cooking '+recipe.level:plan.reason?plan.message:(meals[id]??0)+' in bag · +'+recipe.xp+' Cooking XP';content.append(title,cost,supply);
-    const button=document.createElement('button');button.type='button';button.textContent=locked?'Cooking '+recipe.level:'Cook · '+recipe.healing+' HP';button.setAttribute('aria-label','Cook '+recipe.name+' to restore up to '+recipe.healing+' HP');button.disabled=!!plan.reason||!window.playerCloud?.gameplay;button.onclick=()=>cookMeal(id,button);
+    supply.textContent=cold?'Add timber at the trail camp to cook.':locked?'Unlock at Cooking '+recipe.level:plan.reason?plan.message:(meals[id]??0)+' in bag · +'+recipe.xp+' Cooking XP';content.append(title,cost,supply);
+    const button=document.createElement('button');button.type='button';button.textContent=locked?'Cooking '+recipe.level:'Cook · '+recipe.healing+' HP';button.setAttribute('aria-label','Cook '+recipe.name+' to restore up to '+recipe.healing+' HP');button.disabled=cold||!!plan.reason||!window.playerCloud?.gameplay;button.onclick=()=>cookMeal(id,button);
     card.append(art,content,button);cards.append(card);
   }
 }
 async function cookMeal(id,button){
   if(unavailable())return;
-  const station=atHome()?(homeFurniture.find(i=>i.type==='stove'&&Math.abs(player.cx-i.x)+Math.abs(player.cy-i.y)===1)??homeFurniture.find(i=>i.type==='stove')):currentRoom===factionHall?factionHallFurniture.find(i=>i.type==='stove'):moonwood.layouts.trail.scenery.find(i=>i.type==='campfire');
+  const station=atHome()?(homeFurniture.find(i=>i.type==='stove'&&Math.abs(player.cx-i.x)+Math.abs(player.cy-i.y)===1)??homeFurniture.find(i=>i.type==='stove')):currentRoom===factionHall?factionHallFurniture.find(i=>i.type==='stove'):roomFurniture().find(i=>i.type==='campfire'||i.type==='trailCamp');
   if(station&&Math.abs(player.cx-station.x)+Math.abs(player.cy-station.y)!==1){pendingCookingId=id;$('campfireDialog').close();use(station);note('Walking back to the stove to prepare your meal.');return;}
   if(button)button.disabled=true;savePlayerState();
   try{
@@ -4854,7 +4926,10 @@ function applyServerGameplay(state){
   Object.assign(playerStats,state.stats);
   loungeRound=state.gambling?.round??null;
   const previousRest=homeBedRest;homeBedRest=state.bedRest??null;
+  const previousCampRest=campRest;campRest=state.campRest??null;
+  if(campRest&&currentRoom===moonwood.trailCamp.room&&!player.seat)sitAtTrailCamp();
   health=state.health;playerVitals=normalizeVitals(state.vitals);updateVitalsHud();
+  if(previousCampRest&&!campRest&&combatNow()>=previousCampRest.endsAt&&health===100)note('Rest complete · Health and mana restored.');
   if(previousRest&&!homeBedRest&&health>=100){showTransaction('Rest complete',[{icon:'♥',text:'+'+(100-previousRest.startHealth)+' HP · All five hearts restored'}]);note('Fully rested. Ready for your next adventure.');}
   meals={...state.meals};
   const previousFamiliar=familiarState;
@@ -5643,7 +5718,7 @@ function currentActivityPrompt(){
 let activityPromptKey='';
 function updateActivityPrompt(){
   updateAutoLessonGuide();updateLoungeDressGuide();
-  const blocked=editing||unavailable()||depthsRun||trackedDestination||step||route.length||interaction
+  const blocked=editing||unavailable()||player.seat?.type==='campSeat'||depthsRun||trackedDestination||step||route.length||interaction
     ||window.millRaidClient?.visible||!$('loungeDressGuide').hidden||!$('autoLessonGuide').hidden||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
     ||!$('depthsDecision').hidden||document.querySelector('dialog[open]');
   const prompt=blocked?null:currentActivityPrompt();
@@ -6611,7 +6686,7 @@ function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   }
   if(next==='lounge'&&!isSmartlyDressed(wardrobe)&&!autoJourneyTransition){requestLoungeDress();return;}
   if(next==='lounge'&&isSmartlyDressed(wardrobe))loungeDressGuiding=false;
-  if(!autoJourneyTransition&&(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home"))){note("Finish combat or recovery before travelling.");return;}
+  if(!autoJourneyTransition&&(player.inCombat||(campRest?next!==moonwood.trailCamp.room:hunting.recoveryUntil&&next!=="hub"&&next!=="home"))){note("Finish combat or recovery before travelling.");return;}
   const depthsIndex=depthsStageIndex(next);
   if(depthsRun?!canVisitDepthsRoom(depthsRun,next):depthsIndex>=0)return;
   cancelFishing();selectedTimber=null;resetCombatArt();
@@ -6619,7 +6694,11 @@ function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
-  if(currentRoom!==next)fieldJournalOpen=false;
+  if(currentRoom!==next){
+    fieldJournalOpen=false;
+    if($('trailCampDialog').open)$('trailCampDialog').close();
+    if(next===moonwood.trailCamp.room)campReadAt=-Infinity;
+  }
   currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   depthsExploring=explore;
   const exploring=moonwood.has(next);
@@ -6713,7 +6792,8 @@ if(savedPlayerState?.timberCut){
   if(tree)restoreServerTimber(cut,window.playerCloud?.serverTime??Date.now(),tree);
 }
 if(currentRoom==='millbrook'&&hunting.recoveryUntil){player.seat=roomFurniture().find(item=>item.type==='riverBench');player.direction='right';player.back=false;}
-if(hunting.recoveryUntil&&!['hub','home','millbrook'].includes(currentRoom))enterRoom('hub');
+if(campRest&&currentRoom===moonwood.trailCamp.room)sitAtTrailCamp();
+if(hunting.recoveryUntil&&!campRest&&!['hub','home','millbrook'].includes(currentRoom))enterRoom('hub');
 updateCombatPanel();
 window.towerPauseForAccount=()=>{
   if(player.inCombat)throw new Error('Finish combat before changing accounts.');
@@ -6908,7 +6988,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
+    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,

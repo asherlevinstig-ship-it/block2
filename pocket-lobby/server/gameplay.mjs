@@ -7,6 +7,8 @@ import {watchAction} from './watch-expedition.mjs';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
+import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
+import {startTrailCampRest,stopTrailCampRest} from './trail-camp.mjs';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {activateVeil,awardVeilCloak,awardChallengeClothing,readyOutfitPower,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
@@ -46,9 +48,11 @@ function location(state,rooms){
   if(!rooms.includes(state.location))throw new Error('Travel to the right location for this action.');
 }
 
-export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,{millRaid}={}){
+export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,{millRaid,camp}={}){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
+  if(action==='campRest'){startTrailCampRest(state,camp,now);return;}
+  if(action==='campStand'){stopTrailCampRest(state);return;}
   if(cellarAction(state,action))return;
   if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
@@ -134,7 +138,9 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
       const atStove=state.location==='home'&&state.ownedFurniture?.stove>0&&position&&(state.homeFurniture??[]).some(stove=>stove.type==='stove'&&Math.abs(position.x-stove.x)+Math.abs(position.y-stove.y)===1);
       const atCamp=state.location==='trail'&&position&&Math.abs(position.x-campfire.x)+Math.abs(position.y-campfire.y)===1;
       const atHall=state.location===factionHall&&position&&Math.abs(position.x-factionHallStove.x)+Math.abs(position.y-factionHallStove.y)===1;
-      if(!atStove&&!atCamp&&!atHall)throw new Error('Travel beside the campfire on Lantern Trail or your placed home cooking stove.');
+      const atTrailCamp=state.location===trailCamp.room&&besideTrailCamp(position);
+      if(atTrailCamp&&!(camp?.litUntil>now))throw new Error('Choose Add timber to light the Moonwell trail camp before cooking.');
+      if(!atStove&&!atCamp&&!atHall&&!atTrailCamp)throw new Error('Travel beside the campfire or your placed home cooking stove.');
       prepareMeal(state,body.id);
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');
@@ -325,6 +331,7 @@ export function protectFishingState(previous,next){
   if(previous.autoLesson)next.autoLesson=previous.autoLesson;else delete next.autoLesson;
   if(previous.autoConfigured===true)next.autoConfigured=true;else delete next.autoConfigured;
   if(previous.bedRest){next.bedRest=previous.bedRest;next.homeFurniture=previous.homeFurniture;}else delete next.bedRest;
+  if(previous.campRest)next.campRest=previous.campRest;else delete next.campRest;
   next.safeVersion=1;
   if(!(previous.ownedFurniture?.safe>0))next.homeFurniture=(next.homeFurniture??[]).filter(item=>item.type!=='safe');
   if(previous.autoSwitch)next.autoSwitch=true;else delete next.autoSwitch;

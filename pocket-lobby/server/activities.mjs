@@ -9,6 +9,7 @@ import {enemyAttack} from '../public/hunting.js';
 import {useHunger,exertionDuration,isExhausted} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
+import {settleTrailCampRest} from './trail-camp.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
 import {awardLeadership} from '../public/leadership.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
@@ -151,6 +152,7 @@ export function advanceServerCombat(state,now,random=Math.random){
 }
 export function settleActivities(state,now,random=Math.random){
   let changed=settleBedRest(state,now);
+  if(settleTrailCampRest(state,now))changed=true;
   if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0;
   if(state.hunting?.recoveryUntil&&now>=state.hunting.recoveryUntil){state.hunting.recoveryUntil=0;state.health=100;changed=true;}
   return changed;

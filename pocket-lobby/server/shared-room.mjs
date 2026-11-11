@@ -2,6 +2,7 @@ import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {factionHallAccess} from './faction-projects.mjs';
 import {factionHall} from '../public/faction-hall.js';
 import {moonwood} from '../public/moonwood.js';
+import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
 import {isFamiliar,normalizeFamiliarName,moonSightActive,familiarBond} from '../public/familiars.js';
 import {sharedActivity} from '../public/world-activity.js';
 import {armourSelection} from '../public/hunting.js';
@@ -82,7 +83,16 @@ export class SharedRoom{
     if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
   }
   async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);if(this.room)await this.loadTrees(this.room);this.snapshot();await this.scheduleVeilExpiry();}
-  fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{const path=new URL(request.url).pathname;if(path==='/raid'&&request.method==='POST'){const {raid,playerId,receipt,cast}=await request.json();const peer=[...this.sessions.values()].find(m=>m.playerId===playerId);const cue=peer?{player:peer.id,hit:receipt?.hit??0,cast}:null;for(const ws of this.sessions.keys())this.send(ws,{type:'millRaid',raid,cue});return json({ok:true});}return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
+  fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{
+    const path=new URL(request.url).pathname;
+    if(path==='/trail-camp'&&request.method==='POST'){
+      const camp=await request.json();
+      for(const ws of this.sessions.keys())this.send(ws,{type:'trailCamp',camp});
+      return json({ok:true});
+    }
+    if(path==='/raid'&&request.method==='POST'){const {raid,playerId,receipt,cast}=await request.json();const peer=[...this.sessions.values()].find(m=>m.playerId===playerId);const cue=peer?{player:peer.id,hit:receipt?.hit??0,cast}:null;for(const ws of this.sessions.keys())this.send(ws,{type:'millRaid',raid,cue});return json({ok:true});}
+    return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);
+  });}
   async reserveFishingSpot(request){
     const {playerId,room,spots}=await request.json(),now=Date.now();
     for(const [id,spot] of this.fishingSpots)if(spot.until<=now)this.fishingSpots.delete(id);
@@ -212,6 +222,9 @@ export class SharedRoom{
     }
     if(message?.type==='stand'){meta.seat=null;ws.serializeAttachment(meta);this.snapshot();return;}
     if(message?.type==='sit'){
+      if(message.seat?.type==='campSeat'&&meta.room===trailCamp.room&&besideTrailCamp(meta)&&message.seat.x===meta.x&&message.seat.y===meta.y){
+        meta.seat={type:'campSeat',x:meta.x,y:meta.y,rot:0};ws.serializeAttachment(meta);this.snapshot();return;
+      }
       const seat=meta.seats.find(item=>item.x===message.seat?.x&&item.y===message.seat?.y&&item.type===message.seat?.type&&item.rot===(message.seat?.rot??0));
       const box=seat?roomBoxes('home',[seat])[0]:null;
       const adjacent=box&&[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>meta.x+dx<box.x+box.w&&meta.x+dx+1>box.x&&meta.y+dy<box.y+box.d&&meta.y+dy+1>box.y);

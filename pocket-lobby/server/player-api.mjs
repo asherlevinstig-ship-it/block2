@@ -1,6 +1,8 @@
 import {cellarFlags} from '../public/mill-cellar.js';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
+import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
+import {trailCamp} from '../public/trail-camp.js';
 import {readTimberOrders,changeTimberOrder,atTradingPost,matchAutoTimberOrders,writeAutoTimberSale} from './timber-orders.mjs';
 import {timberMarketCounter,timberMarketSurplus,completeTimberMarketTrip} from './routine-queue.mjs';
 import {GOLD_CAP} from '../public/bank.js';
@@ -187,6 +189,7 @@ export async function handlePlayerApi(request,env){
     }
     if(!id)return json({error:"Load your character first."},401);
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
+    if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/timber-orders'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id);
       if(!row)return json({error:'Character not found.'},401);
@@ -215,7 +218,10 @@ export async function handlePlayerApi(request,env){
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
     const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
-    if(row.last_request===body.operation)return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
+    if(row.last_request===body.operation){
+      if(path==='/api/player/gameplay/campRefuel')return json({...packet(row),camp:await readTrailCamp(env.TOWER_DB)});
+      return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
+    }
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     if(path==='/api/player/mill-raid'){
       const result=await writeMillRaid(env.TOWER_DB,row,body);
@@ -230,6 +236,16 @@ export async function handlePlayerApi(request,env){
       return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
     }
     let state=readPlayerState(row),factionId=null,treeMutation=null;
+    if(path==='/api/player/gameplay/campRefuel'){
+      const now=Date.now();settleActivities(state,now);
+      const result=await refuelTrailCamp(env.TOWER_DB,row,state,body.operation,now);
+      if(!result)return json({error:'Your character changed. Refresh the camp.',...packet(await read(env.TOWER_DB,id))},409);
+      if(env.SHARED_ROOMS){
+        const room=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(publicRoomNamespace(trailCamp.room)));
+        await room.fetch(new Request('https://room.internal/trail-camp',{method:'POST',body:JSON.stringify(result.camp)})).catch(()=>{});
+      }
+      return json({...packet(result.updated),camp:result.camp});
+    }
     if(path==='/api/player/timber-orders'){
       const result=await changeTimberOrder(env.TOWER_DB,row,state,body,Date.now());
       if(!result)return json({error:'Another tab saved first. Reload your character.',...packet(await read(env.TOWER_DB,id))},409);
@@ -255,7 +271,8 @@ export async function handlePlayerApi(request,env){
         const shared=['chop','cut'].includes(gameplay)?await prepareManualTree(env,state,gameplay,body):null;
         const now=Date.now();
         const millRaid=gameplay==='cast'&&state.location==='millbrook'&&!state.fishingCast?await readMillRaid(env.TOWER_DB,now):undefined;
-        applyGameplayAction(state,gameplay,body,now,Math.random,{millRaid});
+        const camp=(gameplay==='campRest'||gameplay==='cook'&&state.location===trailCamp.room)?await readTrailCamp(env.TOWER_DB):undefined;
+        applyGameplayAction(state,gameplay,body,now,Math.random,{millRaid,camp});
         if(shared&&state.timberCut)state.timberCut.treeGeneration=shared.generation;
         if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);
       }

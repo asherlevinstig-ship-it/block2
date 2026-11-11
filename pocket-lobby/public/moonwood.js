@@ -1,4 +1,5 @@
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
+import {trailCamp,trailCampPhase} from './trail-camp.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
@@ -34,7 +35,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
@@ -134,6 +135,7 @@ export const moonwood=(()=>{
     if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':id==='depthsVault'?'vaultBoss':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
     if(dungeonRooms.includes(id)){const main=['depthsGate','depthsGallery','depthsVault'].includes(id);for(const [type,x,y] of [['dungeonCover',4,3],['dungeonCover',3,6],...(main?[['dungeonArch',1,4],['dungeonExit',10,5]]:[]),['dungeonChain',10,2],['dungeonBones',2,6]])scenery.push({id:type+':'+x+','+y,type,x,y,rot:0});}
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
+    if(id===trailCamp.room)scenery.push({id:'trailCamp',type:'trailCamp',x:trailCamp.x,y:trailCamp.y,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
   const layouts=Object.fromEntries(Object.keys(areas).map(id=>[id,generate(id)]));
@@ -209,7 +211,7 @@ export const moonwood=(()=>{
     }
   }
 
-  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={}}){
+  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold'}){
     const {x,y,type}=item;
     if(Object.hasOwn(cellarHeights,type)){drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,pose});return;}
     if(Object.hasOwn(dungeonHeights,type)){drawDungeonProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,pose,combat});return;}
@@ -322,15 +324,22 @@ export const moonwood=(()=>{
           rect(px-9+i*8+Math.round(Math.sin(drift/8)*2),py-9-Math.round(drift),i===1?2:1,1,color);
         }
       }
-    }else if(type==='campfire'){
+    }else if(type==='campfire'||type==='trailCamp'){
+      const phase=type==='campfire'?'burning':campPhase;
       const flicker=reduced?0:Math.floor(time/135)%3;
-      surface(x+.01,y+.01,.98,.98,.18,'#d3803340');
-      surface(x+.16,y+.15,.69,.70,.26,'#ffb25335');
+      if(phase==='burning'){
+        surface(x-.26,y-.26,1.52,1.52,.18,'#d380332a');
+        surface(x+.07,y+.07,.86,.86,.26,'#ffb25335');
+      }else if(phase==='embers')surface(x+.15,y+.15,.70,.70,.26,'#a9533938');
       for(const [u,v] of [[.17,.37],[.31,.64],[.59,.64],[.68,.35],[.43,.18]]){
         part(u,v,.20,.17,0,3,stone);
       }
       part(.30,.40,.40,.13,1,3,['#95604b','#563432','#6a4238']);
       part(.43,.27,.13,.43,2,3,['#b07d5b','#563432','#75473a']);
+      if(phase!=='burning'){
+        if(phase==='embers')for(let i=0;i<4;i++)rect(px-6+i*3,py-6-i%2*2,2,1,reduced||Math.floor(time/280+i)%2?'#f48c4e':'#a44836');
+        return;
+      }
       polygon([[px-7,py-5],[px-7,py-11],[px-3,py-9],[px-1,py-20-flicker],[px+3,py-13],[px+7,py-15],[px+6,py-7],[px+3,py-4]],'#e8753b');
       polygon([[px-4,py-5],[px-3,py-10],[px,py-15-flicker],[px+2,py-9],[px+4,py-10],[px+3,py-5]],'#ffc763');
       rect(px-1,py-8,3,3,'#fff1bb');
@@ -490,5 +499,5 @@ export const moonwood=(()=>{
       }
     }
   }
-  return {view,areas,doors,heights,layouts,has,blocked,open,drawGround,drawProp,drawWater};
+  return {view,areas,doors,heights,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
 })();

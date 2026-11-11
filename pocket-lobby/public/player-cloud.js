@@ -501,6 +501,7 @@
         inHall:()=>packet.state.location==='factionHall'
       });
       window.towerReadFactionProject=async()=>{await flush();return (await request('factions')).membership?.hall;};
+      window.towerReadTrailCamp=async()=>(await request('trail-camp')).camp;
       const {initializeTimberOrders}=await import('./timber-orders.js');
       initializeTimberOrders({
         read:async()=>{await flush();return request('timber-orders');},

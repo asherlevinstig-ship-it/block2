@@ -358,3 +358,14 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
   color:#e7f3cd;
 }
 .world-labels .world-label-tracks:hover { background:#3b544b;border-color:#f1ecc3; }
+.trail-camp-window{width:min(470px,calc(100vw - 28px))}
+.trail-camp-window #trailCampStatus{padding:10px 12px;margin:15px 0 10px;border:1px solid #806448;border-radius:8px;background:#25232c;color:#ffdd9e;font-weight:750}
+.trail-camp-window .trail-camp-note{color:#bfcee3;line-height:1.5}
+.trail-camp-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.trail-camp-actions button{flex:1 1 auto;min-width:max-content;padding:8px 12px}
+.trail-camp-window #trailCampError{color:#ffd09d;margin-bottom:0}
+.trail-camp-window #trailCampError:empty{display:none}
+@media(max-width:720px){
+ .river-bench-rest[data-seat=camp]{top:64px;bottom:auto;width:max-content;max-width:calc(100% - 18px);padding:8px 10px;gap:3px 8px}
+ .river-bench-rest[data-seat=camp]>button{min-height:34px;padding:5px 10px}
+}
