@@ -19,8 +19,19 @@ export function normalizeMining(input={}){
  return {pickOwned,equipped,xp};
 }
 export const miningLevel=mining=>skillLevel(mining?.xp??0);
+export function normalizeAutoMining(input={}){
+ if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Choose valid Auto Mining settings.');
+ const {ore='copperOre',keep=0}=input;
+ if(!Object.hasOwn(oreProducts,ore)||!Number.isSafeInteger(keep)||keep<0||keep>1000000)throw new Error('Choose copper or iron and 0–1,000,000 ore to keep.');
+ return {ore,keep};
+}
+export function miningReportText(plan,state){
+ const id=plan.mining?.ore;if(!id)return '';
+ const count=plan.ores?.[id]??0,sale=plan.oreSales?.[id]??{quantity:0,gold:0};
+ return 'Mined '+count+' '+oreProducts[id].name+' · +'+(plan.miningXp??0)+' Mining XP · Sold '+sale.quantity+' for '+sale.gold+' gold · '+(state.huntingLoot?.[id]??0)+' in your bag.';
+}
 export function miningPose(state){
- const cut=state.miningCut,node=oreDeposits.find(node=>node.id===cut?.node);
+ const cut=state.plan?.miningWork?.cut??state.miningCut,node=oreDeposits.find(node=>node.id===cut?.node);
  return cut&&node?{...cut,x:node.x,y:node.y,room:quarryRoom}:null;
 }
 export const besideDeposit=(position,node)=>!!position&&Math.abs(position.x-node.x)+Math.abs(position.y-node.y)===1;

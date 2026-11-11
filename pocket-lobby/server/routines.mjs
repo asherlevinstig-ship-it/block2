@@ -43,6 +43,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   if(physicalTimber)metadata.physicalTimber=true;
   if(physicalFishing)metadata.physicalFishing=true;
   if(rules.timberMarket)metadata.timberMarket=rules.timberMarket;
+  if(rules.mining)metadata.mining=rules.mining;
   if(rules.simpleMode&&rules.simpleMode!=='gambling'){const queue={enabled:true,repeats:1,budget:100000,reserveGold:rules.goldPolicy.reserveGold,minHealth:simpleAutoRisks[rules.simpleRisk??'balanced'].minHealth,steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true,simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'});settlePlan(state,until,{stop:active,random});return;}
   if(rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='exploring'){if(!state.quest.accepted)return;startExplorationPlan(state,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
   const wantsRest=rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='rest';

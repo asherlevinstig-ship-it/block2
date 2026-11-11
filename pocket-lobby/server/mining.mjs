@@ -2,6 +2,23 @@ import {quarryRoom,quarryMiner,oreDeposits,oreProducts,miningRules,miningLevel,b
 import {exertionDuration,useHunger} from '../public/player-vitals.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 const invalid=message=>Object.assign(new Error(message),{status:400});
+export function awardOreStrike(state,node,cut,now){
+ const ore=oreProducts[node.ore],before=state.mining.xp;
+ state.huntingLoot[node.ore]=(state.huntingLoot[node.ore]??0)+1;
+ state.mining.xp=Math.min(MAX_SKILL_XP,before+ore.xp);useHunger(state);
+ state.miningReceipt={id:cut.id,ore:node.ore,xp:state.mining.xp-before,at:now,node:node.id};
+ return state.miningReceipt.xp;
+}
+export async function writeOreStrike(db,row,state,operation,now,{node,revision,hits,readyAt}){
+ const mutation=crypto.randomUUID();
+ const [,updated]=await db.batch([
+  db.prepare('UPDATE tower_ore_deposits SET hits=?,ready_at=?,revision=revision+1,mutation=? WHERE node_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?) RETURNING node_id')
+   .bind(hits,readyAt,mutation,node,revision,row.player_id,row.revision),
+  db.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_ore_deposits WHERE node_id=? AND mutation=?) RETURNING *')
+   .bind(JSON.stringify(state),operation,now,row.player_id,row.revision,node,mutation)
+ ]);
+ return updated.results[0]??null;
+}
 export async function readOreDeposits(db,now=Date.now()){
  const {results}=await db.prepare('SELECT node_id,hits,ready_at,revision FROM tower_ore_deposits').all();
  return Object.fromEntries(oreDeposits.map(node=>{
@@ -41,17 +58,10 @@ export async function mineAction(db,row,state,body,action,now){
  const cut=state.miningCut;
  if(cut.id!==body.cutId||now<cut.endsAt)throw invalid('Finish the pickaxe swing before collecting ore.');
  if(cut.revision!==saved.revision)throw invalid('Another miner struck this deposit. Start a new swing.');
- state.huntingLoot[node.ore]=(state.huntingLoot[node.ore]??0)+1;
- state.mining.xp=Math.min(MAX_SKILL_XP,state.mining.xp+ore.xp);useHunger(state);
- state.miningReceipt={id:cut.id,ore:node.ore,xp:ore.xp,at:now,node:node.id};
+ awardOreStrike(state,node,cut,now);
  delete state.miningCut;
- const nextHits=hits+1,readyAt=nextHits===miningRules.hits?now+miningRules.respawnMs:0,operation=crypto.randomUUID();
- const [,updated]=await db.batch([
-  db.prepare('UPDATE tower_ore_deposits SET hits=?,ready_at=?,revision=revision+1,mutation=? WHERE node_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?) RETURNING node_id')
-   .bind(nextHits,readyAt,operation,node.id,saved.revision,row.player_id,row.revision),
-  db.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_ore_deposits WHERE node_id=? AND mutation=?) RETURNING *')
-   .bind(JSON.stringify(state),body.operation,now,row.player_id,row.revision,node.id,operation)
- ]);
- if(!updated.results[0])throw invalid('This deposit changed. Refresh and start a new swing.');
- return {updated:updated.results[0]};
+ const nextHits=hits+1,readyAt=nextHits===miningRules.hits?now+miningRules.respawnMs:0;
+ const updated=await writeOreStrike(db,row,state,body.operation,now,{node:node.id,revision:saved.revision,hits:nextHits,readyAt});
+ if(!updated)throw invalid('This deposit changed. Refresh and start a new swing.');
+ return {updated};
 }

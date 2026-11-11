@@ -1,17 +1,19 @@
 import {autoStatus} from './auto-mode.js';
 import {timberSalesText} from './simple-auto.js';
+import {oreProducts} from './mining.js';
 
 const routine=state=>state?.plan?.source==='rules'?state.plan:state?.report?.source==='rules'?state.report:null;
 const sum=values=>Object.values(values??{}).reduce((total,value)=>total+value,0);
 const format=new Intl.NumberFormat();
-const foodJobs=['fishing','woodcutting','battle','hunting','random'];
+const foodJobs=['fishing','woodcutting','mining','battle','hunting','random'];
 const foodStops=['out-of-food','food-budget','food-funds','food-reserve'];
 export const autoRecapAwayMs=60000;
 
 export function autoRecapSnapshot(state){
  const plan=routine(state);
  if(!plan)return null;
- return {id:String(plan.routineId??plan.startedAt),fish:sum(plan.catches),timber:plan.timber??0,wins:plan.hunts?.wins??0,
+ const sales=Object.values(plan.oreSales??{});
+ return {id:String(plan.routineId??plan.startedAt),fish:sum(plan.catches),timber:plan.timber??0,ore:sum(plan.ores),miningXp:plan.miningXp??0,oreSold:sales.reduce((total,sale)=>total+sale.quantity,0),oreGold:sales.reduce((total,sale)=>total+sale.gold,0),wins:plan.hunts?.wins??0,
   places:plan.explored??plan.visited?.length??0,rounds:plan.rounds??0,meals:sum(plan.cookedMeals),
   earned:plan.goldEarned??0,spent:plan.goldSpent??0,bread:plan.rationGoldSpent??0,banked:plan.bankedGold??0,
   marketQuantity:plan.timberSales?.quantity??0,marketGold:plan.timberSales?.gold??0,marketSales:plan.timberSales?.sales??0,marketVisits:plan.timberSales?.visits??0,
@@ -27,11 +29,13 @@ export function autoRecapView(state,baseline,roomName){
  const room=state.autoPresence?.room??state.location;
  const location=roomName(room)??info.location??'The Tower';
  const activity=state.autoPresence?.blocked?'Waiting for a clear path':state.autoPresence?.moving?'Walking to '+(roomName(state.location)??info.location):info.current;
- const rewards=[['fish','Fish caught'],['timber','Timber gathered'],['wins','Fights won'],['places','Places visited'],['rounds','Table rounds'],['meals','Meals cooked']]
+ const rewards=[['fish','Fish caught'],['timber','Timber gathered'],['ore','Ore mined'],['miningXp','Mining XP'],['wins','Fights won'],['places','Places visited'],['rounds','Table rounds'],['meals','Meals cooked']]
   .map(([key,label])=>({label,value:gained(key)})).filter(item=>item.value>0);
  const earned=gained('earned'),spent=gained('spent'),bread=gained('bread'),banked=gained('banked');
  const wallet=[earned&&'+'+format.format(earned)+' gold earned',spent&&'−'+format.format(spent)+' gold spent'+(bread?' · '+format.format(bread)+' on bread':''),banked&&format.format(banked)+' gold banked'].filter(Boolean);
- const market=timberSalesText({quantity:gained('marketQuantity'),gold:gained('marketGold'),sales:gained('marketSales'),visits:gained('marketVisits')},state.woodcutting?.timber??0);
+ const mined=plan.mining&&oreProducts[plan.mining.ore],sold=gained('oreSold');
+ const market=mined?'Sold '+sold+' '+mined.name+' for '+gained('oreGold')+' gold. '+(state.huntingLoot?.[plan.mining.ore]??0)+' in your bag.'
+   :timberSalesText({quantity:gained('marketQuantity'),gold:gained('marketGold'),sales:gained('marketSales'),visits:gained('marketVisits')},state.woodcutting?.timber??0);
  return {rewards,wallet,location,running,returning:info.returning===true,summary:same?'Since you stepped away':'This Auto session',
   status:running?activity:info.reason,completion:running?null:totals.id+':'+plan.endedAt,market,
   startedAt:plan.startedAt,food:!!plan.foodTrip||foodStops.includes(plan.reason)||(plan.simpleMode?foodJobs.includes(plan.simpleMode):[undefined,'fishing','woodcutting','queue'].includes(plan.kind)),

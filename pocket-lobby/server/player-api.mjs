@@ -2,11 +2,12 @@ import {cellarFlags} from '../public/mill-cellar.js';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
 import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
-import {readOreDeposits,mineAction} from './mining.mjs';
+import {readOreDeposits,mineAction,writeOreStrike} from './mining.mjs';
+import {advanceMiningWork} from './mining-work.mjs';
 import {normalizeMining} from '../public/mining.js';
 import {trailCamp} from '../public/trail-camp.js';
 import {readTimberOrders,changeTimberOrder,atTradingPost,matchAutoTimberOrders,writeAutoTimberSale} from './timber-orders.mjs';
-import {timberMarketCounter,timberMarketSurplus,completeTimberMarketTrip} from './routine-queue.mjs';
+import {timberMarketCounter,timberMarketSurplus,completeTimberMarketTrip,completeOreSale} from './routine-queue.mjs';
 import {GOLD_CAP} from '../public/bank.js';
 import {factionHallAccess} from './faction-projects.mjs';
 import {factionHall,factionHallSpawn} from '../public/faction-hall.js';
@@ -101,6 +102,11 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false},env);planChanged=planChanged||previous!==JSON.stringify(state);}
     enablePhysicalWork(state,env);
     const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
+    const oreMutation=idle?await advanceMiningWork(db,state,now,motion):null;
+    if(idle&&state.plan?.oreSaleTrip&&motion?.room==='market'&&motion.x===timberMarketCounter.x&&motion.y===timberMarketCounter.y){
+      completeOreSale(state,now);
+      if(!state.plan)finishRoutineReport(state,now);
+    }
     if(idle&&state.plan?.physicalFishing){
       await advanceFishingWork(env,id,state,now,motion,Math.random,usage);
       if(!state.plan)finishRoutineReport(state,now);
@@ -118,7 +124,8 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(!planChanged&&!activityChanged&&!migrated)return row;
     const operation="settle:"+crypto.randomUUID();
-    const updated=timberSale.length?await writeAutoTimberSale(db,row,state,operation,now,timberSale):await write(db,id,row.revision,state,operation,null,treeMutation);
+    const updated=oreMutation?await writeOreStrike(db,row,state,operation,now,oreMutation)
+      :timberSale.length?await writeAutoTimberSale(db,row,state,operation,now,timberSale):await write(db,id,row.revision,state,operation,null,treeMutation);
     if(updated){
       if(usage)usage.saves++;
       await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{usage,fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});

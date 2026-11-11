@@ -1,6 +1,7 @@
 import {addThreats,combatTargetTile} from './dungeon-adds.js';
 import {advanceOnEnemy} from './enemy-brain.js';
 import {simpleAutoModes,simpleAutoRisks,normalizeTimberMarket} from './simple-auto.js';
+import {normalizeAutoMining,oreProducts} from './mining.js';
 export {simpleAutoModes,simpleAutoRules,simpleAutoRisks,simpleAutoRiskDetail,normalizeTimberMarket,timberSalesText} from './simple-auto.js';
 import {armourSelection,armourProfile} from './hunting.js';
 import {normalizeFoodPolicy} from './food-policy.js';
@@ -12,7 +13,7 @@ import {manaReadyAt} from './player-vitals.js';
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
 export const AWAY_GRACE_MS=3*60000,AWAY_CAP_MS=8*3600000;
-export const queueActions={explore:'Explore a peaceful stop',cookFish:'Stock Grilled Silverfin',cookStew:'Stock Boar Stew',cookHeartyStew:'Stock Hearty Stew',cookFeast:'Stock Silverfin Feast',fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBread:'Buy bread at the bakery',buyBait:'Buy bait',huntBoars:'Hunt boars',huntBeetles:'Hunt Stoneback Beetles',sellShells:'Sell Shell Fragments',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
+export const queueActions={mining:'Mine ore',sellOre:'Sell ore',explore:'Explore a peaceful stop',cookFish:'Stock Grilled Silverfin',cookStew:'Stock Boar Stew',cookHeartyStew:'Stock Hearty Stew',cookFeast:'Stock Silverfin Feast',fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBread:'Buy bread at the bakery',buyBait:'Buy bait',huntBoars:'Hunt boars',huntBeetles:'Hunt Stoneback Beetles',sellShells:'Sell Shell Fragments',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
 export function normalizeRoutineQueue(input){
   if(input===undefined)return undefined;
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid activity queue.');
@@ -21,14 +22,14 @@ export function normalizeRoutineQueue(input){
   return {enabled,repeats,budget,reserveGold,minHealth,steps:steps.map(step=>{
     if(!step||!Object.hasOwn(queueActions,step.type))throw new Error('Choose a valid queue action.');
     const amount=step.type==='rest'?0:step.amount;
-    const min=['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?0:1;
+    const min=['sellFish','sellTimber','sellMeat','sellShells','sellOre'].includes(step.type)?0:1;
     if(!Number.isInteger(amount)||amount<(step.type==='rest'?0:min)||amount>1000||Object.hasOwn(queueHuntEnemies,step.type)&&amount>20)throw new Error('Queue amounts must be whole numbers: up to 20 fights or 1,000 items.');
     return {type:step.type,amount};
   })};
 }
 export function describeRoutineQueue(queue){
   const q=normalizeRoutineQueue(queue);
-  return q.steps.map(step=>queueActions[step.type]+(step.type==='rest'?'':['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?' (keep '+step.amount+')':(['buyBait','buyBread'].includes(step.type)||step.type.startsWith('cook'))?' (stock to '+step.amount+')':' ×'+step.amount)).join(' → ')+' · '+q.repeats+' cycle'+(q.repeats===1?'':'s')+' · spend at most '+q.budget+' gold, keep '+q.reserveGold+' gold.'+(q.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))?' Start fights only at '+q.minHealth+' HP or above.':'');
+  return q.steps.map(step=>queueActions[step.type]+(step.type==='rest'?'':['sellFish','sellTimber','sellMeat','sellShells','sellOre'].includes(step.type)?' (keep '+step.amount+')':(['buyBait','buyBread'].includes(step.type)||step.type.startsWith('cook'))?' (stock to '+step.amount+')':' ×'+step.amount)).join(' → ')+' · '+q.repeats+' cycle'+(q.repeats===1?'':'s')+' · spend at most '+q.budget+' gold, keep '+q.reserveGold+' gold.'+(q.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))?' Start fights only at '+q.minHealth+' HP or above.':'');
 }
 export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');
@@ -49,11 +50,11 @@ export function normalizeCharacterRules(input={}){
   if(!Object.hasOwn(combatStyles,style)||typeof dodge!=='boolean'||typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
   if(strategy==='routine'&&queue?.enabled&&queue.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
-  return {...(input.simpleMode?{simpleMode:input.simpleMode,simpleRisk:input.simpleRisk??'safe'}:{}),...(input.simpleMode==='woodcutting'?{timberMarket:normalizeTimberMarket(input.timberMarket)}:{}),enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
+  return {...(input.simpleMode?{simpleMode:input.simpleMode,simpleRisk:input.simpleRisk??'safe'}:{}),...(input.simpleMode==='mining'?{mining:normalizeAutoMining(input.mining)}:{}),...(input.simpleMode==='woodcutting'?{timberMarket:normalizeTimberMarket(input.timberMarket)}:{}),enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
 }
 export function describeCharacterRules(input){
   const r=normalizeCharacterRules(input);
-  if(r.simpleMode)return simpleAutoModes[r.simpleMode].name+' · '+simpleAutoRisks[r.simpleRisk].name+': '+simpleAutoModes[r.simpleMode].loop+'. '+(r.timberMarket?'Keep '+r.timberMarket.keepTimber+' timber and sell for at least '+r.timberMarket.minimumPrice+' gold each. ':'')+(r.enabled?'Starts after 3 minutes idle or offline.':'Starts when you choose Auto.');
+  if(r.simpleMode)return simpleAutoModes[r.simpleMode].name+' · '+simpleAutoRisks[r.simpleRisk].name+': '+simpleAutoModes[r.simpleMode].loop+'. '+(r.mining?'Mine '+oreProducts[r.mining.ore].name+' and keep '+r.mining.keep+'. ':'')+(r.timberMarket?'Keep '+r.timberMarket.keepTimber+' timber and sell for at least '+r.timberMarket.minimumPrice+' gold each. ':'')+(r.enabled?'Starts after 3 minutes idle or offline.':'Starts when you choose Auto.');
   if(!r.enabled)return 'Automatic away actions are off. Your character stays where you leave them.';
   if(r.strategy==='gambling')return 'Auto '+r.gambling.game+' · Fixed '+r.gambling.bet+' gold bet · Stop before total losses exceed '+r.gambling.lossLimit+' gold, keep '+r.gambling.reserveGold+' gold, stop at +'+r.gambling.profitTarget+' net gold or '+r.gambling.maxRounds+' rounds. Winnings do not reset the loss limit.';
   if(r.strategy==='earnGold')return 'Earn gold safely: choose work from your gear and health, sell surplus, keep your item reserves, spend at most '+r.goldPolicy.budget+' gold and protect '+r.goldPolicy.reserveGold+' gold.';

@@ -21,18 +21,21 @@ import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js
 import {skillLevel,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {harvestTimber,woodRules} from '../public/woodcutting.js';
 import {recordQuest} from '../public/quests.js';
+import {quarryRoom,oreProducts,miningLevel} from '../public/mining.js';
 export const QUEUE_ACTION_MS=15000;
 export const timberMarketCounter={x:4,y:3};
 export const timberMarketSurplus=(state,plan)=>Math.max(0,state.woodcutting.timber-Math.max(plan.timberMarket.keepTimber,state.bank?.vault?.rules?.timber??0));
 const huntTimeBuffer=30000;
-const needsWorkFood=type=>type==='fishing'||type==='buyBait'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type);
+const needsWorkFood=type=>type==='mining'||type==='fishing'||type==='buyBait'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type);
 export function startRoutineQueue(state,rules,startedAt,metadata){
   state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:metadata.rationGoldSpent??0,baitBought:0};
+  if(!state.plan.mining&&rules.queue.steps.some(step=>['mining','sellOre'].includes(step.type)))state.plan.mining={ore:'copperOre',keep:0};
 }
 export function finishRoutineQueue(state,plan,reason,endedAt){
   delete plan.foodTrip;
   delete plan.timberMarketTrip;
-  state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
+  delete plan.miningWork;delete plan.oreSaleTrip;
+  state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.miningXp??0)+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
   state.location='home';state.position={x:5,y:7};return true;
 }
 const finish=finishRoutineQueue;
@@ -65,9 +68,26 @@ export function completeRoutineFish(state,fish,xp,at){
  p.fishingLandingUntil=at+1100;
  if(p.stepCount>=p.queue.steps[p.stepIndex].amount){delete p.fishingWork;nextStep(p,at,'Caught '+p.stepCount+' fish');}
 }
+export function completeRoutineOre(state,ore,xp,at){
+ const p=state.plan;
+ p.ores??={};p.ores[ore]=(p.ores[ore]??0)+1;p.miningXp=(p.miningXp??0)+xp;
+ p.stepCount++;p.cursorAt=at;p.nextAt=null;delete p.miningWork;
+ autoStoreVault(state,p,at);
+ if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,at,'Mined '+p.stepCount+' '+oreProducts[ore].name);
+}
+export function completeOreSale(state,at){
+ const p=state.plan,id=p.mining.ore,ore=oreProducts[id],stock=state.huntingLoot[id]??0;
+ const keep=Math.max(p.mining.keep,p.queue.steps[p.stepIndex].amount,state.bank?.vault?.rules?.['loot:'+id]??0);
+ const quantity=Math.min(Math.max(0,stock-keep),Math.floor((100000000-state.credits)/ore.price)),gold=quantity*ore.price;
+ state.huntingLoot[id]=stock-quantity;state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);
+ p.goldEarned+=gold;p.oreSales??={};const sale=p.oreSales[id]??={quantity:0,gold:0};sale.quantity+=quantity;sale.gold+=gold;
+ delete p.oreSaleTrip;p.stepCount=quantity;if(quantity)autoBankGold(state,p,at);
+ nextStep(p,at,'Sold '+quantity+' '+ore.name+' for '+gold+' gold');
+ if(stock>keep&&!quantity)finish(state,p,'wallet-full',at);
+}
 export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={}){
   const p=state.plan,until=Math.min(now,p.endAt);let changed=false;
-  if(p.timberMarketTrip){
+  if(p.timberMarketTrip||p.oreSaleTrip){
     if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
     return false;
   }
@@ -85,6 +105,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     if(p.fishingLandingUntil>now&&!stop&&now<p.endAt)return changed;
     if(p.physicalFishing&&p.fishingWork?.cast&&!stop&&now<p.endAt)return changed;
     if(p.physicalTimber&&p.treeWork?.cut&&!stop&&now<p.endAt)return changed;
+    if(p.miningWork?.cut&&!stop&&now<p.endAt)return changed;
     if(p.activeHunt){
       let events=advanceServerCombat(state,until,random);if(events.length)changed=true;
       if(state.hunting.encounter&&(stop||now>=p.endAt)){p.returnRequested=true;p.stopReason=now>=p.endAt?'away-cap':'returned';changed=true;
@@ -152,6 +173,24 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       return changed;
     }
     if(type!=='woodcutting')delete p.treeWork;
+    if(type!=='mining')delete p.miningWork;
+    if(type==='mining'){
+      if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
+      const ore=oreProducts[p.mining.ore];
+      if(!state.mining?.pickOwned||!state.mining.equipped||miningLevel(state.mining)<ore.level)return finish(state,p,'requirements',now);
+      if((state.huntingLoot[p.mining.ore]??0)>=1000000){
+        nextStep(p,now,'Ore bag full · Finished gathering');changed=true;continue;
+      }
+      if(!p.miningWork){p.miningWork={phase:'choose'};state.location=quarryRoom;state.position={x:5,y:5};changed=true;}
+      p.nextAt=null;return changed;
+    }
+    if(type==='sellOre'){
+      if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
+      const id=p.mining.ore,keep=Math.max(p.mining.keep,step.amount,state.bank?.vault?.rules?.['loot:'+id]??0);
+      if((state.huntingLoot[id]??0)<=keep){nextStep(p,p.cursorAt,'Ore reserve kept');changed=true;continue;}
+      p.oreSaleTrip=true;p.currentLabel='Selling '+oreProducts[id].name;
+      state.location='market';state.position={...timberMarketCounter};return true;
+    }
     if(p.timberMarket&&type==='sellTimber'){
       if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
       if(!timberMarketSurplus(state,p)){

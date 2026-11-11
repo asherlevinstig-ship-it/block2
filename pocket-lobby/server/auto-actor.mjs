@@ -8,6 +8,7 @@ import {socialRooms} from '../public/shared-world.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {AWAY_GRACE_MS} from '../public/character-rules.js';
 import {choppingPose} from '../public/woodcutting.js';
+import {miningPose} from '../public/mining.js';
 import {sharedFishingPose} from '../public/fishing.js';
 import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 import {autoUsage,autoUsagePhase,recordAutoUsage} from './auto-usage.mjs';
@@ -40,6 +41,7 @@ export class AutoActor{
   const motion=this.actor.motion;
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
   if(peer){
+   peer.mining=motion.moving?null:miningPose(state);
    peer.walk=this.actor.walk??null;
    peer.fishingSpot=!!state.plan?.fishingWork?.spot&&!state.plan?.foodTrip;
    peer.fishingBatch=state.plan?.fishingWork?.batchUntil??null;
@@ -86,7 +88,7 @@ export class AutoActor{
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
   const plan=state?.plan,fishing=plan?.fishingWork;
-  const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??plan?.fishingLandingUntil??plan?.treeWork?.cut?.endsAt??plan?.treeWork?.readyAt??plan?.nextAt??plan?.nextRoundAt??plan?.nextCutAt??plan?.nextCatchAt;
+  const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??plan?.fishingLandingUntil??plan?.miningWork?.cut?.endsAt??plan?.miningWork?.readyAt??plan?.treeWork?.cut?.endsAt??plan?.treeWork?.readyAt??plan?.nextAt??plan?.nextRoundAt??plan?.nextCutAt??plan?.nextCatchAt;
   // During long waits, the client renders the timestamped animation locally.
   // Wake for the next action or lease renewal instead of polling every two seconds.
   const wait=plan?.activeHunt?500:due>now?Math.min(due-now,60000):2000;

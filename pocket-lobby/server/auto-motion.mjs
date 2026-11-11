@@ -2,6 +2,7 @@ import {moonwood} from '../public/moonwood.js';
 import {socialRooms,roomBoxes,validRoomTile,furnitureBox} from '../public/shared-world.js';
 import {timberFacing} from '../public/woodcutting.js';
 import {autoWalkStepMs} from '../public/auto-walk.js';
+import {oreDeposits} from '../public/mining.js';
 
 // Use the same door tiles, arrivals and terrain as the playable world.
 const doors={home:[['hub',0,5,1,6]],hub:[['home',0,6,1,5],['store',0,10,1,5],['market',0,14,1,5],['armory',3,0,1,5],['lounge',14,0,1,5],['tailor',0,2,1,5],['furnishings',9,0,1,5],['outside',8,15,1,5]],outside:[['hub',0,5,8,14],['trail',6,11,1,5]],market:[['hub',0,5,1,14],['bakery',7,0,1,5]],bakery:[['market',0,5,7,1]],store:[['hub',0,5,1,10]],armory:[['hub',0,5,3,1]],lounge:[['hub',0,5,14,1]],tailor:[['hub',0,5,1,2]],furnishings:[['hub',0,5,9,1]]};
@@ -31,7 +32,7 @@ export function planAutoWalk(motion,state,now,canCross=true){
  if(path===null)return {motion:{...motion,moving:false,blocked:true},walk:null};
  if(!path.length&&door&&canCross)return planAutoWalk({...motion,room:door.to,...door.arrival},state,now,false);
  if(!path.length&&!door){
-  const tree=state.plan?.treeWork?.tree;
+  const tree=state.plan?.treeWork?.tree??oreDeposits.find(node=>node.id===state.plan?.miningWork?.node);
   const facing=tree?timberFacing({cx:motion.x,cy:motion.y},tree):state.plan?.fishingWork?.spot?{direction:'right',back:false}:{};
   return {motion:{...motion,...facing,moving:false,blocked:false},walk:null};
  }

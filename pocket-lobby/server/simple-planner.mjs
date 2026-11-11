@@ -4,6 +4,7 @@ import {beetleHuntUnlocked,canUseWeapon,huntEnemies} from '../public/hunting.js'
 import {fishingCatalog} from '../public/fishing.js';
 import {skillLevel} from '../public/skill-curve.js';
 import {randomNeed,randomSurplusSale} from './random-needs.mjs';
+import {miningLevel,oreProducts} from '../public/mining.js';
 const step=(type,amount=1)=>({type,amount});
 export const battleLootFull=(state,enemy)=>(state.huntingLoot[enemy.loot]??0)>=1000000;
 
@@ -49,6 +50,14 @@ export function chooseSimpleTask(state,p,random=Math.random){
     tasks.push(step(beetle?'huntBeetles':'huntBoars',mode==='battle'?battleBatchLimit:1));
    }
    tasks.push(sale);
+  }else if(job==='mining'){
+   const policy=p.mining,ore=oreProducts[policy.ore];
+   if(!state.mining?.pickOwned||!state.mining.equipped||miningLevel(state.mining)<ore.level)return {stop:'requirements',reason:'Equip your pickaxe. '+ore.name+' needs Mining '+ore.level+'.'};
+   const sale=step('sellOre',policy.keep);
+   if((state.huntingLoot[policy.ore]??0)>=1000000){
+    if(policy.keep>=1000000||(state.bank?.vault?.rules?.['loot:'+policy.ore]??0)>=1000000)return {stop:'inventory-full',reason:'Your ore inventory is full and protected by your keep amount.'};
+    tasks=[sale];
+   }else tasks=[step('mining',profile.batch),sale];
   }else if(job==='woodcutting'){
    if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return {stop:'requirements',reason:'Collect and equip an axe at Timber Hollow to start Auto Woodcutting.'};
    const sale=step('sellTimber',mode==='random'?policy.keepTimber:0);

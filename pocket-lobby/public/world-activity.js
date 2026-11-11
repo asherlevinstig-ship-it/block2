@@ -10,6 +10,8 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const mined=after.miningReceipt;
  if(mined?.id&&mined.id!==before.miningReceipt?.id)add('ore:'+mined.id,'timber','+1 '+oreProducts[mined.ore].name,1,mined.at,'quarry');
  if(timberGold>0)add('timber-sale:'+p.startedAt+':'+p.timberSales.visits,'gold','+'+timberGold+' gold',timberGold,p.cursorAt,'market');
+ const oreGold=same?sum(Object.values(p.oreSales??{}).map(sale=>sale.gold))-sum(Object.values(b.oreSales??{}).map(sale=>sale.gold)):0;
+ if(oreGold>0)add('ore-sale:'+p.startedAt+':'+p.cursorAt,'gold','+'+oreGold+' gold',oreGold,p.cursorAt,'market');
  if(p?.kind==='gambling'){
   if(same&&(p.rounds??0)>(b.rounds??0))for(const r of p.recent??[])if(r.at>(b.recent?.at(-1)?.at??0))add('gamble:'+p.startedAt+':'+r.at,r.net<0?'loss':r.net>0?'gold':'push',(r.net<0?'−'+Math.abs(r.net):r.net>0?'+'+r.net:'±0')+' gold',r.net,r.at,'lounge');
  }else{

@@ -3443,8 +3443,9 @@ function draw(time){
     const chopping=woodSession??(autoChop?automatic:null);
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
     if(window.millRaidClient?.striking)Object.assign(pose,playerCombatPose({time,now:combatNow(),encounter:{nextPlayerAt:0},events:{...combatArt,...window.millRaidClient.pose},reduced:reducedMotion.matches}));
-    const miningSwing=miningCut&&currentRoom===quarryRoom;
-    const spritePose=miningSwing?{...pose,chop:choppingPhase(miningCut,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
+    const autoMine=window.playerCloud?.initial?.plan?.miningWork?.cut;
+    const miningSwing=currentRoom===quarryRoom&&!step&&!autoServerWalking&&(miningCut??autoMine);
+    const spritePose=miningSwing?{...pose,chop:choppingPhase(miningSwing,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
@@ -6265,10 +6266,10 @@ function renderRuleQueue(){
     number.textContent=index+1;number.className='queue-step-number';
     for(const [id,label] of Object.entries(queueActions)){const option=document.createElement('option');option.value=id;option.textContent=label;if(id==='huntBeetles'&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered})){option.disabled=true;option.textContent+=' · Win a manual fight first';}type.append(option);}
     type.value=step.type;type.setAttribute('aria-label','Step '+(index+1)+' activity');
-    const keep=['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type);field.textContent=keep?'Keep':(step.type==='buyBait'||step.type.startsWith('cook'))?'Stock to':Object.hasOwn(queueHuntEnemies,step.type)?'Max fights':'Gather';
+    const keep=['sellFish','sellTimber','sellMeat','sellShells','sellOre'].includes(step.type);field.textContent=keep?'Keep':(step.type==='buyBait'||step.type.startsWith('cook'))?'Stock to':Object.hasOwn(queueHuntEnemies,step.type)?'Max fights':'Gather';
     amount.type='number';amount.min=keep?'0':'1';amount.max=Object.hasOwn(queueHuntEnemies,step.type)?'20':'1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
     amount.oninput=()=>{step.amount=Number(amount.value);updateCharacterRulesPreview();};
-    type.onchange=()=>{step.type=type.value;if(Object.hasOwn(queueHuntEnemies,step.type))$('rulesHuntingDetails').open=true;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?0:1,step.amount);if(Object.hasOwn(queueHuntEnemies,step.type))step.amount=Math.min(20,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
+    type.onchange=()=>{step.type=type.value;if(Object.hasOwn(queueHuntEnemies,step.type))$('rulesHuntingDetails').open=true;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber','sellMeat','sellShells','sellOre'].includes(step.type)?0:1,step.amount);if(Object.hasOwn(queueHuntEnemies,step.type))step.amount=Math.min(20,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
     controls.className='queue-step-controls';
     for(const [label,title,run,disabled] of [['↑','Move step up',()=>{[ruleQueueDraft[index-1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index-1]];},index===0],['↓','Move step down',()=>{[ruleQueueDraft[index+1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index+1]];},index===ruleQueueDraft.length-1],['×','Remove step',()=>ruleQueueDraft.splice(index,1),false]]){
       const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('aria-label',title+' '+(index+1));button.disabled=disabled;button.onclick=()=>{run();renderRuleQueue();updateCharacterRulesPreview();};controls.append(button);
@@ -6368,6 +6369,7 @@ function openAdvancedCharacterRules({focusGoal=false,focusFood=false}={}){
     if(item.storedItems)detail.textContent+=' · '+Object.values(item.storedItems).reduce((a,b)=>a+b,0)+' items stored in vault';
     if(item.bankedGold)detail.textContent+=' · Saved to bank '+item.bankedGold+' gold';
     if(item.timberSales)detail.textContent+=' · '+timberSalesText(item.timberSales,item.timberSales.kept);
+    if(item.miningSummary)detail.textContent+=' · '+item.miningSummary;
     if(item.gambling)detail.textContent+=' · Net '+(item.gambling.net>=0?'+':'')+item.gambling.net+' gold · Total losses '+item.gambling.totalLost+' gold';
     if(item.hunts)detail.textContent+=' · '+Object.entries(item.hunts).map(([id,record])=>huntEnemies[id].name+': '+record.wins+' wins, '+record.xp+' XP, '+(item.huntSales?.[id]??0)+' gold sold').join(' · ');
     row.append(title,detail);log.append(row);
@@ -6380,18 +6382,21 @@ let simpleAutoChoice='fishing',simpleAutoRisk='balanced',simpleAutoBusy=false;
 function renderSimpleAuto(){
  const resting=simpleAutoChoice==='rest';
  const timber=simpleAutoChoice==='woodcutting';
+ const miningMode=simpleAutoChoice==='mining',gathering=timber||miningMode;
  $('simpleAutoRiskDetail').textContent=simpleAutoRiskDetail(simpleAutoChoice,simpleAutoRisk);
- $('simpleAutoRiskTitle').textContent=timber?'Batch size':'Risk level';
- $('simpleAutoRiskNote').textContent=timber?'Cuts before each market check':resting?'Rest is always safe':'Choose how far to push your loop';
+ $('simpleAutoRiskTitle').textContent=gathering?'Batch size':'Risk level';
+ $('simpleAutoRiskNote').textContent=miningMode?'Ore before each selling trip':timber?'Cuts before each market check':resting?'Rest is always safe':'Choose how far to push your loop';
  for(const button of document.querySelectorAll('[data-auto-risk]')){
    const risk=button.dataset.autoRisk,profile=simpleAutoRisks[risk];
    button.setAttribute('aria-pressed',String(risk===(resting?'safe':simpleAutoRisk)));
-   button.lastChild.textContent=' '+(timber?profile.batch+' cuts':profile.name);
+   button.lastChild.textContent=' '+(miningMode?profile.batch+' ore':timber?profile.batch+' cuts':profile.name);
    button.disabled=resting||simpleAutoBusy;
  }
  const info=simpleAutoModes[simpleAutoChoice];$('simpleAutoLoop').textContent=info.loop;$('simpleAutoDetail').textContent=info.detail;$('simpleAutoGamble').hidden=simpleAutoChoice!=='gambling';
  $('simpleAutoTimber').hidden=!timber;
  $('simpleAutoTimberPrice').disabled=$('simpleAutoTimberKeep').disabled=!timber;
+ $('simpleAutoMining').hidden=!miningMode;
+ $('simpleAutoMiningOre').disabled=$('simpleAutoMiningKeep').disabled=!miningMode;
  for(const button of $('simpleAutoChoices').children)button.setAttribute('aria-pressed',String(button.dataset.mode===simpleAutoChoice));
  $('simpleAutoStart').disabled=$('simpleAutoSave').disabled=simpleAutoBusy;$('simpleAutoStart').textContent=simpleAutoBusy?'Starting…':window.playerCloud?.initial?.plan?'Switch Auto':'Start Auto';
 }
@@ -6407,12 +6412,15 @@ function openCharacterRules(options={}){
  $('simpleAutoTable').value=rules.gambling.game;$('simpleAutoBet').value=rules.gambling.bet;$('simpleAutoLoss').value=rules.gambling.lossLimit;
  const timber=rules.timberMarket??normalizeTimberMarket();
  $('simpleAutoTimberPrice').value=timber.minimumPrice;$('simpleAutoTimberKeep').value=timber.keepTimber;
+ const miningPolicy=rules.mining??normalizeAutoMining();
+ $('simpleAutoMiningOre').value=miningPolicy.ore;$('simpleAutoMiningKeep').value=miningPolicy.keep;
+ $('simpleAutoMiningAdvice').textContent='Mining '+miningLevel(mining)+' · Copper needs Mining 1 · Iron needs Mining 3. Equip a pickaxe in Inventory.';
  $('simpleAutoStatus').textContent=rules.simpleMode?'':state.autoConfigured?'Choose a loop to replace your existing custom plan.':'';
  const list=$('simpleAutoChoices');list.replaceChildren();
  for(const [id,mode] of Object.entries(simpleAutoModes)){
  const button=document.createElement('button');button.type='button';button.dataset.mode=id;
- if(mode.icon==='axe'){
-   button.innerHTML=windowItemArt('axe');button.firstElementChild.classList.add('hud-icon');
+ if(mode.icon==='axe'||mode.icon==='pick'){
+   button.innerHTML=mode.icon==='pick'?pickaxeArt():windowItemArt('axe');button.firstElementChild.classList.add('hud-icon');
  }else{
    const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('class','hud-icon');icon.setAttribute('aria-hidden','true');
    const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','#hud-i-'+mode.icon);icon.append(use);button.append(icon);
@@ -6424,7 +6432,8 @@ function openCharacterRules(options={}){
 }
 function simpleAutoOptions(){
  const timberMarket=simpleAutoChoice==='woodcutting'?{minimumPrice:$('simpleAutoTimberPrice').valueAsNumber,keepTimber:$('simpleAutoTimberKeep').valueAsNumber}:undefined;
- return {food:characterRules.food,breadBudget:Number($('simpleAutoBreadBudget').value),risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value),timberMarket};
+ const miningPolicy=simpleAutoChoice==='mining'?{ore:$('simpleAutoMiningOre').value,keep:$('simpleAutoMiningKeep').valueAsNumber}:undefined;
+ return {food:characterRules.food,breadBudget:Number($('simpleAutoBreadBudget').value),risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value),timberMarket,mining:miningPolicy};
 }
 async function saveSimpleAuto(start){
  if(simpleAutoBusy||!$('simpleAutoForm').reportValidity())return;
@@ -6927,7 +6936,7 @@ function autoRoomRoute(from,to){
   return null;
 }
 function autoWorkTile(state){
-  if(state.autoPresence?.moving||state.plan?.treeWork||state.plan?.fishingWork){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
+  if(state.autoPresence?.moving||state.plan?.miningWork||state.plan?.treeWork||state.plan?.fishingWork){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
   const task=state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type:state.plan?.kind;
   const interactionType=task==='buyBread'?'foodStall':task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
   const item=interactionType?roomFurniture().find(i=>i.type===interactionType):task==='woodcutting'?roomFurniture().filter(i=>isTimberTree(i)&&!treeState(i).regrowsAt).sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:null;
