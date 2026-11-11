@@ -1806,6 +1806,15 @@ function updateDungeonArenaHud(){
  ability.hidden=!fox;ability.disabled=!fox||!!cooldown||!foxTargetReady(e);ability.textContent=cooldown?'Pounce · '+cooldown+'s':'Cinder Pounce';ability.title='Select an add during its attack warning · G';
  const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;$('dungeonPhase').textContent=phase?'Phase '+phase.index+' · '+phase.name:'';
  $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=stamina;$('dungeonStaminaValue').textContent=Math.floor(stamina);
+ $('dungeonStagger').hidden=!e;
+ if(e){
+  const now=combatNow(),profile=staggerProfile(enemy);
+  const stunned=now<(e.staggerUntil??0),weak=now<(e.staggerWeakUntil??0);
+  const remaining=stunned?(e.staggerUntil-now)/profile.stun:(e.staggerWeakUntil-now)/profile.opening;
+  $('dungeonStaggerLabel').textContent=stunned?'Staggered':weak?'Weak spot':'Stagger';
+  $('dungeonStaggerBar').max=weak?100:profile.limit;
+  $('dungeonStaggerBar').value=weak?Math.min(100,100*remaining):e.stagger??0;
+ }
  $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
  $('dungeonEnemyHealth').textContent=(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health;
  $('dungeonEnemyBar').max=targetEnemy.health;$('dungeonEnemyBar').value=selected?.health??e?.health??enemy.health;
@@ -1831,6 +1840,12 @@ function updateDungeonArenaHud(){
  const summoning=e?.adds?.some(a=>a.spawnAt>combatNow()),incoming=e&&addThreats(e,combatNow()).sort((a,b)=>a.actor.attackAt-b.actor.attackAt)[0];
  if(summoning)cue='Reinforcements! · Click an enemy to change target';
  else if(incoming&&incoming.actor.attackAt<e.nextBoarAt)cue=incoming.move.name+' · '+Math.max(0,(incoming.actor.attackAt-combatNow())/1000).toFixed(1)+'s · '+(arenaBehindCover(incoming.encounter,incoming.move)?'Cover blocks this spell':arenaInDanger(incoming.encounter,incoming.move)?'Move or dodge!':'Stay clear of the marked tiles');
+ else if(e&&e.nextBoarAt-combatNow()>enemyAttack(e).tell){
+  const now=combatNow();
+  if(now<(e.staggerWeakUntil??0))cue=(now<(e.staggerUntil??0)?'Staggered':'Weak spot')+' · Weapon hits +25%';
+  else if(now<(e.counterUntil??0))cue='Counter ready · Next strike +'+(e.counterPercent??50)+'%';
+  else if(now<(e.exposedUntil??0))cue='Shell exposed · Strike now';
+ }
  $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
@@ -2620,13 +2635,24 @@ function object(item,highlight=false,time=0) {
       const actorEncounter=item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
-      const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
+      let facing=player;
+      if(['depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
+        pose.now=combatNow();
+        pose.lastAttack=(combatArt.bursts??[]).findLast(effect=>effect.action==='enemy'&&!effect.targetId);
+        if(type==='depthsColossus'&&pose.lastAttack?.time<combatArt.phaseAt)pose.lastAttack=null;
+        const attack=player.inCombat&&actorEncounter;
+        const committed=attack&&attack.arenaLockedFor===attack.nextBoarAt&&pose.now<=attack.nextBoarAt;
+        const release=attack&&time>=pose.lastAttack?.time&&time-pose.lastAttack.time<320;
+        if(committed&&attack.arenaTarget)facing=attack.arenaTarget;
+        else if(release&&pose.lastAttack.attackTile)facing=pose.lastAttack.attackTile;
+      }
+      const [bx,by]=point(x+.5,y+.5),[px,py]=point(facing.x+.5,facing.y+.5);
       const shift=(type==='wildboar'||type==='moonbackStag'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
       const [mx,my]=isDungeonMob(type)?dungeonMobOffset(item,time):[0,0];
       ctx.save();ctx.translate(mx,my);ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25)*(item.add?.kind==='skitter'?.65:1),pose.squash*(item.add?.kind==='skitter'?.65:1));if(item.add&&combatNow()<item.add.spawnAt)ctx.globalAlpha*=.25;ctx.translate(-bx,-by);
-      moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
+      moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?actorEncounter:null,pose});
       ctx.restore();
       if(!item.defeated){
         const enemy=item.add?addKinds[item.add.kind]:roomEnemy();

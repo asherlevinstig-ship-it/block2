@@ -1,6 +1,7 @@
+import {drawDungeonGuardian} from './dungeon-guardian-art.js';
 import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,isDungeonMob} from './dungeon-arena.js';
-export const dungeonHeights={depthsSkitter:29,depthsWarden:58,depthsSeer:61,depthsSentinel:57,depthsColossus:85,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
-const stone=['#94aeb3','#35495c','#597484'],gold=['#ddbe83','#725d55','#ac8d64'];
+export const dungeonHeights={depthsSkitter:29,depthsWarden:77,depthsSeer:61,depthsSentinel:76,depthsColossus:93,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
+const stone=['#94aeb3','#35495c','#597484'];
 export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
  const gate=room==='depthsGate',gallery=room==='depthsGallery',vault=room==='depthsVault';
  const tint=gate?['#697f88','#354e60','#486472']:gallery?['#708c7d','#2e4e4b','#4d6f60']:vault?['#8f859d','#403c59','#635a78']:['#7b7b94','#353e59','#555774'];
@@ -43,7 +44,7 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
  if(type==='dungeonChain'){for(let i=0;i<8;i++){ctx.strokeStyle='#8a9eac';ctx.lineWidth=1.2;ctx.beginPath();ctx.ellipse(px+(i%2),py-36+i*4,2.5,3,0,0,Math.PI*2);ctx.stroke();}return;}
  if(type==='dungeonBones'){for(let i=0;i<4;i++){rect(px-7+i*4,py-4+i%2*3,2,5,'#b6bca6');rect(px-9+i*4,py-3,5,1,'#b6bca6');}return;}
  if(!isDungeonMob(type))return;
- const wind=pose.windup??0,hit=pose.hit,beat=reduced?0:Math.sin(time/230),float=reduced?0:Math.sin(time/600)*2,defeat=pose.defeated;
+ const wind=pose.windup??0,hit=pose.hit,beat=reduced?0:Math.sin(time/230),float=reduced?0:Math.sin(time/600)*2;
  surface(x-.18,y-.13,1.36,1.1,.4,'#09102177');
  const ink=(dx,dy,w,h,c)=>rect(Math.round(px+dx),Math.round(py+dy),w,h,c);
  if(item.add?.kind==='wisp'){
@@ -87,27 +88,8 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
   ctx.strokeStyle='#b49e83';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px+24,py-1);ctx.lineTo(px+24,py-48);ctx.stroke();
   polygon([[px+24,py-60-wind*6],[px+31,py-50],[px+24,py-42],[px+17,py-50]],'#d4b8ff');ink(23,-54,2,8,'#f5e1ff');
   for(const side of [-1,1]){const ox=px+side*(20+wind*7),oy=py-26-z;ctx.fillStyle='#c4a2eb';ctx.beginPath();ctx.arc(ox,oy,3,0,Math.PI*2);ctx.fill();if(wind>.15){ctx.strokeStyle='#c4a2eb';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(ox,oy,5+wind*4,5+wind*4,0,0,Math.PI*2);ctx.stroke();}}
- }else if(type==='depthsSentinel'){
-  part(.22,.3,.18,.24,0,17,stone);part(.62,.3,.18,.24,0,17,stone);part(.21,.24,.6,.5,17,21,stone);part(.27,.27,.48,.42,38,14,['#b6c7d2','#3f526d','#7c96b0']);
-  polygon([[px-15,py-43],[px-19,py-12],[px-4,py-16],[px+4,py-8],[px+8,py-40]],'#674d83');ink(-5,-42,12,4,'#23384f');ink(-3,-41,8,1,'#f7d599');
-  const blade=wind*12;polygon([[px+17,py-19],[px+20+blade,py-57],[px+24+blade,py-20]],'#c1e0e9');ink(13,-18,15,3,'#d9bc80');ink(18,-16,3,11,'#82736d');
  }else{
-  const boss=type==='depthsColossus',scale=boss?1.35:1,phase=boss?(!combat||combat.health>(combat.brainMaxHealth??240)*2/3?1:combat.health>(combat.brainMaxHealth??240)/3?2:3):0;
-  const metal=hit?['#f3ccb6','#7d627b','#bb8f9d']:boss?['#b4a6a5','#49425c','#7a6e88']:['#a2b2a6','#384f61','#6a8590'];
-  for(const u of [.08,.64]){part(u,.2,.28,.42,0,15,metal);part(u-.05,.12,.38,.55,0,5,metal);}
-  part(.04,.12,.96,.8,15,25,metal);part(.15,.18,.75,.6,40,5,metal);part(.22,.25,.55,.48,45,13,metal);
-  for(const [u,v] of [[-.25,.15],[.86,.15]]){part(u,v,.4,.5,26+wind*5,16,metal);part(u+.05,v+.1,.3,.32,10+wind*15,17,metal);}
-  ink(-7,-51,15,4,'#193449');ink(-5,-50,4,2,phase===3?'#f3b6ff':'#b9f7d6');ink(3,-50,4,2,phase===3?'#f3b6ff':'#b9f7d6');
-  polygon([[px,py-36],[px+8,py-29],[px,py-20],[px-8,py-29]],phase===3?'#d0a3f0':'#9ce0ce');ink(-1,-32,2,9,'#e2ffe1');
-  for(let i=0;i<4;i++)ink(-10+i*6,-23,3,2,'#34465c');
-  if(boss){
-   part(-.15,.05,1.3,1,58,7,gold);for(let i=0;i<4;i++)part(-.15+i*.35,.05,.18,.18,65,10,gold);
-   // An oversized anchor and loose shoulder chains distinguish the boss at a glance.
-   ctx.strokeStyle=phase===2?'#e6c489':'#8c93a7';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(px+26,py-35-wind*10);ctx.lineTo(px+34,py+2);ctx.stroke();
-   polygon([[px+20,py-2],[px+49,py-2],[px+43,py+9],[px+32,py+14],[px+21,py+8]],'#8696aa');
-   for(let i=0;i<5;i++){ctx.strokeStyle='#c5b797';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(px-25-i,py-27+i*5,3,4,0,0,Math.PI*2);ctx.stroke();}
-   if(phase===3)for(const side of [-1,1])polygon([[px+side*33,py-55-float],[px+side*38,py-47],[px+side*33,py-39-float],[px+side*28,py-47]],'#c6a2f0');
-  }else{part(.86,.15,.45,.55,3,24,metal);for(let i=0;i<3;i++)ink(18,-19+i*6,7,1,'#bad1c4');}
+  drawDungeonGuardian(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat});
  }
 }
 export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced}){

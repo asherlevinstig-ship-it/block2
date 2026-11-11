@@ -223,7 +223,10 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
   if(encounter){
     const profile=staggerProfile(huntEnemy(encounter)),stunned=now<encounter.staggerUntil,weak=now<encounter.staggerWeakUntil,recovering=now<encounter.staggerResistUntil;
     const ratio=stunned?Math.min(1,(encounter.staggerUntil-now)/profile.stun):weak?Math.min(1,(encounter.staggerWeakUntil-now)/profile.opening):(encounter.stagger??0)/profile.limit;
-    const y=by-57;ctx.save();ctx.fillStyle='#101a30ed';ctx.fillRect(bx-28,y-11,56,17);ctx.strokeStyle=stunned||weak?'#ffe49a':'#b39574';ctx.strokeRect(bx-28,y,56,5);ctx.fillStyle=stunned||weak?'#ffe49a':recovering?'#68829b':'#dbac78';ctx.fillRect(bx-27,y+1,54*Math.max(0,ratio),3);ctx.font='bold 7px monospace';ctx.textAlign='center';ctx.fillText(stunned?'STAGGERED':weak?'WEAK SPOT':recovering?'RECOVERING':'STAGGER '+(encounter.stagger??0)+'/'+profile.limit,bx,y-3);
+    ctx.save();
+    if(!encounter.arenaRoom?.startsWith('depths')){
+      const y=by-57;ctx.fillStyle='#101a30ed';ctx.fillRect(bx-28,y-11,56,17);ctx.strokeStyle=stunned||weak?'#ffe49a':'#b39574';ctx.strokeRect(bx-28,y,56,5);ctx.fillStyle=stunned||weak?'#ffe49a':recovering?'#68829b':'#dbac78';ctx.fillRect(bx-27,y+1,54*Math.max(0,ratio),3);ctx.font='bold 7px monospace';ctx.textAlign='center';ctx.fillText(stunned?'STAGGERED':weak?'WEAK SPOT':recovering?'RECOVERING':'STAGGER '+(encounter.stagger??0)+'/'+profile.limit,bx,y-3);
+    }
     if(stunned){for(let i=0;i<3;i++){const angle=i*Math.PI*2/3+(reduced?0:time/250);cross(ctx,bx+Math.cos(angle)*13,by-24+Math.sin(angle)*4,2);}}
     else if(!recovering&&ratio>=.5){ctx.strokeStyle='#f0c991';ctx.lineWidth=1;for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(bx+i*6,by-9);ctx.lineTo(bx+i*6-2,by-4);ctx.lineTo(bx+i*6+2,by);ctx.lineTo(bx+i*6,by+5);ctx.stroke();}}
     ctx.restore();
@@ -331,7 +334,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
   const counterPercent=encounter?.counterPercent??50;
   const perfect=counter&&active(time,events.perfectDodgeAt,650);
   const casting=warning&&move.shape==='bolt';
-  if(encounter?.arenaVersion===1&&warning&&!victory){ctx.restore();return;}
+  if(!victory&&(encounter?.arenaRoom?.startsWith('depths')||encounter?.arenaVersion===1&&warning)){ctx.restore();return;}
   if(warning||victory||exposed||counter||stunned||weak){
     const x=width/2,w=victory||!warning&&(counter||stunned||weak)?204:164,y=24;
     ctx.globalAlpha=victory?1-progress(time,events.victoryAt+1700,500):1;
