@@ -3461,12 +3461,12 @@ function draw(time){
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
     const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
-    if(['millRaidMob','millRaidMerchant'].includes(item.type))window.millRaidClient?.drawMob(item,{ctx,point,time,reduced:reducedMotion.matches,actors:renderedActors});
+    if(['millRaidMob','millRaidMerchant','millRaidBarricade'].includes(item.type))window.millRaidClient?.drawMob(item,{ctx,point,time,reduced:reducedMotion.matches,actors:renderedActors});
     else object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
-    const height=['millRaidMob','millRaidMerchant'].includes(item.type)?55:isTimberTree(item)&&treeState(item).regrowsAt?6:h;
+    const height=['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
   }
@@ -4245,6 +4245,8 @@ function finishInteraction(){
   if(item.type==='cellarJournal'){note('Millkeeper’s journal: The custodian guards our emergency gold and a Shield Awakening Stone. Hide behind the stone pillars when it throws a cog.');return;}
   if(item.type==='millRaidMerchant'){
     window.millRaidClient?.merchant();
+  }else if(item.type==='millRaidBarricade'){
+    window.millRaidClient?.repair();
   }else if(item.type==='millRaidMob'){
     window.millRaidClient?.select(item);
   }else if(item.type==='pondShoal'){
@@ -6945,7 +6947,7 @@ window.towerVisitSafe=()=>{
 window.towerBankFeedback=message=>showTransaction('Home safe',[{icon:'◈',text:message}]);
 
 window.towerMillRaidHooks={
- now:()=>combatNow(),room:()=>currentRoom,position:()=>({x:player.cx,y:player.cy}),discovered:()=>adventure.discovered.includes('millbrook'),
+ now:()=>combatNow(),room:()=>currentRoom,position:()=>({x:player.cx,y:player.cy}),timber:()=>woodcutting.timber,discovered:()=>adventure.discovered.includes('millbrook'),
  read:()=>window.playerCloud.readMillRaid(),change:body=>window.playerCloud.millRaid(body),apply:state=>{applyServerGameplay(state);updateInventory();},
  cue:cue=>{const peer=remotePeers.get(cue.player);if(peer){if(cue.hit)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}},
  approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),

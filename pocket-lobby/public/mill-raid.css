@@ -1,4 +1,18 @@
 .mill-raid-panel{position:absolute;z-index:12;bottom:12px;left:50%;transform:translateX(-50%);width:min(430px,calc(100% - 36px));padding:14px 17px;border:1px solid #ca9c5b;border-radius:13px;background:linear-gradient(130deg,#302738f5,#102033f5);box-shadow:0 8px 26px #040e2266;color:#f4e6c9}
 .mill-raid-panel[hidden],.mill-raid-badge[hidden]{display:none}.mill-raid-panel small{font-size:10px;letter-spacing:.12em;color:#f2c37e;font-weight:800}.mill-raid-panel h3{margin:5px 0;font-size:20px}.mill-raid-panel p{font-size:12px;line-height:1.5;margin:5px 0;color:#ccd5e4}.mill-raid-panel>div{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.mill-raid-panel button{font-size:12px;padding:8px 11px;white-space:normal;min-width:0;flex:1 1 auto}.mill-raid-panel .mill-raid-status{color:#f3ce88;font-size:11px;min-height:1.5em}
 .mill-raid-badge{position:absolute;z-index:11;top:115px;left:50%;transform:translateX(-50%);max-width:calc(100% - 300px);padding:8px 14px;border-color:#c79564;background:#322b37ee;color:#ffe0a2;font-size:12px}
+.mill-raid-bridge{padding:7px 9px;margin:6px 0;border:1px solid #58657b;border-radius:6px;background:#111e2f}
+.mill-raid-bridge b{font-size:12px;color:#f2dfb7}.mill-raid-bridge progress{display:block;width:100%;height:7px;margin:4px 0;accent-color:#c7db8e}.mill-raid-bridge p{margin:0}
+.mill-raid-bridge[data-danger=true]{border-color:#ed9e69}.mill-raid-bridge[data-danger=true] progress{accent-color:#f2a06e}
+@media(min-width:801px){.mill-raid-panel[data-phase=battle]{top:90px;right:46px;left:auto;bottom:auto;transform:none;width:min(352px,31%)}}
 @media(max-width:800px){.mill-raid-panel{bottom:12px;padding:10px 12px}.mill-raid-panel h3{font-size:16px}.mill-raid-badge{top:90px;max-width:75%;font-size:11px}}
+@media(max-width:800px){
+ .mill-raid-panel[data-phase=battle]{bottom:0;width:min(430px,calc(100% - 16px));padding:8px 10px}
+ :has(> .mill-raid-panel[data-phase=battle]:not([hidden])) #hint{visibility:hidden}
+ .mill-raid-panel[data-phase=battle] h3{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .mill-raid-panel[data-phase=battle] p{font-size:11px;line-height:1.3}
+ .mill-raid-panel[data-phase=battle]>div{margin-top:5px;gap:4px}
+ .mill-raid-panel[data-phase=battle] button{padding:6px;font-size:11px}
+ .mill-raid-panel[data-phase=battle] .mill-raid-bridge{margin:4px 0;padding:5px 7px}
+ .mill-raid-panel[data-phase=battle] .mill-raid-status{min-height:0;margin-bottom:0}
+}
