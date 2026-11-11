@@ -4,7 +4,7 @@ export const deepMiningRoom='crystaldeep';
 export const miningRooms=[quarryRoom,deepMiningRoom];
 export const depositRoom=node=>node.room??quarryRoom;
 export const miningDestination=policy=>policy?.area===deepMiningRoom?deepMiningRoom:quarryRoom;
-export const deepMiningRequirement=state=>miningLevel(state.mining)<3?'Reach Mining 3 before mining Crystaldeep veins.':!['copper','iron'].includes(state.mining?.pick)?'Equip a Copper or Iron Pickaxe for Crystaldeep veins.':'';
+export const deepMiningRequirement=state=>miningLevel(state.mining)<3?'Reach Mining 3 before mining Crystaldeep veins.':!['copper','iron','runic'].includes(state.mining?.pick)?'Equip a Copper Pickaxe or better for Crystaldeep veins.':'';
 export const miningGuardAwake=(state,now)=>now>=(state.hunting?.crystalRespawnAt??0);
 export const quarryMiner={x:3,y:3};
 export const miningRules={duration:4500,hits:3,respawnMs:45000};
@@ -29,8 +29,15 @@ export function miningFindArt(id){
 export const pickaxes={
  basic:{name:'Basic Pickaxe',duration:4500,level:1,color:'#b8ced8'},
  copper:{name:'Copper Pickaxe',duration:3600,level:2,color:'#e9ac76',bars:3,timber:2,bar:'copperBar'},
- iron:{name:'Iron Pickaxe',duration:2800,level:3,color:'#e0edf2',bars:5,timber:4,bar:'ironBar'}
+ iron:{name:'Iron Pickaxe',duration:2800,level:3,color:'#e0edf2',bars:5,timber:4,bar:'ironBar'},
+ runic:{name:'Runic Pickaxe',duration:2400,level:5,color:'#b7a2f4',bars:8,timber:6,bar:'ironBar',requires:'iron',materials:{runicFragment:5,uncutQuartz:2},bonusChance:.1}
 };
+export function miningBonusOre(mining,id){
+ const chance=pickaxes[mining?.pick??'basic'].bonusChance??0;
+ if(!mining?.equipped||!chance)return 0;
+ let hash=2166136261;for(const c of 'bonus:'+id)hash=Math.imul(hash^c.charCodeAt(0),16777619)>>>0;
+ return hash/4294967296<chance?1:0;
+}
 export const oreProducts={
  copperOre:{name:'Copper Ore',price:6,level:1,xp:10,color:'#e5a16d',icon:'◆',group:'materials'},
  ironOre:{name:'Iron Ore',price:10,level:3,xp:14,color:'#a2c9df',icon:'◆',group:'materials'}
@@ -49,7 +56,7 @@ export function normalizeMining(input={}){
  const {pickOwned=false,equipped=false,xp=0}=input;
  if(typeof pickOwned!=='boolean'||typeof equipped!=='boolean'||equipped&&!pickOwned||!Number.isSafeInteger(xp)||xp<0||xp>MAX_SKILL_XP)throw new Error('Invalid mining progress.');
  const upgrades=input.upgrades??[],pick=input.pick??'basic';
- if(!Array.isArray(upgrades)||upgrades.some(id=>!['copper','iron'].includes(id))||!Object.hasOwn(pickaxes,pick)||pick!=='basic'&&!upgrades.includes(pick)||upgrades.length&&!pickOwned)throw new Error('Invalid pickaxe ownership.');
+ if(!Array.isArray(upgrades)||upgrades.some(id=>!['copper','iron','runic'].includes(id))||!Object.hasOwn(pickaxes,pick)||pick!=='basic'&&!upgrades.includes(pick)||upgrades.length&&!pickOwned)throw new Error('Invalid pickaxe ownership.');
  return {pickOwned,equipped,xp,upgrades:[...new Set(upgrades)],pick};
 }
 export const miningLevel=mining=>skillLevel(mining?.xp??0);
@@ -83,9 +90,9 @@ export function drawOreDeposit(item,time,{point,polygon,ctx,reduced},state={}){
   for(const [dx,dy] of [[-8,-13],[2,-18],[7,-8],[-2,-7]])ctx.fillRect(Math.round(x+dx),Math.round(y+dy),4,3);
   if(state.hits){ctx.strokeStyle='#26323e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-2,y-23);ctx.lineTo(x+1,y-12);ctx.lineTo(x-5,y-6);if(state.hits>1){ctx.moveTo(x+1,y-12);ctx.lineTo(x+9,y-16);}ctx.stroke();}
  }
- if(state.broken&&state.hitAge>=0&&state.hitAge<1100){
+ if((state.broken||state.bonus)&&state.hitAge>=0&&state.hitAge<1100){
   const t=state.hitAge/1100;ctx.save();ctx.globalAlpha=(1-t)*.65;
-  ctx.strokeStyle=state.find?miningFinds[state.find].color:ore.color;ctx.lineWidth=2;
+  ctx.strokeStyle=state.find?miningFinds[state.find].color:state.bonus?'#c2afff':ore.color;ctx.lineWidth=2;
   ctx.beginPath();ctx.ellipse(x,y+2,18+(reduced?0:t*24),7+(reduced?0:t*9),0,0,Math.PI*2);ctx.stroke();
   if(!reduced)for(let i=0;i<14;i++){
    const angle=i*2.399,spread=t*(15+i%4*6),px=x+Math.cos(angle)*spread,py=y+Math.sin(angle)*spread*.42-Math.sin(t*Math.PI)*(12+i%3*7);
@@ -100,7 +107,8 @@ export function drawOreDeposit(item,time,{point,polygon,ctx,reduced},state={}){
  }
 }
 export function pickaxeArt(tier='basic'){
- return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m17 53 26-38 5 3-26 38z" fill="#b48c62" stroke="#513f3c" stroke-width="2"/><path d="M16 13q23-12 40 14l-11-7-9-2-10 3-12 8z" fill="'+pickaxes[tier].color+'" stroke="#405869" stroke-width="2"/><path d="m19 13 12-2 14 6" fill="none" stroke="#eff0d5" stroke-width="2"/></svg>';
+ const runes=tier==='runic'?'<path d="m17 28 26-12 12 11" fill="none" stroke="#a59cfc" stroke-width="7" opacity=".22"/><path d="m28 16 3 4 3-5m3 3 3 5 3-3M32 32l4 3m-9 4 4 3" fill="none" stroke="#e1ffff" stroke-width="2"/><path d="m44 10 4 4-4 4-4-4z" fill="#b1f2ef"/>':'';
+ return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m17 53 26-38 5 3-26 38z" fill="'+(tier==='runic'?'#655587':'#b48c62')+'" stroke="#513f3c" stroke-width="2"/><path d="M16 13q23-12 40 14l-11-7-9-2-10 3-12 8z" fill="'+pickaxes[tier].color+'" stroke="#405869" stroke-width="2"/><path d="m19 13 12-2 14 6" fill="none" stroke="#eff0d5" stroke-width="2"/>'+runes+'</svg>';
 }
 export function drawQuarryCliffs({block,surface}){
  const stone=['#8b9190','#394952','#647078'];

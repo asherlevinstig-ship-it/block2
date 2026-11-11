@@ -25,7 +25,7 @@ test('tunnels connect both ways and every vein and exit has a reachable approach
 test('rich veins enforce level, pickaxe and room; outer copper is safe and iron starts real combat',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const state=miner(),row={player_id:'miner',revision:1},now=1000000;
  state.mining.xp=0;await assert.rejects(mineAction(db,row,state,{node:'deep-copper'},'mineStart',now),/Mining 3/);
- state.mining.xp=skillXpForLevel(3);state.mining.pick='basic';await assert.rejects(mineAction(db,row,state,{node:'deep-copper'},'mineStart',now),/Copper or Iron/);
+ state.mining.xp=skillXpForLevel(3);state.mining.pick='basic';await assert.rejects(mineAction(db,row,state,{node:'deep-copper'},'mineStart',now),/Copper Pickaxe or better/);
  state.mining.pick='copper';await assert.rejects(mineAction(db,row,state,{node:'copper-west'},'mineStart',now),/this area/);
  await mineAction(db,row,state,{node:'deep-copper'},'mineStart',now);assert(state.miningCut);assert.equal(state.hunting.encounter,null);
  delete state.miningCut;state.position={x:8,y:6};

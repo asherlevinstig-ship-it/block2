@@ -11,4 +11,6 @@
 .forge-smelt input{width:100%;min-width:0;box-sizing:border-box}.forge-smelt button{flex:0 0 auto}
 .forge-art{float:right;width:55px;height:55px}.forge-art svg{width:100%;height:100%}
 .forge-pick>button{display:block;width:100%;margin-top:10px}
+.forge-pick[data-rarity="runic"]{border-color:#9c83c7;background:linear-gradient(135deg,#29233f,#17263b)}
+.forge-pick[data-rarity="runic"] .forge-art{filter:drop-shadow(0 0 5px #b29af766)}
 @media(max-width:620px){.forge-columns{grid-template-columns:1fr}.forge-columns>section{min-width:0}}

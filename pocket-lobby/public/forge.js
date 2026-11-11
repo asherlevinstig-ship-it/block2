@@ -1,4 +1,4 @@
-import {pickaxes,miningLevel} from './mining.js';
+import {pickaxes,miningLevel,miningFinds} from './mining.js';
 export const quarryForge={x:9,y:7};
 export const barProducts={
  copperBar:{name:'Copper Bar',ore:'copperOre',oreName:'Copper Ore',amount:3,level:1,price:18,icon:'▰',group:'materials',color:'#dfaa77'},
@@ -8,12 +8,16 @@ export function barArt(id){
  const color=barProducts[id].color;
  return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m10 39 8-20 30-4 9 20-30 13z" fill="'+color+'" stroke="#344858" stroke-width="2"/><path d="m18 19 12 16 27 0M30 35l-3 13" fill="none" stroke="#f0e6ce" stroke-width="2"/><path d="m10 39 20-4-3 13z" fill="#674f4c" opacity=".4"/></svg>';
 }
+export const pickaxeIngredients=id=>({[pickaxes[id].bar]:pickaxes[id].bars,timber:pickaxes[id].timber,...pickaxes[id].materials});
+export const forgeMaterialName=id=>id==='timber'?'timber':barProducts[id]?.name??miningFinds[id]?.name??id;
+export const pickaxeRecipe=id=>Object.entries(pickaxeIngredients(id)).map(([key,n])=>n+' '+forgeMaterialName(key)).join(' + ');
 export function forgeCraftReason(state,id){
  if(!Object.hasOwn(pickaxes,id)||id==='basic')return 'Choose a craftable pickaxe.';
  const pick=pickaxes[id];
  if(state.mining.upgrades.includes(id))return 'Already crafted · Equip it from Inventory.';
  if(miningLevel(state.mining)<pick.level)return 'Needs Mining '+pick.level+'.';
- if((state.huntingLoot[pick.bar]??0)<pick.bars||state.woodcutting.timber<pick.timber)return 'Bring '+pick.bars+' '+barProducts[pick.bar].name+' and '+pick.timber+' timber.';
+ if(pick.requires&&!state.mining.upgrades.includes(pick.requires))return 'Craft the '+pickaxes[pick.requires].name+' first.';
+ if(Object.entries(pickaxeIngredients(id)).some(([key,n])=>(key==='timber'?state.woodcutting.timber:state.huntingLoot[key]??0)<n))return 'Bring '+pickaxeRecipe(id)+'.';
  return '';
 }
 export function drawQuarryForge(item,time,{point,block,rect,ctx,reduced}){

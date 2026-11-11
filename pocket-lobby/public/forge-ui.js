@@ -1,5 +1,5 @@
 import {pickaxes,pickaxeArt,miningLevel,equippedPickaxe} from './mining.js';
-import {barProducts,forgeCraftReason,barArt} from './forge.js';
+import {barProducts,forgeCraftReason,barArt,pickaxeRecipe,pickaxeIngredients,forgeMaterialName} from './forge.js';
 
 export function initializeQuarryForge(api,doc=document){
  const css=doc.createElement('link');css.rel='stylesheet';css.href='forge.css';doc.head.append(css);
@@ -41,12 +41,17 @@ export function initializeQuarryForge(api,doc=document){
    form.onsubmit=event=>{event.preventDefault();if(!button.disabled)change('mineSmelt',{id,quantity:input.valueAsNumber},bar.name);};
    card.append(form,hint);by('bars').append(card);
   }
-  for(const id of ['copper','iron']){
+  for(const id of ['copper','iron','runic']){
    const pick=pickaxes[id],card=doc.createElement('article');card.className='forge-recipe forge-pick';
    const art=doc.createElement('div');art.className='forge-art';art.innerHTML=pickaxeArt(id);
    const reason=forgeCraftReason(state,id);
-   card.append(art,node('h4',pick.name),node('p',pick.bars+' '+barProducts[pick.bar].name+' + '+pick.timber+' timber'),
+   card.append(art,node('h4',pick.name),node('p',pickaxeRecipe(id)),
     node('b',pick.duration/1000+'s per swing · Mining '+pick.level),node('small',reason||'Ready to craft'));
+   if(id==='runic'){
+    card.dataset.rarity='runic';
+    card.append(node('p','10% chance per swing to extract 1 bonus ore. Works in both mining areas and Auto Mining.'));
+    card.append(node('small',Object.entries(pickaxeIngredients(id)).map(([key,n])=>forgeMaterialName(key)+': '+(key==='timber'?state.woodcutting.timber:stock[key]??0)+' / '+n).join(' · ')));
+   }
    const button=node('button',state.mining.upgrades.includes(id)?'Already crafted':'Craft & equip');button.type='button';
    button.disabled=busy||!!reason||!api.ready();button.onclick=()=>change('mineCraft',{id},pick.name);
    card.append(button);by('picks').append(card);

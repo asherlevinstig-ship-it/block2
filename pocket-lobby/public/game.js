@@ -2645,7 +2645,7 @@ function object(item,highlight=false,time=0) {
   if(Object.hasOwn(moonwood.heights,type)){
     if(type==='oreDeposit'){
       const impact=[miningReceipt,...[...remotePeers.values()].map(peer=>peer.miningImpact)].filter(r=>r?.node===item.id).sort((a,b)=>b.at-a.at)[0];
-      drawOreDeposit(item,time,{point,polygon,ctx,reduced:reducedMotion.matches},{...oreState[item.id],broken:impact?.broken,find:impact?.find,hitAge:impact?combatNow()-impact.at:Infinity});return;
+      drawOreDeposit(item,time,{point,polygon,ctx,reduced:reducedMotion.matches},{...oreState[item.id],broken:impact?.broken,find:impact?.find,bonus:impact?.bonus,hitAge:impact?combatNow()-impact.at:Infinity});return;
     }else if(isTimberTree(item)){
       drawTimberTree(item,time);
     }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
@@ -4630,7 +4630,7 @@ function updateMining(time){
     const receipt=packet.state.miningReceipt;
     if(receipt?.id!==cut.id){miningTarget=null;miningBusy=false;note('The Shardback Guardian noticed you. Move out of its attack warnings!');return;}
     const ore=oreProducts[receipt.ore];
-    note('+'+(receipt.amount??1)+' '+ore.name+' · +'+receipt.xp+' Mining XP');
+    note((receipt.bonus?'Runic surge! ':'')+'+'+(receipt.amount??1)+' '+ore.name+' · +'+receipt.xp+' Mining XP');
     const depleted=oreState[target.id]?.readyAt>combatNow();
     if(depleted){miningTarget=null;note(receipt.find?'Discovered '+miningFinds[receipt.find].name+'! Kept in your bag.':'Deposit broken · Choose another rock while it recovers.');}
     miningBusy=false;
@@ -4749,7 +4749,7 @@ function bagEntries(){
   for(const [id,item] of Object.entries(miningFinds))if(huntingLoot[id]>0)entries.push({key:'find:'+id,name:item.name,category:'materials',art:miningFindArt(id),quantity:huntingLoot[id],description:id==='uncutQuartz'?'An uncut mineral crystal, uncovered inside a broken deposit.':id==='ancientFossil'?'A trace of ancient life, preserved deep in quarry stone.':'A fragment of carved stone with a faint magical shimmer.',stats:'Rare mining find · '+item.price+' gold each',note:'Keep as a discovery or sell at the Trading Post. Luck improves discovery chances.'});
   if(mining.pickOwned)for(const id of ['basic',...mining.upgrades]){
     const pick=pickaxes[id],equipped=mining.equipped&&mining.pick===id;
-    entries.push({key:id==='basic'?'pickaxe':'pickaxe:'+id,name:pick.name,category:'gear',art:pickaxeArt(id),quantity:1,equipped,description:'A sturdy pickaxe for quarry deposits.',stats:pick.duration/1000+'s per swing · Mining '+miningLevel(mining),note:'Copper at Mining 1 · Iron at Mining 3',action:equipped?'Unequip':'Equip',run:()=>serverGameplay('mineEquip',{pick:id,equipped:!equipped}).catch(error=>note(error.message))});
+    entries.push({key:id==='basic'?'pickaxe':'pickaxe:'+id,name:pick.name,category:'gear',art:pickaxeArt(id),quantity:1,equipped,description:id==='runic'?'Iron bound with quartz and ancient runes. A glowing tool for a seasoned miner.':'A sturdy pickaxe for quarry deposits.',stats:pick.duration/1000+'s per swing · Mining '+miningLevel(mining)+(pick.bonusChance?' · 10% chance for +1 bonus ore':''),note:id==='runic'?'Works in the quarry, Crystaldeep and Auto Mining. Bonus ore does not add Mining XP.':'Copper at Mining 1 · Iron at Mining 3 · Runic at Mining 5',action:equipped?'Unequip':'Equip',run:()=>serverGameplay('mineEquip',{pick:id,equipped:!equipped}).catch(error=>note(error.message))});
   }
   for(const [id,bar] of Object.entries(barProducts))if(huntingLoot[id]>0)entries.push({
     key:'bar:'+id,name:bar.name,category:'materials',art:barArt(id),quantity:huntingLoot[id],

@@ -12,7 +12,7 @@ export function towerCharacterPose(meta,options={}){
   if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
   else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
   else if(pose.recoil>1){state='hurt';frame=0;}
-  else if(weapon&&['basicAxe','basicPick','copperPick','ironPick'].includes(weaponTier)){state='chop';frame=reduced?5:Math.floor(clamp(pose.chop??((time%700)/700),0,.999)*8);}
+  else if(weapon&&['basicAxe','basicPick','copperPick','ironPick','runicPick'].includes(weaponTier)){state='chop';frame=reduced?5:Math.floor(clamp(pose.chop??((time%700)/700),0,.999)*8);}
   else if(weapon&&pose.attack!==null&&pose.attack!==undefined){state='attack';frame=reduced?3:Math.floor(clamp(pose.attack,0,.999)*6);}
   else if(fishing==='casting'){state='cast';frame=reduced?5:Math.floor(clamp(fishingAge/450,0,.999)*6);}
   else if(fishing==='landing'||fishing==='complete'){state='landing';frame=reduced?2:Math.floor(time/150)%4;}
@@ -35,10 +35,12 @@ export function tintTowerPixel(r,g,b,a,appearance={}){
 function drawTool(ctx,kind,angle,x,y){
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
   ctx.save();ctx.translate(x,y);ctx.rotate(angle);
-  if(['basicPick','copperPick','ironPick'].includes(kind)){
+  if(['basicPick','copperPick','ironPick','runicPick'].includes(kind)){
+    if(kind==='runicPick'){ctx.shadowColor='#b89cff';ctx.shadowBlur=5;}
     p(-1,-17,2,22,'#3c3440');p(0,-17,1,21,'#bc8b59');
-    const metal=kind==='copperPick'?'#dfa46c':kind==='ironPick'?'#e0edf2':'#b7d3dc';
+    const metal=kind==='runicPick'?'#b7a2f4':kind==='copperPick'?'#dfa46c':kind==='ironPick'?'#e0edf2':'#b7d3dc';
     p(-9,-19,18,3,'#344459');p(-8,-18,16,2,metal);p(-10,-16,3,3,metal);p(7,-16,3,3,'#dcebf0');
+    if(kind==='runicPick'){p(-5,-19,1,4,'#deffff');p(2,-18,1,3,'#deffff');p(-1,-13,3,2,'#a5e8f5');p(-1,-8,3,1,'#c5a9ff');}
   }else if(kind==='basicAxe'){
     p(-1,-17,2,22,'#3c3440');p(0,-17,1,21,'#bc8b59');p(-5,-18,10,6,'#334459');p(0,-18,6,6,'#a6c3cd');p(4,-17,2,4,'#e9e8d0');
   }else if(['huntingSpear','breakerSpear'].includes(kind)){

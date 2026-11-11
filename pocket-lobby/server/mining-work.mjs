@@ -27,7 +27,7 @@ export async function advanceMiningWork(db,state,now,motion){
   if(node.guarded&&miningGuardAwake(state,now)&&outfitVeilUntil(state)<=now){startCombatEncounter(state,huntEnemies.crystalGuardian,now);plan.currentLabel='Fighting the Shardback Guardian';return null;}
   if((state.huntingLoot[node.ore]??0)+(node.yield??1)>1000000)return null;
   const hits=snapshot.hits+1,xp=awardOreStrike(state,node,cut,now,hits===miningRules.hits);
-  completeRoutineOre(state,node.ore,xp,now,node.yield??1);
+  completeRoutineOre(state,node.ore,xp,now,state.miningReceipt.amount);
   return {node:node.id,revision:snapshot.revision,hits,readyAt:hits===miningRules.hits?now+miningRules.respawnMs:0};
  }
  if(work.phase==='waiting'&&now<work.readyAt)return null;

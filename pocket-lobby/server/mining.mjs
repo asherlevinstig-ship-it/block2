@@ -1,24 +1,24 @@
 import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit,miningFind} from '../public/mining.js';
-import {quarryForge,barProducts,forgeCraftReason} from '../public/forge.js';
+import {quarryForge,barProducts,forgeCraftReason,pickaxeIngredients} from '../public/forge.js';
 import {exertionDuration,useHunger} from '../public/player-vitals.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
-import {miningRooms,depositRoom,deepMiningRoom,deepMiningRequirement,miningGuardAwake} from '../public/mining.js';
+import {miningRooms,depositRoom,deepMiningRoom,deepMiningRequirement,miningGuardAwake,miningBonusOre} from '../public/mining.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {huntEnemies,canUseWeapon} from '../public/hunting.js';
 import {startCombatEncounter} from './activities.mjs';
 const invalid=message=>Object.assign(new Error(message),{status:400});
 export function awardOreStrike(state,node,cut,now,broken=false){
  const ore=oreProducts[node.ore],before=state.mining.xp;
- const amount=node.yield??1;
+ const base=node.yield??1,bonus=Math.min(miningBonusOre(state.mining,cut.id),Math.max(0,1000000-(state.huntingLoot[node.ore]??0)-base)),amount=base+bonus;
  state.huntingLoot[node.ore]=(state.huntingLoot[node.ore]??0)+amount;
- state.mining.xp=Math.min(MAX_SKILL_XP,before+ore.xp*amount);useHunger(state);
+ state.mining.xp=Math.min(MAX_SKILL_XP,before+ore.xp*base);useHunger(state);
  const find=broken?miningFind(cut.id,state.stats?.luckXp??0):null;
  const awarded=find&&(state.huntingLoot[find]??0)<1000000?find:null;
  if(awarded){
   state.huntingLoot[awarded]=(state.huntingLoot[awarded]??0)+1;
   if(state.plan){state.plan.miningFinds??={};state.plan.miningFinds[awarded]=(state.plan.miningFinds[awarded]??0)+1;}
  }
- state.miningReceipt={id:cut.id,ore:node.ore,amount,room:depositRoom(node),xp:state.mining.xp-before,at:now,node:node.id,broken,find:awarded};
+ state.miningReceipt={id:cut.id,ore:node.ore,amount,bonus,room:depositRoom(node),xp:state.mining.xp-before,at:now,node:node.id,broken,find:awarded};
  return state.miningReceipt.xp;
 }
 export async function writeOreStrike(db,row,state,operation,now,{node,revision,hits,readyAt}){
@@ -65,8 +65,7 @@ export async function mineAction(db,row,state,body,action,now){
    state.huntingLoot[body.id]=(state.huntingLoot[body.id]??0)+quantity;
   }else{
    const reason=forgeCraftReason(state,body.id);if(reason)throw invalid(reason);
-   const pick=pickaxes[body.id];
-   state.huntingLoot[pick.bar]-=pick.bars;state.woodcutting.timber-=pick.timber;
+   for(const [id,quantity] of Object.entries(pickaxeIngredients(body.id))){if(id==='timber')state.woodcutting.timber-=quantity;else state.huntingLoot[id]-=quantity;}
    state.mining.pickOwned=true;state.mining.upgrades.push(body.id);state.mining.pick=body.id;state.mining.equipped=true;
   }
   return {state};
