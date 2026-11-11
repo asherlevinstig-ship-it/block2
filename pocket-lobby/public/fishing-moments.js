@@ -20,34 +20,40 @@ const fishingMoments=(()=>{
     return true;
   }
   function drawFish(ctx,x,y,species,quality,scale=1){
-    const ink=species.startsWith('trout')?'#b9b4dd':species.startsWith('perch')?'#a7be8f':'#a7d8db';
+    const moonfin=species==='moonfin';
+    const ink=moonfin?'#b1edff':species.startsWith('trout')?'#b9b4dd':species.startsWith('perch')?'#a7be8f':'#a7d8db';
     ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.scale(scale,scale);
     ctx.fillStyle='#34435b';ctx.fillRect(-7,-3,13,6);
     ctx.fillStyle=ink;ctx.fillRect(-6,-2,11,4);ctx.fillRect(-3,-3,5,6);
     ctx.beginPath();ctx.moveTo(-6,0);ctx.lineTo(-11,-4);ctx.lineTo(-11,4);ctx.closePath();ctx.fill();
     ctx.fillStyle='#edf3d9';ctx.fillRect(1,1,3,1);ctx.fillRect(2,-2,2,1);
     ctx.fillStyle='#273344';ctx.fillRect(4,-1,1,1);
+    if(moonfin){
+      ctx.fillStyle='#a89afa';ctx.fillRect(-4,-4,5,1);ctx.fillRect(-5,-5,3,1);
+      ctx.fillStyle='#f2f9ff';ctx.fillRect(-1,-1,1,3);ctx.fillRect(-2,0,1,1);
+    }
     if(quality!=='common'){
       ctx.fillStyle=quality==='rare'?'#e2b6ef':'#f7dc9b';
       ctx.fillRect(-4,-2,1,1);ctx.fillRect(-1,0,1,1);
     }
     ctx.restore();
   }
-  function drawShoal(ctx,x,y,time,reduced){
+  function drawShoal(ctx,x,y,time,reduced,fish='silverfin'){
+    const moonfin=fish==='moonfin';
     ctx.save();
     ctx.beginPath();ctx.ellipse(x,y,15,6,0,0,Math.PI*2);
-    ctx.fillStyle='#55e5d32e';ctx.fill();
-    ctx.strokeStyle='#96eee7';ctx.lineWidth=1.2;ctx.stroke();
+    ctx.fillStyle=moonfin?'#a3b8ff49':'#55e5d32e';ctx.fill();
+    ctx.strokeStyle=moonfin?'#dce2ff':'#96eee7';ctx.lineWidth=1.2;ctx.stroke();
     for(let i=0;i<3;i++){
       const wave=reduced?(i+1)/4:(time/1900+i/3)%1;
       ctx.globalAlpha=.75*(1-wave);
       ctx.beginPath();ctx.ellipse(x,y,13+wave*17,5+wave*8,0,0,Math.PI*2);
-      ctx.strokeStyle=i===0?'#ffdf97':'#91f3e7';ctx.stroke();
+      ctx.strokeStyle=moonfin?(i===0?'#f4f2ff':'#a8c3ff'):(i===0?'#ffdf97':'#91f3e7');ctx.stroke();
     }
     const leap=reduced?.45:time%2600/650;
     if(leap<1){
       ctx.globalAlpha=1;
-      drawFish(ctx,x-9+leap*18,y-Math.sin(leap*Math.PI)*13-2,'silverfin','fine',.7);
+      drawFish(ctx,x-9+leap*18,y-Math.sin(leap*Math.PI)*13-2,fish,moonfin?'rare':'fine',.7);
     }
     ctx.restore();
   }

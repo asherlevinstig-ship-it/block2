@@ -6,6 +6,8 @@ import {readMillRaid,publicMillRaid,advanceMillRaid,writeMillRaid} from '../serv
 import {millRaidClock,raidThreat,raidDanger} from '../public/mill-raid.js';
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {SharedRoom} from '../server/shared-room.mjs';
+import {applyGameplayAction} from '../server/gameplay.mjs';
+import {moonfinPool} from '../public/region-catalog.js';
 const start=1200000+90000;
 const player=name=>normalizeState({avatar:{name,outfit:0,hair:0},location:'millbrook',position:{x:5,y:4},health:100,combatGear:{ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'},quest:{accepted:true},vitals:{hunger:100,mana:100}});
 const fresh=()=>({clock:millRaidClock(start),now:start,state:{wave:0,mobs:[],members:{},victoryAt:0}});
@@ -80,4 +82,59 @@ test('raid room broadcasts identical shared health and public attack cues to eve
  for(let i=0;i<2;i++)room.sessions.set({send:text=>messages[i].push(JSON.parse(text))},{playerId:'private-'+i,id:'public-'+i});
  await room.fetch(new Request('https://room.internal/raid',{method:'POST',body:JSON.stringify({raid:{id:1,mobs:[{id:'0-0',hp:20}]},playerId:'private-0',receipt:{hit:14},cast:false})}));
  assert.deepEqual(messages[0],messages[1]);assert.equal(messages[0][0].cue.player,'public-0');assert.equal(messages[0][0].cue.hit,14);assert(!JSON.stringify(messages).includes('private-'));
+});
+test('the fishing pool opens for visitors on server-confirmed victory and lets a cast finish after closing',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const realNow=Date.now,realRandom=Math.random;
+ let now=start+100;
+ Date.now=()=>now;Math.random=()=>.3;
+ t.after(()=>{Date.now=realNow;Math.random=realRandom;});
+ let cookie='';
+ const call=async (path,body)=>{
+  const response=await handlePlayerApi(new Request('https://tower.test/api/player/'+path,{method:'POST',headers:{Origin:'https://tower.test',Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify(body)}),{TOWER_DB:db});
+  cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;
+  return {status:response.status,...await response.json()};
+ };
+ const session=await call('session',{legacy:{avatar:{name:'Visitor',outfit:0,hair:0}}});
+ const visitor=player('Visitor');visitor.combatGear.equippedWeapon=null;
+ const replace=()=>sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(visitor),session.characterKey);
+ replace();
+ let revision=session.revision,operation=0;
+ const play=async (name,body={})=>{
+  const result=await call('gameplay/'+name,{...body,characterKey:session.characterKey,revision,operation:'pool-'+ ++operation});
+  if(result.status===200)revision=result.revision;
+  return result;
+ };
+ assert.match((await play('cast',{millRaid:{victoryAt:now}})).error,/opens after/);
+ const raid=fresh();raid.state.victoryAt=now;
+ sql.prepare('INSERT INTO tower_mill_raids (raid_id,state_json) VALUES (?,?)').run(raid.clock.id,JSON.stringify(raid.state));
+ assert.match((await play('cast')).error,/glowing bank/);
+ visitor.position=moonfinPool.spots[0];replace();
+ now=raid.clock.next-2000;
+ const cast=(await play('cast')).state.fishingCast;
+ assert.deepEqual(cast.water,moonfinPool.water);
+ now=cast.biteAt;
+ const reel=await play('reel',{castId:cast.id});
+ assert.equal(reel.state.fishingCast.bonus,5);
+ now=reel.state.fishingCast.landAt+900;
+ const caught=await play('catch',{castId:cast.id});
+ assert.equal(caught.state.fishingReceipt.fish,'moonfin');
+ assert.equal(caught.state.fishStock.moonfin,1);
+ assert.equal(caught.state.fishingGear.bait,9);
+ assert.equal((await play('catch',{castId:cast.id})).state.fishStock.moonfin,1);
+ assert.match((await play('cast')).error,/opens after/);
+});
+test('a Moonfin can be sold at Millbrook or cooked into chowder',()=>{
+ const visitor=player('Visitor');visitor.fishStock.moonfin=2;visitor.woodcutting.timber=1;
+ visitor.position={x:3,y:5};
+ const gold=visitor.credits;
+ applyGameplayAction(visitor,'sell',{id:'moonfin',quantity:1},start);
+ assert.equal(visitor.credits,gold+26);
+ visitor.location='home';visitor.ownedFurniture.stove=1;visitor.homeFurniture=[{id:1,type:'stove',x:1,y:1,rot:0}];visitor.position={x:1,y:2};
+ applyGameplayAction(visitor,'cook',{id:'moonfinChowder'},start);
+ assert.equal(visitor.fishStock.moonfin,0);
+ assert.equal(visitor.meals.moonfinChowder,1);
+ visitor.health=40;visitor.vitals.hunger=40;
+ applyGameplayAction(visitor,'eat',{id:'moonfinChowder'},start);
+ assert.equal(visitor.health,100);assert.equal(visitor.vitals.hunger,100);
 });

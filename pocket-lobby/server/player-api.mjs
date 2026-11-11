@@ -229,7 +229,9 @@ export async function handlePlayerApi(request,env){
           if(gameplay==='cook'&&!access.kitchen)return json({error:'Complete the field kitchen project to use this stove.'},403);
         }
         const shared=['chop','cut'].includes(gameplay)?await prepareManualTree(env,state,gameplay,body):null;
-        applyGameplayAction(state,gameplay,body);
+        const now=Date.now();
+        const millRaid=gameplay==='cast'&&state.location==='millbrook'&&!state.fishingCast?await readMillRaid(env.TOWER_DB,now):undefined;
+        applyGameplayAction(state,gameplay,body,now,Math.random,{millRaid});
         if(shared&&state.timberCut)state.timberCut.treeGeneration=shared.generation;
         if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);
       }

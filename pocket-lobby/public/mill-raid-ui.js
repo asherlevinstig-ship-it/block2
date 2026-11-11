@@ -39,12 +39,12 @@ export function initializeMillRaid(api){
   eyebrow.textContent=phase==='victory'?'WORLD EVENT · VICTORY':phase==='warning'?'WORLD EVENT · RAID APPROACHING':'WORLD EVENT · WAVE '+(raid?.wave??1)+' / 3';
   title.textContent=phase==='victory'?'Millbrook stands!':phase==='warning'?'Smoke beyond the reeds':'Defend the old mill';
   const seconds=Math.max(0,Math.ceil(((phase==='warning'?clock.opens:phase==='victory'?clock.next:clock.ends)-now())/1000));
-  detail.textContent=phase==='warning'?'Raiders arrive in '+seconds+'s. Equip a weapon and gather by the mill.':phase==='victory'?'The mill is safe. Relief supplies available for '+Math.ceil(seconds/60)+' minutes.':raid?.self?.defeated?'You fell defending the mill. Rest on the bench; try again next raid.':(raid?.defenders??0)+' defenders · '+(raid?.mobs.filter(m=>m.hp>0).length??2)+' enemies · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0')+' left. Click a monster to approach and strike. Leave the red tiles!';
+  detail.textContent=phase==='warning'?'Raiders arrive in '+seconds+'s. Equip a weapon and gather by the mill.':phase==='victory'?'Moonfin Pool is open to everyone for '+Math.ceil(seconds/60)+' min. Follow the glowing stones beside the mill.':raid?.self?.defeated?'You fell defending the mill. Rest on the bench; try again next raid.':(raid?.defenders??0)+' defenders · '+(raid?.mobs.filter(m=>m.hp>0).length??2)+' enemies · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0')+' left. Click a monster to approach and strike. Leave the red tiles!';
   const battle=phase==='battle'&&!raid?.self?.defeated;
   strike.hidden=!battle;heal.hidden=!battle;stop.hidden=!battle||!fighting;claim.hidden=phase!=='victory'||!raid?.self?.qualified;buy.hidden=phase!=='victory';
   claim.disabled=busy||raid?.self?.claimed;claim.textContent=raid?.self?.claimed?'Reward collected':'Collect 75 gold + XP';
   strike.disabled=heal.disabled=buy.disabled=busy;strike.textContent=fighting?'Striking · Click floor to move':'Strike nearest';
-  status.textContent=notice||(raid?.self?.qualified?'Contribution secured · Stay and help finish the defense.':'Damage enemies or heal injured allies to earn a reward.');
+  status.textContent=notice||(phase==='victory'?'':raid?.self?.qualified?'Contribution secured · Stay and help finish the defense.':'Damage enemies or heal injured allies to earn a reward.');
  }
  const timer=setInterval(()=>{
   const next=api.room(),clock=millRaidClock(now());

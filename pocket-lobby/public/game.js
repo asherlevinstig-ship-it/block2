@@ -3062,6 +3062,9 @@ const roomLayers={
 for(const id of Object.keys(moonwood.areas)){
   roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),id===wildlifeRoom?wildlifeView:moonwood.view);
 }
+function moonfinPoolOpen(){
+  return currentRoom===moonfinPool.room&&window.millRaidClient?.phase==='victory';
+}
 function drawMoonwoodDetails(time){
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,progress:adventure});
   const clue=moonbackClue();
@@ -3080,6 +3083,16 @@ function drawMoonwoodDetails(time){
     if(!fishingSession&&!routineControlled()){
       for(const {x,y} of shoal.spots)surface(x+.09,y+.09,.82,.82,.4,'#9ceada19','#abebd9a0');
     }
+  }
+  if(moonfinPoolOpen()){
+    const {water,spots}=moonfinPool;
+    for(let i=0;i<4;i++){
+      const x=7.35+i*.33,y=6.18-i*.39;
+      surface(x,y,.34,.23,.45,'#a1b9f17d','#d4e6ff');
+      surface(x+.09,y+.06,.14,.08,.6,'#e9f5ff');
+    }
+    for(const {x,y} of spots)surface(x+.12,y+.12,.76,.76,.42,'#a1caff28','#cee6ff90');
+    fishingMoments.drawShoal(ctx,...point(water.x,water.y,.5),time,reducedMotion.matches,'moonfin');
   }
   if(currentRoom==='grove'&&adventure.groveTrail){
     for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
@@ -3164,9 +3177,12 @@ function updateWorldLabels(){
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
   const clue=moonbackClue();
   const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
+  const poolCast=currentRoom===moonfinPool.room&&fishingSession?.room===moonfinPool.room;
+  const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
+  const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
   const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
-  const labelKey=key+'|'+(clue?.door.to??'');
+  const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel;
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -3244,6 +3260,7 @@ function updateWorldLabels(){
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
   if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name);
+  if(poolLabel)add(poolLabel,...point(moonfinPool.water.x,moonfinPool.water.y,21),'shoal',poolBite?reelFish:useMoonfinPool,poolBite?'Space':'Rare catch');
   if(clue){
     const {inside,tile,to}=clue.door,x=inside.x+.5+(inside.x-tile.x)*.75,y=inside.y+.5+(inside.y-tile.y)*.75;
     add('Fresh stag tracks',...point(x,y,13),'tracks',followMoonbackTracks,explorationName(to));
@@ -3544,8 +3561,9 @@ function pointer(e){
   const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
   const door=roomDoors[currentRoom].find(portal=>doorAvailable(portal)&&hitDoor(x,y,portal));
   let shoalHit=false;
-  if(currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()){
-    const {water}=pondShoalAt(combatNow()),[sx,sy]=point(water.x,water.y,.5);
+  const fishingWater=moonfinPoolOpen()||fishingSession?.room===moonfinPool.room?moonfinPool.water:currentRoom==='pond'&&!fishingSession?pondShoalAt(combatNow()).water:null;
+  if(fishingWater&&window.playerCloud?.gameplay&&!routineControlled()){
+    const [sx,sy]=point(fishingWater.x,fishingWater.y,.5);
     shoalHit=((x-sx)/26)**2+((y-sy)/12)**2<=1;
   }
   return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null,shoalHit};
@@ -4044,6 +4062,18 @@ function usePondShoal(){
   player.seat=null;player.waveStarted=null;
   route=paths[0];target=route.at(-1)??null;interaction={type:'pondShoal',shoalId:shoal.id};
 }
+function useMoonfinPool(){
+  if(currentRoom!==moonfinPool.room||!window.playerCloud?.gameplay||unavailable())return;
+  if(fishingSession){reelFish();return;}
+  if(!moonfinPoolOpen()){note('Moonfin Pool opens after Millbrook wins the raid.');return;}
+  if(fishingGear.bait<1){note('Bring bait from Silverfin Outfitters before fishing.');return;}
+  const start=startPosition();
+  const paths=moonfinPool.spots.filter(spot=>![...remotePeers.values()].some(peer=>peer.x===spot.x&&peer.y===spot.y))
+    .map(spot=>walkingPath(start,spot)).filter(Boolean).sort((a,b)=>a.length-b.length);
+  if(!paths.length){note('The pool bank is busy. Try again when a spot is free.');return;}
+  player.seat=null;player.waveStarted=null;
+  route=paths[0];target=route.at(-1)??null;interaction={type:'moonfinPool'};
+}
 function seatAnchor(item){
   const [w,d]=dimensions(item);
   const offsets=[[w/2,.63],[.63,d/2],[w/2,.37],[.37,d/2]];
@@ -4060,7 +4090,7 @@ function reelFish(){
       if(!cast)return;
       const offset=performance.now()-result.serverTime;
       session.landAt=cast.landAt+offset;session.bonus=cast.bonus;
-      if(cast.bonus){fishingMoments.sound('reel');note(cast.shoalReeled?'Well timed! Shoal bonus active · Better odds of a fine catch.':'Well timed! +5 bonus Patience XP.');}
+      if(cast.bonus){fishingMoments.sound('reel');note(cast.room===moonfinPool.room?'Well timed! Better odds of Moonfin · +5 Patience XP.':cast.shoalReeled?'Well timed! Shoal bonus active · Better odds of a fine catch.':'Well timed! +5 bonus Patience XP.');}
       updateAdventurePanel();
     }).catch(error=>note(error.message));
     return;
@@ -4220,6 +4250,9 @@ function finishInteraction(){
   }else if(item.type==='pondShoal'){
     if(pondShoalAt(combatNow()).id===item.shoalId)startServerCast(item.shoalId);
     else usePondShoal();
+  }else if(item.type==='moonfinPool'){
+    if(moonfinPoolOpen())startServerCast();
+    else note('Moonfin Pool closed while you were walking.');
   }else if(item.type==='dungeonExit'||item.type==='dungeonArch'){
     if(depthsSideForRoom(currentRoom))visitDungeonSide('return');
     else if(currentRoom===depthsCacheRoom)visitDepthsCache();
@@ -4463,7 +4496,7 @@ function mealArt(id){
 
   const fish='<path d="M8 35 3 23l13 5q15-16 37-2l6 6-6 6Q32 50 16 36L3 41z" fill="#83b2c5" stroke="#d5e6dc" stroke-width="2"/><path d="m26 25 4 14m6-16 4 15" stroke="#416d7d" stroke-width="3"/><circle cx="49" cy="31" r="2" fill="#243443"/>';
   const stew='<path d="M9 29h46l-5 17q-18 13-36 0z" fill="#b57557" stroke="#edb787" stroke-width="2"/><ellipse cx="32" cy="29" rx="23" ry="8" fill="#835142" stroke="#edb787" stroke-width="2"/><path d="m21 29 5-3 4 4-5 2zm13-2 5-2 5 4-6 2z" fill="#e4ae62"/><path d="M25 17q-5-4 0-9m12 10q-5-4 0-10" fill="none" stroke="#e4dcc2" stroke-width="2"/>';
-  return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'||id==='heartyStew'?stew:fish)+'</svg>';
+  return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'||id==='heartyStew'||id==='moonfinChowder'?stew:fish)+'</svg>';
 }
 let buyingBread=false;
 function renderFoodStall(){
@@ -4567,7 +4600,7 @@ function bagEntries(){
   if(fishingGear.bait)entries.push({key:'bait',name:'Riverworms',category:'materials',art:windowItemArt('bait'),quantity:fishingGear.bait,description:'Bait for your next fishing trip.',stats:'One used per catch',note:'Used automatically while fishing.'});
   if(woodcutting.timber)entries.push({key:'timber',name:'Timber',category:'materials',art:windowItemArt('timber'),quantity:woodcutting.timber,description:'Gathered by chopping trees.',stats:tradeCatalog.timber.price+' gold each',note:'Craft at the Timber Hollow workbench or sell at the Trading Post.'});
   for(const [id,quantity] of Object.entries(fishStock))if(quantity&&fishProducts[id]){
-    const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
+    const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:id==='moonfin'?'A rare catch from Millbrook’s victory pool.':'Caught while fishing.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:id==='moonfin'?'Sell it at the Trading Post or use it to cook Moonfin Chowder.':'Sell at the Trading Post or Silverfin Outfitters.'});
   }
   if(combatGear.moonwellCharmOwned)entries.push({key:'charm',name:moonwellCharm.name,category:'gear',art:windowItemArt('charm'),quantity:1,
     equipped:combatGear.moonwellCharmEquipped,description:'A piece of the Moonwell’s magic, shaped at the Timber Hollow workbench.',
@@ -5016,7 +5049,7 @@ async function playLoungeRound(move){
   finally{loungeBusy=false;renderLoungeGame(errorText);if(!errorText)celebrateLoungeRound(loungeRound);}
 }
 function restoreServerCast(cast,serverTime){
-  if(cast.shoalId!==undefined){player.direction='right';player.back=false;}
+  if(cast.shoalId!==undefined||cast.room===moonfinPool.room){player.direction='right';player.back=false;}
   const offset=performance.now()-serverTime;
   fishingSession={...cast,serverCastId:cast.id,started:cast.started+offset,castEnds:cast.castEnds+offset,
     biteAt:cast.biteAt+offset,landAt:cast.landAt+offset,stage:'casting',fishId:null};
@@ -5030,7 +5063,10 @@ async function startServerCast(shoalId){
     restoreServerCast(result.state.fishingCast,result.serverTime);
     fishingMoments.sound('cast');
     catchReveal=null;$('catchReveal').hidden=true;
-    if(shoalId!==undefined){
+    if(result.state.fishingCast.room===moonfinPool.room){
+      canvas.focus({preventScroll:true});
+      note('Line cast into Moonfin Pool. Reel at the bite for a better chance of Moonfin.');
+    }else if(shoalId!==undefined){
       canvas.focus({preventScroll:true});
       note('Line cast into the shoal. Reel at the bite or press Space.');
     }
@@ -6332,7 +6368,7 @@ canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
-  if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(shoalHit)usePondShoal();else if(item)use(item);else if(tile)walkTo(tile);return;}
+  if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(shoalHit)(currentRoom===moonfinPool.room?useMoonfinPool:usePondShoal)();else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
 });
@@ -6859,7 +6895,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
   });
   window.towerMultiplayer=multiplayer;connectRoom();
 }else $('networkStatus').textContent='Local preview';
-if(window.playerCloud?.initial?.fishingCast&&isFishingRoom(currentRoom)){
+if(window.playerCloud?.initial?.fishingCast&&(isFishingRoom(currentRoom)||currentRoom===moonfinPool.room)){
   restoreServerCast(window.playerCloud.initial.fishingCast,window.playerCloud.serverTime);
 }
 requestAnimationFrame(animation);

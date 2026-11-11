@@ -335,7 +335,7 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
 #merchantDialog .modal-head{background:linear-gradient(135deg,#243851,#122239)}
 
 #upgradeNotNow{margin-right:18px}#resumeUpgradeGuide{margin-top:12px;width:100%;min-height:40px}
-.world-labels[data-room=pond] .world-label-shoal {
+.world-labels .world-label-shoal {
   pointer-events:auto;
   padding:5px 8px;
   border:1px solid #a6dfcb;
@@ -345,7 +345,9 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
   color:#e1fff4;
   cursor:pointer;
 }
-.world-labels[data-room=pond] .world-label-shoal:hover { background:#23545a;border-color:#fff0b7; }
+.world-labels .world-label-shoal:hover { background:#23545a;border-color:#fff0b7; }
+.world-labels[data-room=millbrook] .world-label-shoal { background:#252c52f2;border-color:#a6b8f5;color:#edf1ff; }
+.world-labels[data-room=millbrook] .world-label-shoal:hover { background:#3b4775;border-color:#eef2ff; }
 .world-labels .world-label-tracks {
   pointer-events:auto;
   cursor:pointer;

@@ -6,7 +6,7 @@ import {familiarFishingTime,familiarBond} from '../public/familiars.js';
 import {watchAction} from './watch-expedition.mjs';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
-import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
+import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {activateVeil,awardVeilCloak,awardChallengeClothing,readyOutfitPower,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
@@ -18,7 +18,7 @@ import {bankTransfer} from './banking.mjs';
 import {normalizeBank} from '../public/bank.js';
 import {normalizeDungeonLoot,dungeonRelics} from '../public/dungeon-loot.js';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
-import {fishingCatalog,fishProducts,pondShoalAt,rollFishingCatch} from '../public/fishing.js';
+import {fishingCatalog,fishProducts,pondShoalAt,rollFishingCatch,rollMoonfin} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
 import {awardLeadership} from '../public/leadership.js';
 import {purchaseWeapon} from '../public/hunting.js';
@@ -46,7 +46,7 @@ function location(state,rooms){
   if(!rooms.includes(state.location))throw new Error('Travel to the right location for this action.');
 }
 
-export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
+export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,{millRaid}={}){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
   if(cellarAction(state,action))return;
@@ -162,15 +162,21 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='cast'){
-    location(state,['pond','willowbank','ambermead']);
+    location(state,['pond','willowbank','ambermead',moonfinPool.room]);
     if(state.fishingCast)return;
     const position=state.position;
-    let shoal;
-    if(body.shoalId!==undefined){
+    const atMoonfinPool=state.location===moonfinPool.room;
+    let shoal,water;
+    if(atMoonfinPool){
+      if(!millRaid?.state.victoryAt||millRaid.state.victoryAt>now||now>=millRaid.clock.next)throw Object.assign(new Error('Moonfin Pool opens after Millbrook wins the raid.'),{status:400});
+      if(!moonfinPool.spots.some(spot=>spot.x===position?.x&&spot.y===position?.y))throw new Error('Travel to the glowing bank beside the mill before casting.');
+      water=moonfinPool.water;
+    }else if(body.shoalId!==undefined){
       const active=pondShoalAt(now);
       if(state.location!=='pond'||body.shoalId!==active.id)throw new Error('The shoal moved. Follow the bright ripples to cast again.');
       if(!active.spots.some(spot=>spot.x===position?.x&&spot.y===position?.y))throw new Error('Walk to the bank beside the shoal before casting.');
       shoal=active;
+      water=active.water;
     }else if(!besideFishingStation(state.location,position))throw new Error('Travel to the fishing post before casting.');
     const rod=state.fishingGear.equippedRod;
     const profile=fishingCatalog.rods[rod];
@@ -180,7 +186,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const wait=familiarFishingTime(state,profile.duration*(.85+random()*.30));
     // Keep the reel window and landing animation timing identical.
     const biteAt=now+exertionDuration(3150+wait,state.vitals)-2700;
-    state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0,...(shoal?{shoalId:shoal.id,water:shoal.water}:{})};
+    state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0,...(shoal?{shoalId:shoal.id}:{}),...(water?{water}:{}),...(atMoonfinPool?{room:moonfinPool.room}:{})};
     return;
   }
   if(action==='cancel'){
@@ -188,7 +194,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='reel'||action==='catch'){
-    location(state,['pond','willowbank','ambermead']);
+    location(state,['pond','willowbank','ambermead',moonfinPool.room]);
     const cast=state.fishingCast;
     if(!cast||cast.id!==body.castId){
       if(action==='catch'&&state.fishingReceipt?.castId===body.castId)return;
@@ -205,7 +211,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     const before=state.stats.patienceXp;
     const shoalReeled=cast.shoalId!==undefined&&cast.shoalReeled===true;
-    const fish=rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp,shoalReeled);
+    const fish=state.location===moonfinPool.room&&cast.room===moonfinPool.room&&rollMoonfin(cast.bonus,random)
+      ?'moonfin':rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp,shoalReeled);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     const otterHelp=cast.otterHelp===true&&state.familiars?.equipped==='otter';
     const baitSaved=otterHelp&&familiarBond(state.familiars,'otter').rank>=3;
@@ -370,7 +377,7 @@ export function protectFishingState(previous,next){
   const cut=previous.timberCut;
   if(cut&&next.location===previous.location&&next.position?.x===previous.position?.x&&next.position?.y===previous.position?.y&&next.woodcutting.equipped)next.timberCut=cut;
   else delete next.timberCut;
-  if(previous.fishingCast&&next.location===previous.location&&isFishingRoom(next.location))next.fishingCast=previous.fishingCast;
+  if(previous.fishingCast&&next.location===previous.location&&(isFishingRoom(next.location)||next.location===moonfinPool.room))next.fishingCast=previous.fishingCast;
   if(previous.fishingReceipt)next.fishingReceipt=previous.fishingReceipt;
   if(previous.tradeReceipt)next.tradeReceipt=previous.tradeReceipt;
   return next;

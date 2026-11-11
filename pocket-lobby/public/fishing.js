@@ -26,6 +26,10 @@ const fishProducts=Object.fromEntries(Object.entries(fishingCatalog.species).fla
     return [id,{name:(quality==='common'?'':tier.name+' ')+fish.name,price:fish.price+tier.premium,icon:'⋈',group:'fish',quality}];
   })
 ));
+fishProducts.moonfin={name:'Moonfin',price:26,icon:'⋈',group:'fish',quality:'rare'};
+export function rollMoonfin(reelBonus,random){
+  return random()<(reelBonus ? .40 : .25);
+}
 function fishingLuckBonus(luckXp=0){
   const levels=Math.min(5,Math.max(0,skillLevel(luckXp)-1));
   return {fine:levels*.4,rare:levels*.2};
