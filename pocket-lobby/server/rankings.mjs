@@ -5,7 +5,7 @@ import {playerPower} from '../public/progression.js';
 
 export async function readRankings(db,playerId,account){
   const {results}=await db.prepare(
-    "SELECT a.player_id, a.username, p.state_json FROM tower_accounts a JOIN tower_players p ON p.player_id = a.player_id WHERE json_extract(p.state_json, '$.rankingJoined') = 1"
+    "SELECT a.player_id, a.username, p.state_json, (SELECT COALESCE(SUM(remaining*price),0) FROM tower_timber_orders WHERE buyer_id=a.player_id) AS held_gold FROM tower_accounts a JOIN tower_players p ON p.player_id = a.player_id WHERE json_extract(p.state_json, '$.rankingJoined') = 1"
   ).all();
   const players=[];
   for(const row of results){
@@ -18,7 +18,7 @@ export async function readRankings(db,playerId,account){
         id:row.player_id,
         name:state.avatar.name,
         username:row.username,
-        gold:ownedGold(state),
+        gold:ownedGold(state)+row.held_gold,
         earned:state.goldEarned,
         power:power.total,
         breakdown:power.parts

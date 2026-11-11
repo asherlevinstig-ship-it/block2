@@ -1,6 +1,7 @@
 import {cellarFlags} from '../public/mill-cellar.js';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
+import {readTimberOrders,changeTimberOrder,atTradingPost} from './timber-orders.mjs';
 import {factionHallAccess} from './faction-projects.mjs';
 import {factionHall,factionHallSpawn} from '../public/faction-hall.js';
 import {watchFlags} from '../public/region-catalog.js';
@@ -139,10 +140,12 @@ export async function handlePlayerApi(request,env){
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env,id,true);
       if(existing)return json(packet(existing));
-      const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
+      const body=await bodyOf(request);
+      const serverStart=env.SERVER_CHARACTER_STARTS===true;
+      const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
-      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -174,6 +177,12 @@ export async function handlePlayerApi(request,env){
     }
     if(!id)return json({error:"Load your character first."},401);
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
+    if(path==='/api/player/timber-orders'&&request.method==='GET'){
+      const row=await read(env.TOWER_DB,id);
+      if(!row)return json({error:'Character not found.'},401);
+      if(!atTradingPost(readPlayerState(row)))return json({error:'Visit the Trading Post to browse player orders.'},400);
+      return json(await readTimberOrders(env.TOWER_DB,id));
+    }
     if(path==="/api/player/factions"){
       if(request.method==="GET")return json(await readFactions(env.TOWER_DB,id,new URL(request.url).searchParams.get('q')));
       const body=await bodyOf(request);
@@ -196,7 +205,7 @@ export async function handlePlayerApi(request,env){
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
     const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
-    if(row.last_request===body.operation)return json(packet(row));
+    if(row.last_request===body.operation)return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     if(path==='/api/player/mill-raid'){
       const result=await writeMillRaid(env.TOWER_DB,row,body);
@@ -211,6 +220,11 @@ export async function handlePlayerApi(request,env){
       return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
     }
     let state=readPlayerState(row),factionId=null,treeMutation=null;
+    if(path==='/api/player/timber-orders'){
+      const result=await changeTimberOrder(env.TOWER_DB,row,state,body,Date.now());
+      if(!result)return json({error:'Another tab saved first. Reload your character.',...packet(await read(env.TOWER_DB,id))},409);
+      return json({...packet(result.updated),board:await readTimberOrders(env.TOWER_DB,id),receipt:result.receipt});
+    }
     enablePhysicalWork(state,env);
     if(path.startsWith('/api/player/gameplay/')){
       if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
@@ -253,7 +267,13 @@ export async function handlePlayerApi(request,env){
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);
         state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required'});
-        break;
+        {
+          const [saved]=await env.TOWER_DB.batch([
+            env.TOWER_DB.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? RETURNING *').bind(JSON.stringify(state),body.operation,Date.now(),id,row.revision),
+            env.TOWER_DB.prepare('DELETE FROM tower_timber_orders WHERE buyer_id=? AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=? AND last_request=?) RETURNING order_id').bind(id,id,row.revision+1,body.operation)
+          ]);
+          return saved.results[0]?json(packet(saved.results[0])):json({error:'Another tab saved first. Reload your character.'},409);
+        }
       case "/api/player/save":
         if(body.state?.location==='millCellar'&&(state.location!=='millCellar'||!state.adventure.millCellarFound))throw new Error('Choose the loose bricks at the watermill to enter the cellar.');
         if(state.location==='millCellar'&&body.state?.location&&body.state.location!=='millCellar')throw new Error('Choose the cellar stairs to return to Millbrook.');

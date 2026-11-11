@@ -102,8 +102,8 @@
         // Durable Auto alarms can commit between our last packet and this request.
         // Retry only server settlement revisions; another window still triggers conflict handling.
         if(['presence','control'].includes(path)&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
-        if(path.startsWith('gameplay/')||path==='control'||path==='mill-raid'){
-          if(error.status===undefined&&attempt<2)continue;
+        if(path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'){
+          if((error.status===undefined||path==='timber-orders'&&error.status===503)&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
           throw error;
@@ -406,6 +406,13 @@
           if(oldRoom)legacy.furniture=oldRoom;
         }
         packet=await request('session',{legacy,newCharacter:!readLocal('player-state',null)&&!readLocal('avatar',null)});
+        if(packet.state.characterCreated===false){
+          const previousSave=readLocal('cloud-pending',null);
+          if(previousSave){
+            try{localStorage.setItem('pocket-lobby:cloud-conflict',JSON.stringify(previousSave));}catch{}
+            backup(null);
+          }
+        }
       }
       const recovery=readLocal('cloud-pending',null);
       if(recovery?.state&&!packet.state.plan&&!packet.state.report){
@@ -493,6 +500,18 @@
         inHall:()=>packet.state.location==='factionHall'
       });
       window.towerReadFactionProject=async()=>{await flush();return (await request('factions')).membership?.hall;};
+      const {initializeTimberOrders}=await import('./timber-orders.js');
+      initializeTimberOrders({
+        read:async()=>{await flush();return request('timber-orders');},
+        change:async body=>{
+          if(gameplayBusy)throw new Error('Wait for your current action to finish.');
+          await flush();gameplayBusy=true;
+          try{return await action('timber-orders',body);}
+          finally{gameplayBusy=false;}
+        },
+        balances:()=>window.towerTimberOrderBalances?.()??{credits:0,timber:0},
+        apply:(state,receipt)=>window.towerApplyTimberOrder?.(state,receipt)
+      });
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         const {initializeMillRaid}=await import('./mill-raid-ui.js');

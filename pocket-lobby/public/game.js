@@ -6945,6 +6945,15 @@ window.towerVisitSafe=()=>{
   use(safe);
 };
 window.towerBankFeedback=message=>showTransaction('Home safe',[{icon:'◈',text:message}]);
+window.towerTimberOrderBalances=()=>({credits,timber:woodcutting.timber});
+window.towerApplyTimberOrder=(state,receipt)=>{
+  applyServerGameplay(state);updateInventory();
+  if(!receipt)return;
+  const labels={post:'Timber buy order posted',fill:'Timber sold',cancel:'Order refund',collect:'Timber collected'};
+  const items=receipt.kind==='fill'?[{icon:'▤',text:'−'+receipt.quantity+' timber'}]
+    :receipt.kind==='collect'?[{icon:'▤',text:'+'+receipt.quantity+' timber'}]:[];
+  showTransaction(labels[receipt.kind],items,receipt.gold);
+};
 
 window.towerMillRaidHooks={
  now:()=>combatNow(),room:()=>currentRoom,position:()=>({x:player.cx,y:player.cy}),timber:()=>woodcutting.timber,discovered:()=>adventure.discovered.includes('millbrook'),

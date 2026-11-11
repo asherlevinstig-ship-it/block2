@@ -4,6 +4,9 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 main = "../worker/index.js"
 
+[vars]
+SERVER_CHARACTER_STARTS = true
+
 [triggers]
 crons = ["*/5 * * * *"]
 
