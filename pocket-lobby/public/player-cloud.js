@@ -525,6 +525,8 @@
       });
       const {initializeCourtyardEnvironment}=await import('./courtyard-environment.js');
       window.courtyardEnvironment=initializeCourtyardEnvironment();
+      const {initializeHudClearance}=await import('./hud-clearance.js');
+      initializeHudClearance();
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         const {initializeMillRaid}=await import('./mill-raid-ui.js');

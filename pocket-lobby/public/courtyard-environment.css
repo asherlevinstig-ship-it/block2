@@ -1,12 +1,20 @@
 #courtyardEnvironment{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;background:#07172c;contain:strict}
 #courtyardEnvironment[hidden]{display:none}
-body[data-environment="courtyard"]{background:#07172c}
+body{background:#07172c}
 body>.shell{position:relative;z-index:1}
 .courtyard-landscape,.courtyard-atmosphere,.courtyard-oak{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.courtyard-landscape,.courtyard-oak{object-fit:cover;object-position:72% 50%;image-rendering:auto;will-change:transform}
-.courtyard-landscape{filter:brightness(.78) saturate(.92)}
+.courtyard-landscape,.courtyard-oak{object-fit:cover;object-position:var(--environment-position,72%) 50%;image-rendering:auto;will-change:transform}
+.courtyard-landscape{filter:brightness(var(--environment-brightness,.78)) saturate(.92) hue-rotate(var(--environment-hue,0deg))}
 .courtyard-atmosphere{z-index:1}
 .courtyard-oak{z-index:2;object-fit:fill;object-position:left top;transform-origin:0 80%;filter:brightness(.83)}
+#courtyardEnvironment img[hidden]{display:none}
 #courtyardEnvironment::after{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(180deg,#03112766,transparent 24%,transparent 78%,#04112677),radial-gradient(ellipse at 46% 56%,#08182b28,transparent 65%)}
-@media(max-width:700px){.courtyard-landscape{object-position:90% 50%;filter:brightness(.68) saturate(.9)}.courtyard-oak{opacity:.7}}
+/* Measured clearance prevents Auto controls crossing the power/tool dock. */
+.scene .auto-panel{bottom:var(--auto-dock-clearance,18px);max-height:var(--auto-panel-max,calc(100% - 36px));overflow:auto;overscroll-behavior:contain}
+@media(max-width:700px){.courtyard-landscape{object-position:var(--environment-mobile-position,78%) 50%;filter:brightness(.68) saturate(.9) hue-rotate(var(--environment-hue,0deg))}.courtyard-oak{opacity:.7}}
 @media(prefers-reduced-motion:reduce){.courtyard-landscape,.courtyard-oak{will-change:auto;transform:none!important}}
+@media(max-width:700px){
+ .scene .auto-panel #autoWhere,.scene .auto-panel #autoDecision{display:none}
+ .scene .auto-panel{padding:10px 12px}
+ .scene .auto-panel h3{font-size:15px;margin:7px 0}
+}
