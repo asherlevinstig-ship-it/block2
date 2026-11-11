@@ -9,6 +9,7 @@ import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/p
 import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
 import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
 import {startTrailCampRest,stopTrailCampRest} from './trail-camp.mjs';
+import {oreProducts} from '../public/mining.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {activateVeil,awardVeilCloak,awardChallengeClothing,readyOutfitPower,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
@@ -34,7 +35,7 @@ import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread} fro
 import {moonwood} from '../public/moonwood.js';
 
 const besideRiverTrader=state=>state.position&&Math.abs(state.position.x-3)+Math.abs(state.position.y-4)===1;
-const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
+const prices={...Object.fromEntries(Object.entries(oreProducts).map(([id,ore])=>[id,ore.price])),boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
 const earn=(state,gold)=>{
   if(state.credits+gold>100000000)throw new Error('Invalid balance. Make room in your wallet.');
   state.credits+=gold;
@@ -49,6 +50,7 @@ function location(state,rooms){
 }
 
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,{millRaid,camp}={}){
+  if(state.miningCut)throw new Error('Choose a floor tile to stop mining before another activity.');
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
   if(action==='campRest'){startTrailCampRest(state,camp,now);return;}
@@ -319,6 +321,10 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  next.mining=previous.mining;
+  if(previous.miningCut&&next.location===previous.location&&next.position?.x===previous.position?.x&&next.position?.y===previous.position?.y)next.miningCut=previous.miningCut;
+  else delete next.miningCut;
+  if(previous.miningReceipt)next.miningReceipt=previous.miningReceipt;
   next.bank=previous.bank;
   next.familiars=previous.familiars;
   next.adventure={...next.adventure};for(const key of [...watchFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;

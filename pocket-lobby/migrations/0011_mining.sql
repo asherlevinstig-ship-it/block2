@@ -1,0 +1,7 @@
+CREATE TABLE tower_ore_deposits (
+ node_id TEXT PRIMARY KEY,
+ hits INTEGER NOT NULL DEFAULT 0,
+ ready_at INTEGER NOT NULL DEFAULT 0,
+ revision INTEGER NOT NULL DEFAULT 0,
+ mutation TEXT NOT NULL DEFAULT ''
+);

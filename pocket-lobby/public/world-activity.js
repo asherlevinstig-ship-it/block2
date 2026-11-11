@@ -1,4 +1,5 @@
 import {fishProducts} from './fishing.js';
+import {oreProducts} from './mining.js';
 const plan=s=>s?.plan?.source==='rules'?s.plan:s?.report?.source==='rules'?s.report:null;
 const sum=o=>Object.values(o??{}).reduce((a,b)=>a+b,0);
 export function worldActivityEvents(before,after,now=Date.now()){
@@ -6,6 +7,8 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const events=[],room=after.location,p=plan(after),b=plan(before),same=p&&b&&(p.routineId??p.startedAt)===(b.routineId??b.startedAt);
  const add=(id,kind,label,amount=0,at=now,eventRoom=room)=>{if(now-at>=0&&now-at<5000)events.push({id,kind,label,amount,at,room:eventRoom});};
  const timberGold=same?(p.timberSales?.gold??0)-(b.timberSales?.gold??0):0;
+ const mined=after.miningReceipt;
+ if(mined?.id&&mined.id!==before.miningReceipt?.id)add('ore:'+mined.id,'timber','+1 '+oreProducts[mined.ore].name,1,mined.at,'quarry');
  if(timberGold>0)add('timber-sale:'+p.startedAt+':'+p.timberSales.visits,'gold','+'+timberGold+' gold',timberGold,p.cursorAt,'market');
  if(p?.kind==='gambling'){
   if(same&&(p.rounds??0)>(b.rounds??0))for(const r of p.recent??[])if(r.at>(b.recent?.at(-1)?.at??0))add('gamble:'+p.startedAt+':'+r.at,r.net<0?'loss':r.net>0?'gold':'push',(r.net<0?'−'+Math.abs(r.net):r.net>0?'+'+r.net:'±0')+' gold',r.net,r.at,'lounge');
@@ -31,4 +34,4 @@ export function worldActivityEvents(before,after,now=Date.now()){
  return events.slice(-16);
 }
 export function createWorldActivityTracker(initial){let previous=initial?structuredClone(initial):null;return {update(state,now){const events=worldActivityEvents(previous,state,now);previous=structuredClone(state);return events;}};}
-export function sharedActivity(state){return state.hunting?.encounter?'combat':state.timberCut?'woodcutting':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.treeWork?.phase==='waiting'?'regrowth':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}
+export function sharedActivity(state){return state.hunting?.encounter?'combat':state.miningCut?'mining':state.timberCut?'woodcutting':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.treeWork?.phase==='waiting'?'regrowth':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}

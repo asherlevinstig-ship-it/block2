@@ -2,6 +2,8 @@ import {cellarFlags} from '../public/mill-cellar.js';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
 import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
+import {readOreDeposits,mineAction} from './mining.mjs';
+import {normalizeMining} from '../public/mining.js';
 import {trailCamp} from '../public/trail-camp.js';
 import {readTimberOrders,changeTimberOrder,atTradingPost,matchAutoTimberOrders,writeAutoTimberSale} from './timber-orders.mjs';
 import {timberMarketCounter,timberMarketSurplus,completeTimberMarketTrip} from './routine-queue.mjs';
@@ -45,6 +47,7 @@ const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
 function readPlayerState(row){
   const state=JSON.parse(row.state_json);
+  state.mining=normalizeMining(state.mining);
   migrateProgression(state);
   migrateHomeSafe(state);
   state.vitals=normalizeVitals(state.vitals);
@@ -190,6 +193,7 @@ export async function handlePlayerApi(request,env){
     if(!id)return json({error:"Load your character first."},401);
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
     if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
+    if(path==='/api/player/mining'&&request.method==='GET')return json({deposits:await readOreDeposits(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/timber-orders'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id);
       if(!row)return json({error:'Character not found.'},401);
@@ -236,6 +240,13 @@ export async function handlePlayerApi(request,env){
       return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
     }
     let state=readPlayerState(row),factionId=null,treeMutation=null;
+    if(path.startsWith('/api/player/gameplay/mine')){
+      const result=await mineAction(env.TOWER_DB,row,state,body,path.split('/').at(-1),Date.now());
+      const updated=result.updated??await write(env.TOWER_DB,id,row.revision,result.state,body.operation);
+      if(!updated)return json({error:'Your character changed. Reload to continue.',...packet(await read(env.TOWER_DB,id))},409);
+      await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision);
+      return json({...packet(updated),deposits:await readOreDeposits(env.TOWER_DB)});
+    }
     if(path==='/api/player/gameplay/campRefuel'){
       const now=Date.now();settleActivities(state,now);
       const result=await refuelTrailCamp(env.TOWER_DB,row,state,body.operation,now);
@@ -354,6 +365,7 @@ export async function handlePlayerApi(request,env){
       case "/api/player/auto/simple":{
         const now=Date.now();
         if(state.depthsRun||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Auto after finishing your current activity and leaving the dungeon.');
+        if(state.miningCut)throw new Error('Choose Stop at the quarry before starting Auto.');
         const rules=simpleAutoRules(body.mode,body.options??{});
         await settleBeforeLeavingFishing(env,id,state,now);
         saveAutoSettings(state,rules,now);

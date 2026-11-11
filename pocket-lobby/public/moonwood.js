@@ -1,5 +1,6 @@
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
 import {trailCamp,trailCampPhase} from './trail-camp.js';
+import {oreDeposits,quarryMiner,drawQuarryCliffs} from './mining.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
@@ -15,6 +16,7 @@ export const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
+    quarry:{number:'21',name:'Coppervein Quarry',description:'Collect a free pickaxe from the miner. Mine copper to train, then unlock iron at Mining 3. Sell ore at the Trading Post.',badge:'MINING',floor:'Open quarry',center:[5,5],palette:['#45515b','#69757a','#b7a17e'],authored:[['woodcutter',quarryMiner.x,quarryMiner.y],...oreDeposits.map(node=>['oreDeposit',node.x,node.y]),['wildrock',1,1],['wildrock',10,8],['pillar',10,5]]},
     millCellar:cellarArea,
     [wildlifeRoom]:wildlifeArea,
     ...willowmereAreas,...watchAreas,
@@ -37,6 +39,7 @@ export const moonwood=(()=>{
   };
   const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
+  heights.oreDeposit=28;
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -57,6 +60,7 @@ export const moonwood=(()=>{
   connect('willowbank','millbrook',[3,0,3,1,'WILLOWBANK'],[0,6,1,6,'MILLBROOK']);
   connect('trail',wildlifeRoom,[10,0,10,1,'LANTERN TRAIL'],[0,9,1,9,'WILDLIFE RESERVE']);
   connect('trail','logging',[9,9,9,8,'TRAIL'],[0,5,1,5,'TIMBER']);
+  connect('logging','quarry',[5,0,5,1,'TIMBER HOLLOW'],[0,5,1,5,'QUARRY']);
   connect('trail','clearing',[7,0,7,1,'TRAIL'],[0,5,1,5,'HUNT']);
   connect('trail','grove',[4,0,4,1,'TRAIL'],[0,5,1,5,'GROVE']);
   connect('trail','creek',[11,4,10,4,'TRAIL'],[0,4,1,4,'CREEK']);
@@ -120,6 +124,9 @@ export const moonwood=(()=>{
     if(id==='depthsVault')carve({x:3,y:4},center);
     const hiddenTrail=id==='grove'?[...path].filter(tile=>!visiblePath.has(tile)).map(tile=>tile.split(',').map(Number)):[];
     const scenery=authored.map(([type,x,y])=>({id:key(x,y),type,x,y,rot:0,room:id}));
+    if(id==='quarry')for(const item of scenery){
+      if(item.type==='oreDeposit')Object.assign(item,oreDeposits.find(node=>node.x===item.x&&node.y===item.y));
+    }
     if(!area.authored){
       for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
         if(path.has(key(x,y))||reserved.has(key(x,y))||isWater(id,x))continue;
@@ -165,6 +172,7 @@ export const moonwood=(()=>{
         if(!onTrail)surface(x+.58,y+.72,.05,.12,.15,id==='roots'?'#9a7482':'#679397');
       }
     }
+    if(id==='quarry')drawQuarryCliffs({block,surface});
     if(id==='shrine'||id==='ruins'){
       surface(3.6,2.65,4.7,3.7,.27,'#4f4864');
       surface(3.74,2.79,4.42,3.42,.34,'#ada0a7');

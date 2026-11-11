@@ -38,7 +38,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
     state.activityLog=[...(state.activityLog??[]).filter(item=>item.id!==routineId),entry].slice(-10);return;
   }
   // Unfinished manual casts/cuts pay nothing. The saved routine starts cleanly.
-  delete state.fishingCast;delete state.timberCut;
+  delete state.fishingCast;delete state.timberCut;delete state.miningCut;
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget,...(rules.simpleMode?{simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'}:{}),...(rules.food?{foodPolicy:rules.food}:{})};
   if(physicalTimber)metadata.physicalTimber=true;
   if(physicalFishing)metadata.physicalFishing=true;
