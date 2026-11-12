@@ -24,6 +24,7 @@ function finish(message,status=400){
   const escaped=message.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   return new Response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LiveWeave sign-in</title><body style="margin:10vh auto;padding:24px;max-width:520px;background:#0b162b;color:#e8edf8;font:16px/1.6 system-ui"><h1>LiveWeave sign-in</h1><p>'+escaped+'</p><a style="color:#f5d88a" href="/">Return to the game and try again</a></body></html>',{status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",'Set-Cookie':clearCookie(FLOW_COOKIE)}});
 }
+export {finish as liveweaveFailure};
 export async function handleLiveweave(request,env,{issueSession,signedIn,json,limit}){
   const url=new URL(request.url),route=url.pathname.split('/').at(-1);
   if(!liveweaveEnabled(env))return json({error:'LiveWeave sign-in is not available yet.'},503);
@@ -48,9 +49,15 @@ export async function handleLiveweave(request,env,{issueSession,signedIn,json,li
   if((current?.playerId??null)!==flow.player_id||(current?.account?.id??null)!==flow.account_id)return finish('The game account changed during sign-in. Please start again from the correct character.');
   const claimed=await env.TOWER_DB.prepare('DELETE FROM tower_login_flows WHERE state_hash = ? AND expires_at > ? RETURNING state_hash').bind(hash,Date.now()).first();
   if(!claimed)return finish('This sign-in has already been used. Please start again.');
-  const exchange=await (env.LIVEWEAVE_FETCH??fetch)(env.LIVEWEAVE_AUTH_URL,{method:'POST',headers:{'Content-Type':'application/json','User-Agent':'TowerSignIn/1.0',Authorization:'Bearer '+env.LIVEWEAVE_AUTH_SECRET},body:JSON.stringify({code,state}),redirect:'error',signal:AbortSignal.timeout(10000)});
+  let exchange;
+  try{
+    // Workers supports manual/follow, not Fetch's "error" redirect mode.
+    // Refuse redirects without forwarding the shared key to another address.
+    exchange=await (env.LIVEWEAVE_FETCH??fetch)(env.LIVEWEAVE_AUTH_URL,{method:'POST',headers:{'Content-Type':'application/json','User-Agent':'TowerSignIn/1.0',Authorization:'Bearer '+env.LIVEWEAVE_AUTH_SECRET},body:JSON.stringify({code,state}),redirect:'manual',signal:AbortSignal.timeout(10000)});
+  }catch{return finish('The connection to LiveWeave could not be completed. Return to the game and start sign-in again.',502);}
   if(!exchange.ok)return finish('LiveWeave could not confirm this sign-in. Please start again.',502);
-  const person=await exchange.json();
+  let person;
+  try{person=await exchange.json();}catch{return finish('LiveWeave returned an unexpected response. Please start sign-in again.',502);}
   if(!['student','teacher'].includes(person.type)||!Number.isSafeInteger(person.id)||person.id<1||!Number.isSafeInteger(person.schoolId)||person.schoolId<0)return finish('LiveWeave returned an invalid account. Please contact your school.',502);
   const subject=person.type+':'+person.id;
   const linked=await env.TOWER_DB.prepare('SELECT a.account_id, a.username FROM tower_external_accounts e JOIN tower_accounts a ON a.account_id = e.account_id WHERE e.provider = ? AND e.subject = ?').bind(PROVIDER,subject).first();

@@ -6,7 +6,7 @@ import {handlePlayerApi} from '../server/player-api.mjs';
 const origin='https://tower.test',secret='a'.repeat(64),code='b'.repeat(64);
 function fixture(){
  const {db,sql}=testDatabase();let person={type:'student',id:123,schoolId:4},exchanges=0;
- const env={TOWER_DB:db,LIVEWEAVE_AUTH_URL:'https://liveweave.test/tower-auth.php',LIVEWEAVE_AUTH_SECRET:secret,LIVEWEAVE_FETCH:async(url,options)=>{exchanges++;assert.equal(options.headers.Authorization,'Bearer '+secret);assert.equal(options.redirect,'error');assert.equal(JSON.parse(options.body).code,code);return Response.json(person);}};
+ const env={TOWER_DB:db,LIVEWEAVE_AUTH_URL:'https://liveweave.test/tower-auth.php',LIVEWEAVE_AUTH_SECRET:secret,LIVEWEAVE_FETCH:async(url,options)=>{exchanges++;assert.equal(options.headers.Authorization,'Bearer '+secret);assert.equal(options.redirect,'manual');assert.equal(JSON.parse(options.body).code,code);return Response.json(person);}};
  function client(){const cookies=new Map();return {cookies,async call(path,body,site=origin){const headers={Cookie:[...cookies].map(([k,v])=>k+'='+v).join(';')};if(body){headers.Origin=site;headers['Content-Type']='application/json';}const handler=path.startsWith('account/')?handleAccountApi:handlePlayerApi;const r=await handler(new Request(origin+'/api/'+path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined}),env);for(const c of r.headers.getSetCookie()){const [pair]=c.split(';'),[k,v]=pair.split('=');if(v)cookies.set(k,v);else cookies.delete(k);}const text=await r.text();return {status:r.status,location:r.headers.get('Location'),data:r.headers.get('Content-Type')?.includes('json')?JSON.parse(text):text};},async start(){const r=await this.call('account/liveweave/start',{});assert.equal(r.status,200);return new URL(r.data.url).searchParams.get('state');},callback(state){return this.call('account/liveweave/callback?state='+state+'&code='+code);}};}
  return {sql,env,client,get exchanges(){return exchanges;},setPerson:value=>person=value};
 }
@@ -65,4 +65,14 @@ test('invalid exchange data never links a character and unavailable providers ar
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM tower_external_accounts').get().n,0);
  f.env.LIVEWEAVE_AUTH_SECRET='';assert.equal((await a.call('account/status')).data.liveweave.enabled,false);assert.equal((await a.call('account/liveweave/start',{})).status,503);
  f.sql.close();
+});
+
+test('LiveWeave connection errors and redirect responses show a safe retry screen',async()=>{
+ for(const response of [()=>{throw new TypeError('Network failed');},()=>new Response(null,{status:302,headers:{Location:'https://other.test'}}),()=>new Response('<html>hosting error</html>',{status:200})]){
+  const f=fixture(),a=f.client();await a.call('player/session',{legacy:{credits:72}});
+  f.env.LIVEWEAVE_FETCH=async(url,options)=>{assert.equal(options.redirect,'manual');return response();};
+  const result=await a.callback(await a.start());assert.equal(result.status,502);assert.match(result.data,/Return to the game/);assert(!result.data.includes('account service is temporarily unavailable'));
+  assert.equal((await a.call('player/state')).data.state.credits,72);assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM tower_external_accounts').get().n,0);
+  f.sql.close();
+ }
 });

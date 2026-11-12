@@ -1,6 +1,6 @@
 import {scrypt,timingSafeEqual} from 'node:crypto';
 import {Buffer} from 'node:buffer';
-import {handleLiveweave,liveweaveStatus} from './liveweave.mjs';
+import {handleLiveweave,liveweaveStatus,liveweaveFailure} from './liveweave.mjs';
 import {resolveIdentity,randomToken,tokenHash,sessionCookie,clearCookie,ACCOUNT_COOKIE,GUEST_COOKIE,SESSION_AGE} from './identity.mjs';
 
 const json=(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
@@ -98,6 +98,10 @@ export async function handleAccountApi(request,env){
     }
     return json({error:'Not found.'},404);
   }catch(error){
+    if(route==='liveweave/callback'){
+      console.error('LiveWeave callback failed',error.name);
+      return liveweaveFailure('Your sign-in could not be completed. Return to the game and start LiveWeave sign-in again.',503);
+    }
     if(error instanceof SyntaxError)return json({error:'Invalid account request.'},400);
     if(/Use a (password|username)/.test(error.message))return json({error:error.message},400);
     console.error('Account service error',error.name);return json({error:'The account service is temporarily unavailable. Please try again.'},503);
