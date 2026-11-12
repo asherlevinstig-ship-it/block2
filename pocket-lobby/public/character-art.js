@@ -9,7 +9,8 @@ export function towerCharacterPose(meta,options={}){
   const {direction='right',back=false,time=0,cycle=0,seated=false,wave=null,fishing=false,fishingAge=0,weapon=false,weaponTier=null,pose={},reduced=false}=options;
   const row=back?(direction==='right'?2:3):(direction==='right'?1:0);
   let state='idle',frame=reduced?0:Math.floor(time/850)%2;
-  if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
+  if(options.meditating){state='blink';frame=0;}
+  else if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
   else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
   else if(pose.recoil>1){state='hurt';frame=0;}
   else if(weapon&&['basicAxe','basicPick','copperPick','ironPick','runicPick'].includes(weaponTier)){state='chop';frame=reduced?5:Math.floor(clamp(pose.chop??((time%700)/700),0,.999)*8);}
@@ -22,10 +23,52 @@ export function towerCharacterPose(meta,options={}){
   else if(pose.ready){state='ready';frame=reduced?0:Math.floor(time/650)%2;}
   else if(cycle){state='walk';frame=reduced?0:Math.floor(time/70)%8;}
   else if(!reduced&&time%3700>3550){state='blink';frame=0;}
-  if(options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
+  if(!options.meditating&&options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
   const animation=meta.states[state];frame=clamp(Math.floor(frame),0,animation.frames-1);
   const column=animation.start+frame,detail=meta.poses[meta.directions[row]][column];
-  return {state,frame,row,column,detail};
+  return {state:options.meditating?'meditate':state,frame:options.meditating?(reduced?0:Number(Math.sin(time/1600)>.25)):frame,row,column,detail};
+}
+
+// Keep the authored face, hair and tailored torso. Fold the lower body into a
+// grounded lotus pose rather than squashing a standing sprite or its feet.
+export function meditateTowerFrame(pixels,source,width,height,appearance,selection){
+ const original=pixels.slice(),center=Math.floor(width/2),at=(x,y)=>(y*width+x)*4;
+ let waist=height;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=at(x,y);if(source[i]===250&&source[i+1]===2&&source[i+3])waist=Math.min(waist,y);}
+ if(waist===height)waist=66;
+ const shift=74-waist,lift=selection.frame;
+ const put=(x,y,color)=>{if(x<0||x>=width||y<0||y>=height)return;pixels.set([...rgb(color),255],at(x,y));};
+ const poly=(points,color)=>{
+  const top=Math.floor(Math.min(...points.map(p=>p[1]))),bottom=Math.ceil(Math.max(...points.map(p=>p[1])));
+  for(let y=top;y<=bottom;y++){
+   const cuts=[];for(let i=0,j=points.length-1;i<points.length;j=i++){
+    const a=points[i],b=points[j];if((a[1]>y)!==(b[1]>y))cuts.push(a[0]+(y-a[1])*(b[0]-a[0])/(b[1]-a[1]));
+   }
+   cuts.sort((a,b)=>a-b);for(let i=0;i+1<cuts.length;i+=2)for(let x=Math.ceil(cuts[i]);x<=Math.floor(cuts[i+1]);x++)put(center+x,y,color);
+  }
+ };
+ pixels.fill(0);
+ const dress=[6,9].includes(appearance.outfit),cloth=(dress?JACKETS[appearance.outfit]:TROUSERS[appearance.trousers??0])??TROUSERS[0],sleeve=JACKETS[appearance.outfit??0]??JACKETS[0],boot=BOOTS[appearance.boots??0]??BOOTS[0];
+ poly([[-18,77],[-13,73],[-6,75],[0,79],[7,74],[14,74],[19,79],[15,84],[6,86],[-1,84],[-11,86],[-19,82]],'#242838');
+ poly([[-17,78],[-12,75],[-5,77],[5,82],[13,83],[5,85],[-4,82],[-13,84],[-17,81]],cloth[1]);
+ poly([[16,78],[13,75],[7,76],[-2,81],[-11,83],[-7,85],[2,83],[14,82],[17,80]],cloth[0]);
+ poly([[-14,77],[-11,76],[-4,78],[4,82],[0,82],[-7,79]],cloth[2]);
+ poly([[13,76],[15,78],[7,80],[1,82],[0,81],[6,78]],cloth[1]);
+ if(dress){poly([[-14,78],[0,80],[14,78],[14,82],[4,85],[-7,85],[-15,82]],cloth[1]);for(let x=-9;x<=9;x+=6){put(center+x,82,cloth[2]);put(center+x+1,83,cloth[0]);}}
+ else{poly([[-7,82],[-3,80],[2,82],[2,84],[-5,84]],boot[0]);poly([[4,82],[9,81],[11,83],[5,85],[2,84]],boot[1]);put(center+7,82,boot[2]);}
+ // Torso breathes one native pixel; the crossed legs stay planted.
+ for(let y=0;y<waist+2;y++)for(let x=0;x<width;x++){
+  if(y>waist-8&&Math.abs(x-center)>11)continue;
+  const from=at(x,y),dy=y+shift-lift;if(dy<0||dy>=height||!original[from+3])continue;
+  pixels.set(original.subarray(from,from+4),at(x,dy));
+ }
+ for(const side of [-1,1]){
+  poly([[side*10,65-lift],[side*14,68-lift],[side*16,75],[side*12,77],[side*10,72]],sleeve[0]);
+  poly([[side*11,67-lift],[side*13,69-lift],[side*14,74],[side*12,74]],sleeve[1]);
+  poly([[side*14,73],[side*17,74],[side*17,77],[side*13,77],[side*12,75]],'#a86d50');
+  poly([[side*14,73],[side*17,74],[side*16,76],[side*13,75]],'#edbd8e');
+  put(center+side*15,74,'#ffe0ae');
+ }
 }
 export function tintTowerPixel(r,g,b,a,appearance={}){
   if(r!==250||g<1||g>4)return [r,g,b,a];
@@ -195,7 +238,7 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
   const meta=metadata,cache=new Map(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
-    const key=[selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,vest??false].join(':');
+    const key=[selection.state,selection.frame,selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,vest??false].join(':');
     if(cache.has(key)){const image=cache.get(key);cache.delete(key);cache.set(key,image);return image;}
     const atlas=vest?atlases.armour:atlases.normal,pixels=new Uint8ClampedArray(width*height*4),sourcePixels=new Uint8ClampedArray(width*height*4);
     const indices=[0,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0];
@@ -209,14 +252,24 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     }
     tailorTowerFrame(pixels,sourcePixels,width,height,appearance,selection,vest);
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
+    if(selection.state==='meditate')meditateTowerFrame(pixels,sourcePixels,width,height,appearance,selection);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');
     const data=typeof ImageData==='function'?new ImageData(pixels,width,height):{data:pixels,width,height};ctx.putImageData(data,0,0);
     cache.set(key,canvas);if(cache.size>384)cache.delete(cache.keys().next().value);return canvas;
   }
   function grip(x,y,options={}){const {detail}=towerCharacterPose(meta,options);return [x+(detail.grip[0]-meta.pivot[0])*meta.scale,y+(detail.grip[1]-meta.pivot[1])*meta.scale];}
   function draw(ctx,x,y,appearance={},options={}){
+    if(options.meditating)options={...options,weapon:false,sheathed:false};
     const selection=towerCharacterPose(meta,options),image=frameImage(appearance,selection,options.vest);
     const [gx,gy]=grip(x,y,options);ctx.save();ctx.imageSmoothingEnabled=false;
+    if(options.meditating){
+      const phase=options.reduced?0:(options.time??0)/1600;
+      ctx.save();ctx.globalAlpha*=.35+.08*Math.sin(phase);ctx.strokeStyle='#c2b4fa';ctx.lineWidth=.65;
+      ctx.beginPath();ctx.ellipse(x,y+1,15+Math.sin(phase)*.5,5,0,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='#e6d8ab';
+      for(const side of [-1,1]){const rise=options.reduced?8:((options.time??0)/150+side*9+20)%18;ctx.fillRect(x+side*14,y-5-rise,.8,.8);}
+      ctx.restore();
+    }
     const carried=options.sheathed&&!options.weapon?carriedTowerEquipment(meta,x,y,options):null;
     if(carried&&!options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&options.back)drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);

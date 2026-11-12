@@ -3481,13 +3481,14 @@ function draw(time){
     const preparedSwing=miningCut??autoMine;
     const miningSwing=miningRooms.includes(currentRoom)&&!step&&!autoServerWalking&&preparedSwing&&combatNow()>=preparedSwing.started&&combatNow()<preparedSwing.endsAt+400&&preparedSwing;
     const spritePose=miningSwing?{...pose,chop:choppingPhase(miningSwing,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
+    const meditating=window.towerLearning?.active&&!routineControlled()&&!player.inCombat&&!seat&&!step&&!woodSession&&!cast&&!miningSwing;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     const familiar=drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
-    renderedActors.push({id:'self',name:avatar.name,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
+    renderedActors.push({id:'self',name:avatar.name,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
     if(veiled){
       ctx.save();ctx.strokeStyle='#a3e6eb';ctx.globalAlpha=reducedMotion.matches?.45:.38+.16*Math.sin(time/180);

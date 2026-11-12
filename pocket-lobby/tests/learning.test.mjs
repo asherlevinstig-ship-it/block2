@@ -96,3 +96,10 @@ test('first Auto lesson routes zero-point players to questions before starting t
  assert.match(g.nodes.get('autoLessonStart').textContent,/Earn my first/);
  g.nodes.get('autoLessonStart').onclick();assert.equal(opens,1);assert(!g.nodes.get('autoLessonDialog').open);
 });
+
+test('the world character meditates while the question screen is open and stands when it closes',()=>{
+ const g=boot(character()),draw=g.context.towerCharacterArt.draw,poses=[];
+ g.context.towerCharacterArt.draw=(ctx,x,y,appearance,options)=>{if(appearance.name==='Guest')poses.push(options);return draw(ctx,x,y,appearance,options);};
+ g.context.towerLearning={active:true};g.run('draw(2000)');assert(poses.at(-1).meditating);
+ g.context.towerLearning.active=false;g.run('draw(2100)');assert(!poses.at(-1).meditating);
+});

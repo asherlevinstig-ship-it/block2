@@ -1,8 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {uniqueTowerOutfit,tailorTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {uniqueTowerOutfit,tailorTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
 const root=new URL('../public/art/',import.meta.url),meta=JSON.parse(fs.readFileSync(new URL('tower-adventurer.json',root),'utf8'));
+
+test('meditation uses closed eyes in every facing, stable breathing frames and a still reduced-motion pose',()=>{
+ for(const [direction,back] of [['left',false],['right',false],['right',true],['left',true]]){
+  const a=towerCharacterPose(meta,{direction,back,meditating:true,time:0,weapon:true,pose:{attack:.5}}),b=towerCharacterPose(meta,{direction,back,meditating:true,time:1800});
+  assert.equal(a.state,'meditate');assert.equal(a.column,meta.states.blink.start);assert.equal(a.frame,0);assert.equal(b.frame,1);assert.equal(a.column,b.column);
+  assert.equal(towerCharacterPose(meta,{meditating:true,time:1800,reduced:true}).frame,0);
+ }
+});
+
+test('meditation preserves face pixels, folds legs and anchors them through the breathing cycle',()=>{
+ const source=new Uint8ClampedArray(80*100*4),initial=source.slice(),at=(x,y)=>(y*80+x)*4;
+ source.set([250,2,1,255],at(40,64));initial.set([61,69,101,255],at(40,64));initial.set([33,66,99,255],at(40,20));
+ const a=initial.slice(),b=initial.slice();meditateTowerFrame(a,source,80,100,{trousers:0,hair:3},{frame:0});meditateTowerFrame(b,source,80,100,{trousers:0,hair:3},{frame:1});
+ assert.deepEqual([...a.slice(at(40,30),at(40,30)+4)],[33,66,99,255]);assert.deepEqual([...b.slice(at(40,29),at(40,29)+4)],[33,66,99,255]);
+ assert.deepEqual(a.slice(at(0,78)),b.slice(at(0,78)),'legs must stay planted while torso breathes');
+ assert(a[at(24,79)+3]>0&&a[at(56,79)+3]>0,'crossed knees extend on both sides');
+});
+
+test('meditation frames have a separate cache and suppress both carried and drawn weapons',()=>{
+ const normal={data:new Uint8ClampedArray(meta.width*meta.height*4)},images=[];
+ const renderer=createTowerCharacterRenderer({metadata:meta,atlases:{normal,armour:normal},createCanvas:()=>({getContext:()=>({putImageData(){}})})});
+ let marks=0;const ctx={save(){},restore(){},beginPath(){},ellipse(){},stroke(){},fillRect(){marks++;},drawImage:image=>images.push(image),globalAlpha:1};
+ renderer.draw(ctx,0,0,{}, {state:'blink'});renderer.draw(ctx,0,0,{}, {meditating:true,weapon:true,sheathed:true,weaponTier:'trainingSword',time:0});
+ assert.notEqual(images[0],images[1]);assert.equal(marks,2,'only meditation motes draw, no sword');
+ renderer.draw(ctx,0,0,{}, {meditating:true,time:0});assert.equal(images[1],images[2]);
+});
 
 test('character atlases cover all actions and directions with valid attached hand positions',()=>{
   assert.deepEqual(meta.directions,['SW','SE','NE','NW']);assert.deepEqual(meta.cell,[80,100]);assert.equal(meta.states.walk.frames,8);
