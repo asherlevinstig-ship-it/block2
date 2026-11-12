@@ -52,3 +52,36 @@ test('account validation and rate limits run before expensive password hashing',
   assert.equal((await a.call('account/login',{username:'nobody',password:''})).status,429);
   sql.close();
 });
+
+test('password changes preserve progress and recovery but revoke all previous sessions',async()=>{
+ const {db,sql}=testDatabase(),env={TOWER_DB:db},a=client(env),b=client(env);
+ await a.call('player/session',{legacy:{credits:77}});
+ const registered=await a.call('account/register',{username:'PasswordHero',password:'the original long passphrase'});
+ await b.call('account/login',{username:'PasswordHero',password:'the original long passphrase'});
+ assert.equal((await a.call('account/password',{password:'wrong current password',newPassword:'a new long passphrase'})).status,401);
+ assert.equal((await a.call('account/password',{password:'the original long passphrase',newPassword:'short'})).status,400);
+ assert.equal((await b.call('player/state')).status,200);
+ const oldCookies=[...a.cookies];
+ assert.equal((await a.call('account/password',{password:'the original long passphrase',newPassword:'a new long passphrase'})).status,200);
+ assert.equal((await a.call('player/state')).data.state.credits,77);
+ assert.equal((await b.call('player/state')).status,401);
+ const stale=client(env);for(const [k,v] of oldCookies)stale.cookies.set(k,v);
+ assert.equal((await stale.call('player/state')).status,401);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM tower_sessions').get().n,1);
+ assert.equal((await b.call('account/login',{username:'PasswordHero',password:'the original long passphrase'})).status,401);
+ assert.equal((await b.call('account/login',{username:'PasswordHero',password:'a new long passphrase'})).status,200);
+ assert.equal((await b.call('account/recover',{username:'PasswordHero',password:'a recovered long passphrase',recoveryCode:registered.data.recoveryCode})).status,200);
+ sql.close();
+});
+
+test('failed sign-up session creation rolls back account linking and leaves guest usable',async()=>{
+ const {db,sql}=testDatabase(),a=client({TOWER_DB:db});
+ await a.call('player/session',{legacy:{credits:42}});
+ sql.exec("CREATE TRIGGER fail_session BEFORE INSERT ON tower_sessions BEGIN SELECT RAISE(ABORT, 'fixture failure'); END");
+ assert.equal((await a.call('account/register',{username:'RetryHero',password:'a sufficiently long passphrase'})).status,503);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM tower_accounts').get().n,0);
+ assert.equal((await a.call('player/state')).data.state.credits,42);
+ sql.exec('DROP TRIGGER fail_session');
+ assert.equal((await a.call('account/register',{username:'RetryHero',password:'a sufficiently long passphrase'})).status,200);
+ sql.close();
+});

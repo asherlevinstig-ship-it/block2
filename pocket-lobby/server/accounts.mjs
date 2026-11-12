@@ -20,9 +20,10 @@ async function limit(db,key,max,period){
   const row=await db.prepare('INSERT INTO tower_auth_limits (limit_key, window_start, hits) VALUES (?, ?, 1) ON CONFLICT(limit_key) DO UPDATE SET hits = CASE WHEN window_start = excluded.window_start THEN hits + 1 ELSE 1 END, window_start = excluded.window_start RETURNING hits').bind(await tokenHash(key),window).first();
   return row.hits<=max;
 }
-async function issueSession(db,accountId){
+async function issueSession(db,accountId,createAccount=null){
   const token=randomToken(),now=Date.now();
-  await db.prepare('INSERT INTO tower_sessions (session_hash, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)').bind(await tokenHash(token),accountId,now+SESSION_AGE*1000,now).run();
+  const session=db.prepare('INSERT INTO tower_sessions (session_hash, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)').bind(await tokenHash(token),accountId,now+SESSION_AGE*1000,now);
+  if(createAccount)await db.batch([createAccount,session]);else await session.run();
   await db.prepare('DELETE FROM tower_sessions WHERE account_id = ? AND (expires_at <= ? OR session_hash NOT IN (SELECT session_hash FROM tower_sessions WHERE account_id = ? ORDER BY created_at DESC LIMIT 10))').bind(accountId,now,accountId).run();
   return token;
 }
@@ -44,6 +45,20 @@ export async function handleAccountApi(request,env){
     }
     const ip=request.headers.get('CF-Connecting-IP')??'local';
     if(!await limit(env.TOWER_DB,'auth-ip:'+ip,20,600000))return json({error:'Too many attempts. Please try again in ten minutes.'},429);
+    if(route==='password'){
+      if(!identity?.account)return json({error:'Sign in to change your password.'},401);
+      const password=passwordInput(body.newPassword);
+      const row=await env.TOWER_DB.prepare('SELECT password_hash FROM tower_accounts WHERE account_id = ?').bind(identity.account.id).first();
+      if(!await verifyPassword(body.password,row?.password_hash))return json({error:'The current password did not match.'},401);
+      const nextHash=await hashPassword(password),token=randomToken(),sessionHash=await tokenHash(token),now=Date.now(),id=identity.account.id;
+      const results=await env.TOWER_DB.batch([
+        env.TOWER_DB.prepare('UPDATE tower_accounts SET password_hash = ? WHERE account_id = ? AND password_hash = ? RETURNING account_id').bind(nextHash,id,row.password_hash),
+        env.TOWER_DB.prepare('DELETE FROM tower_sessions WHERE account_id = ? AND EXISTS (SELECT 1 FROM tower_accounts WHERE account_id = ? AND password_hash = ?)').bind(id,id,nextHash),
+        env.TOWER_DB.prepare('INSERT INTO tower_sessions (session_hash, account_id, expires_at, created_at) SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM tower_accounts WHERE account_id = ? AND password_hash = ?)').bind(sessionHash,id,now+SESSION_AGE*1000,now,id,nextHash)
+      ]);
+      if(!results[0].results?.length)return json({error:'Your password changed in another session. Please sign in again.'},409);
+      return signedIn({account:identity.account,ok:true},token);
+    }
     if(route==='recovery-code'){
       if(!identity?.account)return json({error:'Sign in to manage your recovery code.'},401);
       const row=await env.TOWER_DB.prepare('SELECT password_hash FROM tower_accounts WHERE account_id = ?').bind(identity.account.id).first();
@@ -58,9 +73,10 @@ export async function handleAccountApi(request,env){
       const player=await env.TOWER_DB.prepare('SELECT player_id FROM tower_players WHERE player_id = ?').bind(identity.playerId).first();if(!player)return json({error:'Load your character first.'},409);
       if(await env.TOWER_DB.prepare('SELECT account_id FROM tower_accounts WHERE username_key = ? OR player_id = ?').bind(key,identity.playerId).first())return json({error:'That username or character already has an account. Try signing in.'},409);
       const accountId=crypto.randomUUID(),recoveryCode=randomToken(),passwordHash=await hashPassword(password);
-      try{await env.TOWER_DB.prepare('INSERT INTO tower_accounts (account_id, username_key, username, player_id, password_hash, recovery_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(accountId,key,username,identity.playerId,passwordHash,await tokenHash(recoveryCode),Date.now()).run();}
+      let token;
+      try{token=await issueSession(env.TOWER_DB,accountId,env.TOWER_DB.prepare('INSERT INTO tower_accounts (account_id, username_key, username, player_id, password_hash, recovery_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(accountId,key,username,identity.playerId,passwordHash,await tokenHash(recoveryCode),Date.now()));}
       catch(error){if(/UNIQUE/i.test(error.message))return json({error:'That username or character already has an account. Try signing in.'},409);throw error;}
-      return signedIn({account:{id:accountId,username},recoveryCode},await issueSession(env.TOWER_DB,accountId));
+      return signedIn({account:{id:accountId,username},recoveryCode},token);
     }
     const account=await env.TOWER_DB.prepare('SELECT * FROM tower_accounts WHERE username_key = ?').bind(key).first();
     if(route==='login'){

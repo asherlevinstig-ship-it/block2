@@ -509,7 +509,7 @@
       Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
-      window.playerCloud={enqueue,flush,attach,readMillRaid:()=>request('mill-raid'),millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
+      window.playerCloud={enqueue,flush,attach,prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},readMillRaid:()=>request('mill-raid'),millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;
