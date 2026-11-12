@@ -1,12 +1,12 @@
 'use strict';
 (()=>{
   const $=id=>document.getElementById(id);
-  let account=null,mode='register',busy=false,reloadOnClose=false;
+  let account=null,mode='register',busy=false,reloadOnClose=false,liveweave={enabled:false,linked:false,passwordLogin:true};
   async function request(path,body){
     const response=await fetch('/api/account/'+path,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
     const data=await response.json();if(!response.ok)throw new Error(data.error??'Please try again.');return data;
   }
-  async function refresh(){const data=await request('status');account=data.account;$('accountOpen').textContent=account?account.username:'Save account';$('accountOpen').setAttribute('aria-label',account?'Manage account for '+account.username:'Create an account or sign in to save your adventure');return data;}
+  async function refresh(){const data=await request('status');account=data.account;liveweave=data.liveweave??{enabled:false,linked:false,passwordLogin:true};$('accountOpen').textContent=account?account.username:'Save account';$('accountOpen').setAttribute('aria-label',account?'Manage account for '+account.username:'Create an account or sign in to save your adventure');return data;}
   function render(){
     $('accountForm').hidden=!!account;$('accountSettings').hidden=!account;$('accountTabs').hidden=!!account;
     $('accountHeading').textContent=account?'Your account':mode==='register'?'Keep your adventure.':mode==='login'?'Welcome back.':'Recover your account.';
@@ -23,6 +23,13 @@
     $('accountSubmit').textContent=mode==='register'?'Create account & keep progress':mode==='login'?'Sign in':'Reset password';
     for(const button of $('accountTabs').querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.mode===mode));
     $('accountMessage').textContent='';
+    $('accountLiveweave').hidden=!liveweave.enabled;
+    $('accountLiveweaveButton').hidden=liveweave.linked;
+    $('accountLiveweaveButton').textContent=account?'Link this character to LiveWeave':'Continue with LiveWeave';
+    $('accountLiveweaveTitle').textContent=liveweave.linked?'Connected to LiveWeave':'Use your school account';
+    $('accountLiveweaveHint').textContent=liveweave.linked?'Sign in with LiveWeave on any device to return to this character. Manage your school password on LiveWeave.':account?'Keep this character and connect it to your LiveWeave student or teacher account.':'Sign in on LiveWeave, then return here. Your current character is kept on your first link. If already linked, your saved character opens.';
+    $('accountPasswordSecurity').hidden=!!account&&!liveweave.passwordLogin;
+    $('accountRecoverySecurity').hidden=!!account&&!liveweave.passwordLogin;
   }
   async function open(next){
     if(busy)return;mode=next??(window.towerAuthRequired?'login':mode);$('accountRecoveryResult').hidden=true;reloadOnClose=false;
@@ -46,6 +53,11 @@
   }
   $('accountOpen').onclick=()=>open();
   $('cloudAccount').onclick=()=>open();
+  $('accountLiveweaveButton').onclick=async()=>{
+    if(busy)return;busy=true;$('accountLiveweaveButton').disabled=true;$('accountMessage').textContent='Opening LiveWeave sign-in…';
+    try{await prepare();const data=await request('liveweave/start',{});clearCharacterCache();location.assign(data.url);}
+    catch(error){$('accountMessage').textContent=error.message;window.towerMultiplayer?.reconnect();busy=false;$('accountLiveweaveButton').disabled=false;}
+  };
   for(const button of $('accountTabs').querySelectorAll('button'))button.onclick=()=>{if(busy)return;mode=button.dataset.mode;render();};
   $('accountForm').onsubmit=async event=>{
     event.preventDefault();if(busy)return;busy=true;$('accountSubmit').disabled=true;$('accountMessage').textContent='Working…';

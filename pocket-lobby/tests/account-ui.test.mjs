@@ -27,3 +27,13 @@ test('account creation validates confirmation before preparing and uses AP-safe 
  get('accountConfirmPassword').value=get('accountPassword').value;await get('accountForm').onsubmit({preventDefault(){}});
  assert.deepEqual(events,['prepare','register']);assert.equal(get('accountRecoveryResult').hidden,false);
 });
+
+test('LiveWeave sign-in saves safely before leaving and does not request a game password',async()=>{
+ const nodes=new Map(),events=[];
+ class Node{constructor(){this.value='';this.hidden=false;this.listeners={};this.dataset={};}querySelectorAll(){return [];}querySelector(){return new Node();}setAttribute(){}addEventListener(name,fn){this.listeners[name]=fn;}showModal(){this.open=true;}}
+ const get=id=>{if(!nodes.has(id))nodes.set(id,new Node());return nodes.get(id);};
+ const context=vm.createContext({document:{getElementById:get},localStorage:{removeItem:()=>events.push('clear')},AbortSignal,location:{assign:url=>events.push(url)},fetch:async url=>url.endsWith('/status')?Response.json({account:null,liveweave:{enabled:true,linked:false,passwordLogin:true}}):Response.json({url:'https://liveweave.test/tower-auth.php?state=test'}),playerCloud:{prepareAccountChange:async()=>events.push('prepare')}});context.window=context;
+ vm.runInContext(fs.readFileSync(new URL('../public/accounts.js',import.meta.url),'utf8'),context);await context.towerAccounts.open();
+ assert.equal(get('accountLiveweave').hidden,false);assert.equal(get('accountLiveweaveButton').textContent,'Continue with LiveWeave');
+ await get('accountLiveweaveButton').onclick();assert.equal(events[0],'prepare');assert.equal(events.at(-1),'https://liveweave.test/tower-auth.php?state=test');assert.equal(events.filter(e=>e==='clear').length,5);
+});

@@ -1,5 +1,6 @@
 import {scrypt,timingSafeEqual} from 'node:crypto';
 import {Buffer} from 'node:buffer';
+import {handleLiveweave,liveweaveStatus} from './liveweave.mjs';
 import {resolveIdentity,randomToken,tokenHash,sessionCookie,clearCookie,ACCOUNT_COOKIE,GUEST_COOKIE,SESSION_AGE} from './identity.mjs';
 
 const json=(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
@@ -23,7 +24,7 @@ async function limit(db,key,max,period){
 async function issueSession(db,accountId,createAccount=null){
   const token=randomToken(),now=Date.now();
   const session=db.prepare('INSERT INTO tower_sessions (session_hash, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)').bind(await tokenHash(token),accountId,now+SESSION_AGE*1000,now);
-  if(createAccount)await db.batch([createAccount,session]);else await session.run();
+  if(createAccount)await db.batch([...(Array.isArray(createAccount)?createAccount:[createAccount]),session]);else await session.run();
   await db.prepare('DELETE FROM tower_sessions WHERE account_id = ? AND (expires_at <= ? OR session_hash NOT IN (SELECT session_hash FROM tower_sessions WHERE account_id = ? ORDER BY created_at DESC LIMIT 10))').bind(accountId,now,accountId).run();
   return token;
 }
@@ -33,8 +34,9 @@ export async function handleAccountApi(request,env){
   if(!env.TOWER_DB)return json({error:'Accounts are temporarily unavailable.'},503);
   const route=new URL(request.url).pathname.slice('/api/account/'.length);
   try{
+    if(route.startsWith('liveweave/'))return await handleLiveweave(request,env,{issueSession,signedIn,json,limit});
     const identity=await resolveIdentity(request,env);
-    if(route==='status'&&request.method==='GET')return json({account:identity?.account??null,expired:!!identity?.expired,hasCharacter:!!identity?.playerId});
+    if(route==='status'&&request.method==='GET')return json({account:identity?.account??null,expired:!!identity?.expired,hasCharacter:!!identity?.playerId,liveweave:await liveweaveStatus(env,identity)});
     if(request.method!=='POST')return json({error:'Not found.'},404);
     if(request.headers.get('Origin')!==new URL(request.url).origin||!request.headers.get('Content-Type')?.startsWith('application/json'))return json({error:'Use the account controls in the game.'},403);
     const raw=await request.text();if(raw.length>4096)return json({error:'Account request is too large.'},400);

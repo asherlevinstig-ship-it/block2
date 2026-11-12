@@ -6,6 +6,7 @@ main = "../worker/index.js"
 
 [vars]
 SERVER_CHARACTER_STARTS = true
+LIVEWEAVE_AUTH_URL = "https://liveweave.net/tower-auth.php"
 
 [triggers]
 crons = ["*/5 * * * *"]
