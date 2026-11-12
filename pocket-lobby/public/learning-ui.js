@@ -15,7 +15,7 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
   animation=reduced?null:requestAnimationFrame(drawMeditation);
  }
  function stopAnimation(){if(animation!==null)cancelAnimationFrame(animation);animation=null;}
- dialog.addEventListener('close',()=>{if(!dialog.open)stopAnimation();});
+ dialog.addEventListener('close',()=>{if(!dialog.open){stopAnimation();for(const trigger of triggers)trigger.setAttribute('aria-expanded','false');}});
  const finished=()=>{const session=getState().learning?.session;return session&&session.answered>=session.target;};
  function summary(){
   const s=getState(),session=s.learning?.session,answered=session?.answered??0,target=session?.target??10;
@@ -67,8 +67,8 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
  el('homeworkAgain').onclick=()=>load(true);
  el('homeworkAdventure').onclick=async()=>{if(busy)return;busy=true;try{dialog.close();await onAdventure();}finally{busy=false;}};
  dialog.querySelector('.close').onclick=()=>dialog.close();
- const open=()=>{stopAnimation();if(dialog.open)dialog.close();dialog.showModal();if(renderer)drawMeditation(performance.now());load();};
- const trigger=doc.getElementById('openLearning');if(trigger)trigger.onclick=open;
+ const open=()=>{stopAnimation();if(dialog.open)dialog.close();dialog.showModal();for(const trigger of triggers)trigger.setAttribute('aria-expanded','true');if(renderer)drawMeditation(performance.now());load();};
+ const triggers=['openLearning','hotbarQuestions'].map(id=>doc.getElementById(id)).filter(Boolean);for(const trigger of triggers)trigger.onclick=open;
  const gate=doc.getElementById('cloudGate');
  if(gate){const button=doc.createElement('button');button.type='button';button.id='cloudLearn';button.className='primary';button.textContent='Answer questions · Earn AP';button.onclick=open;gate.insertBefore(button,doc.getElementById('cloudRetry'));}
  return {open,dialog,get active(){return dialog.open;}};
