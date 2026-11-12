@@ -42,3 +42,19 @@ test('preview is free and player saves cannot forge Stealth or erase protection'
  const f=fixture();const quote=await robberyAction(f.env,f.row(idA),f.a,{...f.body,kind:'preview'},now);assert.equal(quote.preview.ap,10);assert.equal(f.row(idA).revision,1);assert.equal(JSON.parse(f.row(idA).state_json).actionPoints.value,25);
  const before=character();before.robbery.protectedUntil=now+600000;before.stats.stealthXp=15;const forged=character();forged.stats.stealthXp=9999;forged.robbery.protectedUntil=0;const next=normalizeState(protectFishingState(before,forged));assert.equal(next.stats.stealthXp,15);assert.equal(next.robbery.protectedUntil,now+600000);f.sql.close();
 });
+
+test('higher Stealth and Luck increase the haul and equipment contributes',async()=>{
+ const {robberyGold}=await import('../public/robbery-rules.js'),{skillXpForLevel}=await import('../public/skill-curve.js');
+ const low=character(),stealth=character({stats:{stealthXp:skillXpForLevel(10)}}),lucky=character({stats:{luckXp:skillXpForLevel(10)}}),both=character({stats:{stealthXp:skillXpForLevel(10),luckXp:skillXpForLevel(10)}});
+ assert.equal(robberyGold(1000,low),25);assert(robberyGold(1000,stealth)>25);assert(robberyGold(1000,lucky)>25);assert.equal(robberyGold(1000,both),97);
+ const outfit=low.wardrobe.outfits[0];low.wardrobe.owned.push('duskWrap');outfit.jacket='duskWrap';assert(robberyGold(1000,low)>25);
+ const victim=character({credits:1000}),receipt=prepareRobbery(both,victim,'scaled',now,()=>0);assert.equal(receipt.gold,97);assert.equal(victim.credits,903);assert.equal(both.actionPoints.value,15);
+ assert.equal(robberyGold(50,both),0);assert.equal(robberyGold(51,both),1);assert(robberyGold(1000,character({stats:{stealthXp:4000000000000,luckXp:4000000000000}}))<=250);
+});
+
+test('the preview and the committed haul use the same stat-scaled calculation',async()=>{
+ const {skillXpForLevel}=await import('../public/skill-curve.js'),f=fixture();f.a.stats.stealthXp=skillXpForLevel(8);f.a.stats.luckXp=skillXpForLevel(5);
+ f.sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(f.a),idA);
+ const preview=await robberyAction(f.env,f.row(idA),structuredClone(f.a),{...f.body,kind:'preview'},now);
+ const attempt=await robberyAction(f.env,f.row(idA),structuredClone(f.a),f.body,now,()=>0);assert.equal(attempt.receipt.gold,preview.preview.gold);assert(attempt.receipt.gold>10);f.sql.close();
+});

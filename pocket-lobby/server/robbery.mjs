@@ -12,7 +12,7 @@ export function prepareRobbery(actor,target,operation,now,random=()=>crypto.getR
  const a=actor.robbery=normalizeRobbery(actor.robbery),b=target.robbery=normalizeRobbery(target.robbery);
  if(a.lastAttemptAt&&now-a.lastAttemptAt<robberyRules.cooldown)throw invalid('Wait '+Math.ceil((robberyRules.cooldown-now+a.lastAttemptAt)/1000)+'s before another steal attempt.');
  if(b.protectedUntil>now)throw invalid('This player is protected after a recent attempt. Choose someone else.');
- const available=robberyGold(target.credits);
+ const available=robberyGold(target.credits,actor);
  if(!available)throw invalid('This player has no unprotected wallet gold to steal. Banked gold and the first 50 wallet gold are safe.');
  const points=normalizeActionPoints(actor.actionPoints);
  if(points.value<robberyRules.ap)throw invalid('A steal attempt costs 10 AP. Answer more questions first.',402);
@@ -40,7 +40,7 @@ export async function robberyAction(env,row,actor,body,now=Date.now(),random){
  if(!targetRow)throw invalid('This player has left.');
  const target=JSON.parse(targetRow.state_json);ready(target,false);
  if(target.location!==actor.location)throw invalid('This player has changed areas.');
- const quote={chance:robberyChance(actor,target),ap:robberyRules.ap,gold:robberyGold(target.credits),stats:robberyStats(actor),cooldownUntil:(actor.robbery?.lastAttemptAt??0)+robberyRules.cooldown,protectedUntil:target.robbery?.protectedUntil??0};
+ const quote={chance:robberyChance(actor,target),ap:robberyRules.ap,gold:robberyGold(target.credits,actor),stats:robberyStats(actor),cooldownUntil:(actor.robbery?.lastAttemptAt??0)+robberyRules.cooldown,protectedUntil:target.robbery?.protectedUntil??0};
  if(body.kind==='preview')return {preview:quote};
  const receipt=prepareRobbery(actor,target,body.operation,now,random);
  receipt.peer=body.target;actor.robbery.lastAttempt.peer=body.target;
