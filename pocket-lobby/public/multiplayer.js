@@ -1,6 +1,6 @@
 import {socialRooms} from './shared-world.js';
 export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
-  let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',profiling=false,failures=0;
+  let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',lastMeditating=false,profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
   function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);}
   async function join(next){
@@ -21,7 +21,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
           if(getLocal().room&&getLocal().room!==next){join(getLocal().room);return;}
           failures=0;
           selfId=data.selfId;onHistory(data.chat??[]);
-          profileKey=getLocal().profileKey;lastPosition='';lastSeat='';
+          profileKey=getLocal().profileKey;lastPosition='';lastSeat='';lastMeditating=false;
           tick=setInterval(update,125);ping=setInterval(()=>send({type:'ping'}),25000);
         }
         if(data.type==='welcome'||data.type==='snapshot'){
@@ -63,6 +63,8 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
     if(key!==lastPosition){if(send({type:'move',x:local.x,y:local.y,direction:local.direction,back:local.back}))lastPosition=key;}
     const seatKey=local.seat?JSON.stringify(local.seat):'';
     if(seatKey!==lastSeat){send(local.seat?{type:'sit',seat:local.seat}:{type:'stand'});lastSeat=seatKey;}
+    const meditating=local.meditating===true;
+    if(meditating!==lastMeditating&&send({type:'meditate',active:meditating}))lastMeditating=meditating;
     if(local.profileKey!==profileKey&&!profiling){
       profiling=true;const current=generation;
       flush().then(()=>{if(current===generation){send({type:'profile'});profileKey=local.profileKey;}}).catch(()=>{}).finally(()=>{profiling=false;});

@@ -22,9 +22,10 @@ function familiarProfile(state){
  return {familiar,familiarName:normalizeFamiliarName(state.familiars?.names?.[familiar])||undefined};
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
+const canMeditate=meta=>!meta.serverAuto&&!meta.auto&&!meta.seat&&!meta.activity&&!meta.fishing&&!meta.chopping&&!meta.mining;
 export function publicPeer(meta,now=Date.now()){
   const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
-  return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+  return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
 }
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
@@ -240,6 +241,10 @@ export class SharedRoom{
     if(now-meta.windowAt>1000){meta.windowAt=now;meta.packets=0;}if(++meta.packets>30){ws.close(1008,'Too many messages');return;}
     let message;try{message=JSON.parse(raw);}catch{return;}
     if(message?.type==='ping'){this.send(ws,{type:'pong'});return;}
+    if(message?.type==='meditate'){
+      if(typeof message.active!=='boolean'||meta.meditationRequested===message.active)return;
+      meta.meditationRequested=message.active;ws.serializeAttachment(meta);this.snapshot();return;
+    }
     if(message?.type==='shareTrail'){
       if(meta.lastTrailAt&&now-meta.lastTrailAt<2000)return;
       meta.lastTrailAt=now;
@@ -255,22 +260,22 @@ export class SharedRoom{
       if(meta.serverAuto||this.autoPeers.has(meta.playerId))return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
-      if(meta.x!==message.x||meta.y!==message.y)meta.seat=null;const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
+      if(meta.x!==message.x||meta.y!==message.y){meta.seat=null;meta.meditationRequested=false;}const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
       ws.serializeAttachment(meta);this.snapshot();return;
     }
     if(message?.type==='stand'){meta.seat=null;ws.serializeAttachment(meta);this.snapshot();return;}
     if(message?.type==='sit'){
       if(message.seat?.type==='campSeat'&&meta.room===trailCamp.room&&besideTrailCamp(meta)&&message.seat.x===meta.x&&message.seat.y===meta.y){
-        meta.seat={type:'campSeat',x:meta.x,y:meta.y,rot:0};ws.serializeAttachment(meta);this.snapshot();return;
+        meta.seat={type:'campSeat',x:meta.x,y:meta.y,rot:0};meta.meditationRequested=false;ws.serializeAttachment(meta);this.snapshot();return;
       }
       const seat=meta.seats.find(item=>item.x===message.seat?.x&&item.y===message.seat?.y&&item.type===message.seat?.type&&item.rot===(message.seat?.rot??0));
       const box=seat?roomBoxes('home',[seat])[0]:null;
       const adjacent=box&&[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>meta.x+dx<box.x+box.w&&meta.x+dx+1>box.x&&meta.y+dy<box.y+box.d&&meta.y+dy+1>box.y);
       const occupied=seat&&[...this.sessions.values()].some(other=>other.id!==meta.id&&other.seat?.x===seat.x&&other.seat?.y===seat.y);
       if(!adjacent||occupied){this.send(ws,{type:'unseat'});this.send(ws,{type:'notice',text:occupied?'That seat is occupied.':'Walk beside the seat first.'});return;}
-      meta.seat=seat;ws.serializeAttachment(meta);this.snapshot();return;
+      meta.seat=seat;meta.meditationRequested=false;ws.serializeAttachment(meta);this.snapshot();return;
     }
-    if(message?.type==='wave'){meta.waveAt=now;ws.serializeAttachment(meta);this.snapshot();return;}
+    if(message?.type==='wave'){meta.meditationRequested=false;meta.waveAt=now;ws.serializeAttachment(meta);this.snapshot();return;}
     if(message?.type==='profile'){
       const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();if(!row)return;
       const state=JSON.parse(row.state_json);if(state.location!==meta.room)return;

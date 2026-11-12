@@ -646,11 +646,12 @@ function drawRemote(peer,time){
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
   const raidPose=currentRoom==='millbrook'&&time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  const meditating=peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{meditating,direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
-  const activity=chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
-  renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:43),familiar,familiarName:peer.familiarName});
+  const activity=meditating?'Meditating':chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
+  renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:meditating?35:43),familiar,familiarName:peer.familiarName});
   ctx.restore();
 }
 function updateActorNameplates(){
@@ -738,6 +739,7 @@ function updateBedGuide(){
   $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
 }
 function needsAutoLesson(){return (window.playerCloud?.initial??savedPlayerState)?.autoLesson==='required';}
+function playerMeditating(){return window.towerLearning?.active&&!routineControlled()&&!player.inCombat&&!player.seat&&!step&&!woodSession&&!fishingSession&&!miningCut&&!homeBedRest;}
 function needsLearningPoints(){return (window.playerCloud?.initial??savedPlayerState)?.actionPoints?.value===0;}
 function updateAutoLessonGuide(){
   const visible=needsAutoLesson()&&!loungeDressGuiding&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
@@ -3481,7 +3483,7 @@ function draw(time){
     const preparedSwing=miningCut??autoMine;
     const miningSwing=miningRooms.includes(currentRoom)&&!step&&!autoServerWalking&&preparedSwing&&combatNow()>=preparedSwing.started&&combatNow()<preparedSwing.endsAt+400&&preparedSwing;
     const spritePose=miningSwing?{...pose,chop:choppingPhase(miningSwing,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
-    const meditating=window.towerLearning?.active&&!routineControlled()&&!player.inCombat&&!seat&&!step&&!woodSession&&!cast&&!miningSwing;
+    const meditating=playerMeditating()&&!cast&&!miningSwing;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
@@ -7134,7 +7136,7 @@ function correctRoomPosition(position){
 }
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
-    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped]])}),
+    getLocal:()=>({meditating:playerMeditating(),room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped]])}),
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
