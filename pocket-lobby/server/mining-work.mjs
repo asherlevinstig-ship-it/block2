@@ -1,12 +1,22 @@
 import {oreDeposits,oreProducts,miningRules,miningDuration,quarryRoom,besideDeposit} from '../public/mining.js';
-import {exertionDuration} from '../public/player-vitals.js';
+import {exertionDuration,LOW_HUNGER} from '../public/player-vitals.js';
 import {autoTilePath} from './auto-motion.mjs';
-import {readOreDeposits,awardOreStrike} from './mining.mjs';
+import {readOreDeposits,readOreDeposit,awardOreStrike} from './mining.mjs';
+import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
 import {completeRoutineOre} from './routine-queue.mjs';
 import {miningDestination,depositRoom,deepMiningRoom,miningGuardAwake} from '../public/mining.js';
 import {startCombatEncounter} from './activities.mjs';
 import {huntEnemies,canUseWeapon} from '../public/hunting.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
+
+export const MINING_SWING_PAUSE_MS=2000;
+function canPrepareNextSwing(state,plan,node,stepIndex,cycle,now){
+ if(state.plan!==plan||plan.stepIndex!==stepIndex||plan.cycle!==cycle||plan.simpleMode==='random'||plan.returnRequested||plan.foodTrip||state.characterRules?.goal||miningDestination(plan.mining)!==quarryRoom||node.guarded)return false;
+ if((state.huntingLoot[node.ore]??0)+(node.yield??1)>1000000||(state.vitals?.hunger??100)<=LOW_HUNGER)return false;
+ const food=normalizeFoodPolicy(plan.foodPolicy??state.characterRules?.food);
+ if(food.enabled&&state.health<food.eatBelow||chooseAutoMeal(state,food))return false;
+ return now+MINING_SWING_PAUSE_MS+exertionDuration(miningDuration(state.mining),state.vitals)<plan.endAt;
+}
 
 export async function advanceMiningWork(db,state,now,motion){
  const plan=state.plan,work=plan?.miningWork;
@@ -21,13 +31,19 @@ export async function advanceMiningWork(db,state,now,motion){
  if(work.cut){
   const cut=work.cut;
   if(now<cut.endsAt)return null;
-  const node=oreDeposits.find(node=>node.id===cut.node),snapshot=(await readOreDeposits(db,now))[node.id];
+  const node=oreDeposits.find(node=>node.id===cut.node),snapshot=await readOreDeposit(db,node.id,now);
   delete work.cut;work.phase='choose';
   if(!arrived()||!besideDeposit(motion,node)||snapshot.readyAt>now||snapshot.revision!==cut.revision)return null;
   if(node.guarded&&miningGuardAwake(state,now)&&outfitVeilUntil(state)<=now){startCombatEncounter(state,huntEnemies.crystalGuardian,now);plan.currentLabel='Fighting the Shardback Guardian';return null;}
   if((state.huntingLoot[node.ore]??0)+(node.yield??1)>1000000)return null;
-  const hits=snapshot.hits+1,xp=awardOreStrike(state,node,cut,now,hits===miningRules.hits);
+  const stepIndex=plan.stepIndex,cycle=plan.cycle,hits=snapshot.hits+1,xp=awardOreStrike(state,node,cut,now,hits===miningRules.hits);
   completeRoutineOre(state,node.ore,xp,now,state.miningReceipt.amount);
+  // Save preparation with the accepted strike. The next strike still re-reads
+  // the deposit and atomically checks revision+1 before awarding anything.
+  if(hits<miningRules.hits&&canPrepareNextSwing(state,plan,node,stepIndex,cycle,now)){
+   const started=now+MINING_SWING_PAUSE_MS;
+   plan.miningWork={phase:'mining',node:node.id,stand:{...work.stand},cut:{id:crypto.randomUUID(),node:node.id,revision:snapshot.revision+1,started,endsAt:started+exertionDuration(miningDuration(state.mining),state.vitals)}};
+  }
   return {node:node.id,revision:snapshot.revision,hits,readyAt:hits===miningRules.hits?now+miningRules.respawnMs:0};
  }
  if(work.phase==='waiting'&&now<work.readyAt)return null;
@@ -54,8 +70,7 @@ export async function advanceMiningWork(db,state,now,motion){
   if(node?.guarded&&miningGuardAwake(state,now)&&outfitVeilUntil(state)<=now){
    work.phase='choose';startCombatEncounter(state,huntEnemies.crystalGuardian,now);plan.currentLabel='Fighting the Shardback Guardian';return null;
   }
-  await db.prepare('INSERT OR IGNORE INTO tower_ore_deposits (node_id) VALUES (?)').bind(work.node).run();
-  const snapshot=(await readOreDeposits(db,now))[work.node];
+  const snapshot=await readOreDeposit(db,work.node,now);
   if(snapshot.readyAt>now){work.phase='choose';return null;}
   work.cut={id:crypto.randomUUID(),node:work.node,revision:snapshot.revision,started:now,endsAt:now+exertionDuration(miningDuration(state.mining),state.vitals)};
   work.phase='mining';plan.currentLabel='Mining '+oreProducts[plan.mining.ore].name;

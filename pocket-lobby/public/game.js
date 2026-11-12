@@ -3474,7 +3474,8 @@ function draw(time){
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
     if(window.millRaidClient?.striking)Object.assign(pose,playerCombatPose({time,now:combatNow(),encounter:{nextPlayerAt:0},events:{...combatArt,...window.millRaidClient.pose},reduced:reducedMotion.matches}));
     const autoMine=window.playerCloud?.initial?.plan?.miningWork?.cut;
-    const miningSwing=miningRooms.includes(currentRoom)&&!step&&!autoServerWalking&&(miningCut??autoMine);
+    const preparedSwing=miningCut??autoMine;
+    const miningSwing=miningRooms.includes(currentRoom)&&!step&&!autoServerWalking&&preparedSwing&&combatNow()>=preparedSwing.started&&combatNow()<preparedSwing.endsAt+400&&preparedSwing;
     const spritePose=miningSwing?{...pose,chop:choppingPhase(miningSwing,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;

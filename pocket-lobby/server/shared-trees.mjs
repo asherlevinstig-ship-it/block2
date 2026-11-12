@@ -18,8 +18,11 @@ export async function roomTreeSnapshot(db,room,now=Date.now()){
 }
 export async function readSharedTree(db,room,tree,now=Date.now()){
  const key=treeKey(room,tree);
- await db.prepare('INSERT OR IGNORE INTO tower_trees (tree_key,room) VALUES (?,?)').bind(key,room).run();
- const row=await db.prepare('SELECT * FROM tower_trees WHERE tree_key = ?').bind(key).first();
+ let row=await db.prepare('SELECT * FROM tower_trees WHERE tree_key = ?').bind(key).first();
+ if(!row){
+  await db.prepare('INSERT OR IGNORE INTO tower_trees (tree_key,room) VALUES (?,?)').bind(key,room).run();
+  row=await db.prepare('SELECT * FROM tower_trees WHERE tree_key = ?').bind(key).first();
+ }
  return {key,...logicalTree(row,now)};
 }
 export async function prepareManualTree(env,state,action,body,now=Date.now()){
@@ -41,24 +44,38 @@ export function describeTreeCut(state,shared,cutId){
 // Both updates run atomically. A failed player revision or tree generation can
 // never consume a tree hit without paying its player, or pay a duplicate hit.
 export async function writeTreePlayer(db,id,revision,state,operation,mutation){
- for(let attempt=0;attempt<4;attempt++){
-  const now=Date.now(),generation=mutation.generation+(mutation.cuts===3?1:0);
-  if(mutation.cuts===3)mutation.regrowsAt=now+timberTreeRules.regrowMs;
-  state.woodcutting.trees??={};state.woodcutting.trees[mutation.key]={cuts:mutation.cuts,regrowsAt:mutation.regrowsAt};
-  if(mutation.cuts===3&&state.timberCut?.key===mutation.key)delete state.timberCut;
-  // A retry can turn a standing-tree hit into the final cut.
-  const work=state.plan?.treeWork;
-  if(mutation.cuts===3&&work?.cut?.key===mutation.key){delete work.cut;work.phase='choose';}
-  if(state.timberReceipt?.id===mutation.cutId)Object.assign(state.timberReceipt,{at:now,felled:mutation.cuts===3,room:mutation.room,tree:{x:mutation.tree.x,y:mutation.tree.y}});
-  const result=await db.batch([
-   db.prepare('UPDATE tower_trees SET cuts=?,regrows_at=?,generation=?,version=version+1,hit_at=?,fall_direction=?,last_cut_id=?,last_player_id=? WHERE tree_key=? AND version=? AND generation=? AND (regrows_at=0 OR regrows_at<=?) AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?)').bind(mutation.cuts,mutation.regrowsAt,generation,now,mutation.fallDirection,mutation.cutId,id,mutation.key,mutation.version,mutation.generation,now,id,revision),
-   db.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_trees WHERE tree_key=? AND last_cut_id=? AND last_player_id=?) RETURNING player_id,state_json,revision,last_request').bind(JSON.stringify(state),operation,now,id,revision,mutation.key,mutation.cutId,id)
-  ]);
-  const updated=result[1].results?.[0];if(updated)return updated;
-  const player=await db.prepare('SELECT revision FROM tower_players WHERE player_id=?').bind(id).first();if(player?.revision!==revision)return null;
-  const latest=await readSharedTree(db,mutation.room,mutation.tree,now);
-  if(latest.regrowsAt||latest.generation!==mutation.generation)return null;
-  mutation={...mutation,version:latest.version,cuts:latest.cuts+1,regrowsAt:latest.cuts===2?now+timberTreeRules.regrowMs:0};
- }
- return null;
+ const now=Date.now(),work=state.plan?.treeWork;
+ const receipt=state.timberReceipt?.id===mutation.cutId;
+ const pendingManual=state.timberCut?.key===mutation.key;
+ const pendingAuto=!!work&&(work.cut?.key===mutation.key||work.tree?.x===mutation.tree.x&&work.tree?.y===mutation.tree.y);
+ state.woodcutting.trees??={};state.woodcutting.trees[mutation.key]={cuts:mutation.cuts,regrowsAt:mutation.regrowsAt};
+ if(receipt)Object.assign(state.timberReceipt,{at:now,room:mutation.room,tree:{x:mutation.tree.x,y:mutation.tree.y}});
+ // Concurrent cuts within this generation use the current count in SQL, rather
+ // than reading/rebasing/retrying it. The paid tree token gates the player save.
+ // Patch the actual felling result into that same save, including pending poses.
+ const result=await db.batch([
+  db.prepare(`UPDATE tower_trees SET
+   cuts=CASE WHEN regrows_at>0 THEN 1 ELSE cuts+1 END,
+   regrows_at=CASE WHEN regrows_at=0 AND cuts=2 THEN ? ELSE 0 END,
+   generation=generation+CASE WHEN regrows_at=0 AND cuts=2 THEN 1 ELSE 0 END,
+   version=version+1,hit_at=?,fall_direction=?,last_cut_id=?,last_player_id=?
+   WHERE tree_key=? AND generation=? AND ((regrows_at=0 AND cuts<3) OR (regrows_at>0 AND regrows_at<=?))
+   AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?)`)
+   .bind(now+timberTreeRules.regrowMs,now,mutation.fallDirection,mutation.cutId,id,mutation.key,mutation.generation,now,id,revision),
+  db.prepare(`WITH paid_tree AS (
+    SELECT cuts,regrows_at FROM tower_trees WHERE tree_key=? AND last_cut_id=? AND last_player_id=?
+   ), draft AS (SELECT ? AS body), patched AS (
+    SELECT json_set(body,?,cuts,?,regrows_at) AS body,cuts FROM draft,paid_tree
+   ), receipt AS (
+    SELECT CASE WHEN ? THEN json_set(body,'$.timberReceipt.felled',json(CASE WHEN cuts=3 THEN 'true' ELSE 'false' END)) ELSE body END AS body,cuts FROM patched
+   ), pose AS (
+    SELECT CASE WHEN cuts=3 AND ? THEN json_set(json_remove(body,'$.plan.treeWork.cut'),'$.plan.treeWork.phase','choose') ELSE body END AS body,cuts FROM receipt
+   ) UPDATE tower_players SET
+    state_json=(SELECT CASE WHEN cuts=3 AND ? THEN json_remove(body,'$.timberCut') ELSE body END FROM pose),
+    revision=revision+1,last_request=?,updated_at=?
+    WHERE player_id=? AND revision=? AND EXISTS (SELECT 1 FROM paid_tree)
+    RETURNING player_id,state_json,revision,last_request`)
+   .bind(mutation.key,mutation.cutId,id,JSON.stringify(state),'$.woodcutting.trees.'+JSON.stringify(mutation.key)+'.cuts','$.woodcutting.trees.'+JSON.stringify(mutation.key)+'.regrowsAt',receipt?1:0,pendingAuto?1:0,pendingManual?1:0,operation,now,id,revision)
+ ]);
+ return result[1].results?.[0]??null;
 }

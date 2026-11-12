@@ -67,3 +67,25 @@ node pocket-lobby/scripts/benchmark-quiet-hunting.mjs --output quiet-hunting-ben
 ```
 
 The recorded local comparison in `benchmarks/quiet-hunting-2026-11-12.json` checks identical outcomes, HP, XP, loot, spell cooldowns and mana between watched and unobserved runs. Starter boar alarms/player-state writes fall from 8/8 to 3/3; the spell build falls from 8/8 to 2/2; the beetle falls from 5/5 to 3/3. Immediate retreat remains 1/1 and reaching the time cap retains live scheduling. These are per-fixture operation counts, not measured production bill savings. Tests also cover room entry/exit, owner return, taking control, actor recovery, scarce mana, failed escapes, defeat and repeated hunts separated by rest.
+
+## Shared gathering
+
+Tree cuts now increment the current cut count atomically within the expected tree generation. The same database batch pays its player only if that cut's token belongs to that player and the player revision still matches. The player save uses the committed cut count to set the felling receipt and clear pending swings on a felled tree. This replaces repeated read/rebase/retry transactions when many valid cuts finish together. A rejected player revision cannot consume a hit; a failed transaction rolls back both the resource and player reward.
+
+Existing trees and rocks no longer execute an initialization INSERT on every read. Ore strikes read the targeted deposit rather than returning every deposit; full area snapshots are still used for choosing a deposit and for viewers.
+
+Safe quarry mining can prepare the next swing in the accepted strike's player save. Its original two-second pause and swing duration remain intact. The next hit still reads the shared deposit and checks its exact revision before paying; it is discarded if another miner changes the rock. Preparation stops for depletion, completed steps, hunger/food decisions, random-job decisions, goals, time caps and returns. Guarded/deep mining retains the intervening checks. Timestamped poses reach viewers in advance, and the player's sprite waits until the recorded start time to animate.
+
+This batches preparation and resource/player commits, not unverified offline yields. Every awarded tree cut and ore strike still has an individual shared-resource transaction. Viewer arrival reads current resource snapshots. Tree regrowth and rock recovery remain shared.
+
+```
+node pocket-lobby/scripts/benchmark-gathering.mjs --output gathering-benchmark.json
+```
+
+`benchmarks/gathering-2026-11-12.json` compares an isolated archive of commit `8b718831` with the new code using identical fixtures:
+
+- Twenty Auto woodcutters, including a regrowth/stale-swing check: 484 → 134 write queries, 404 → 188 read queries, 114 → 40 transaction batches; six timber and 60 XP in both runs. A mixed manual/Auto case also preserves all rewards.
+- Twenty Auto miners across depletion and regrowth: 1,688 → 456 returned rows by targeting the struck deposit; ore and XP totals match. Returned rows are not Cloudflare's billed rows scanned.
+- One mining actor completing three strikes: 5 → 3 alarms, 13 → 7 read queries, 10 → 6 write queries; the cycle remains 17.5 seconds, three ore, 30 XP and three hunger consumed.
+
+Twenty simultaneous HTTP cuts also passed through the local Cloudflare runtime: three accepted, 17 stale rejections, three timber, 30 XP and one felling receipt, with no server errors. The installed emulator required a local compatibility override to 2026-09-25; deployment retains 2026-09-30. These simulations and local checks are not a production capacity test or an invoice estimate.

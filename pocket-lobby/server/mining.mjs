@@ -33,10 +33,19 @@ export async function writeOreStrike(db,row,state,operation,now,{node,revision,h
 }
 export async function readOreDeposits(db,now=Date.now()){
  const {results}=await db.prepare('SELECT node_id,hits,ready_at,revision FROM tower_ore_deposits').all();
+ const rows=new Map(results.map(row=>[row.node_id,row]));
  return Object.fromEntries(oreDeposits.map(node=>{
-  const row=results.find(row=>row.node_id===node.id);
-  return [node.id,{hits:row?.ready_at&&row.ready_at<=now?0:row?.hits??0,readyAt:row?.ready_at>now?row.ready_at:0,revision:row?.revision??0}];
+  return [node.id,logicalOreDeposit(rows.get(node.id),now)];
  }));
+}
+function logicalOreDeposit(row,now){return {hits:row?.ready_at&&row.ready_at<=now?0:row?.hits??0,readyAt:row?.ready_at>now?row.ready_at:0,revision:row?.revision??0};}
+export async function readOreDeposit(db,node,now=Date.now()){
+ let row=await db.prepare('SELECT node_id,hits,ready_at,revision FROM tower_ore_deposits WHERE node_id=?').bind(node).first();
+ if(!row){
+  await db.prepare('INSERT OR IGNORE INTO tower_ore_deposits (node_id) VALUES (?)').bind(node).run();
+  row=await db.prepare('SELECT node_id,hits,ready_at,revision FROM tower_ore_deposits WHERE node_id=?').bind(node).first();
+ }
+ return logicalOreDeposit(row,now);
 }
 export async function mineAction(db,row,state,body,action,now){
  if(action==='mineCancel'){delete state.miningCut;return {state};}
@@ -83,10 +92,9 @@ export async function mineAction(db,row,state,body,action,now){
  const ore=oreProducts[node.ore];
  if(miningLevel(state.mining)<ore.level)throw invalid('This deposit needs Mining '+ore.level+'. Mine copper to train.');
  if((state.huntingLoot[node.ore]??0)+(node.yield??1)>1000000)throw invalid('Make room in your bag before mining more ore.');
- await db.prepare('INSERT OR IGNORE INTO tower_ore_deposits (node_id) VALUES (?)').bind(node.id).run();
- const saved=await db.prepare('SELECT * FROM tower_ore_deposits WHERE node_id=?').bind(node.id).first();
- if(saved.ready_at>now)throw invalid('This deposit is depleted. Try another while it recovers.');
- const hits=saved.ready_at?0:saved.hits;
+ const saved=await readOreDeposit(db,node.id,now);
+ if(saved.readyAt>now)throw invalid('This deposit is depleted. Try another while it recovers.');
+ const hits=saved.hits;
  if(node.guarded&&miningGuardAwake(state,now)&&outfitVeilUntil(state)<=now){
   if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw invalid('The Shardback Guardian guards this vein. Equip a weapon, use Veilstep, or mine outer copper.');
   startCombatEncounter(state,huntEnemies.crystalGuardian,now);return {state};

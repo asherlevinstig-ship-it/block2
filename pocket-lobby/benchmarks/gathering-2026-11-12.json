@@ -1,0 +1,507 @@
+{
+  "baselineCommit": "8b718831",
+  "measured": "2026-11-12",
+  "note": "Local operation-count comparison, not billable rows or production latency. Baseline was run from an isolated archive of the prior commit using the same fixture code. Primary rewards, XP, resource versions, mining duration and hunger are checked for equality.",
+  "baseline": {
+    "description": "Twenty simultaneous gatherers contend on one resource, including mixed manual/Auto cases. Real SQLite transactions and revision checks are used; clock and room transport are simulated. Tests include regrowth and stale-generation rejection. Counts are queries/returned rows, not Cloudflare billing or network-capacity measurements.",
+    "rows": [
+      {
+        "kind": "tree",
+        "players": 20,
+        "manualPlayers": 0,
+        "rewards": 6,
+        "xp": 60,
+        "counts": {
+          "readQueries": 404,
+          "writeQueries": 484,
+          "rowsReturned": 464,
+          "batches": 114,
+          "roomRequests": 60
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 3,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 182,
+              "writeQueries": 222,
+              "rowsReturned": 202,
+              "batches": 57,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 3,
+            "resourceVersion": 6,
+            "operations": {
+              "readQueries": 182,
+              "writeQueries": 222,
+              "rowsReturned": 202,
+              "batches": 57,
+              "roomRequests": 20
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 3,
+          "version": 6
+        },
+        "activityMessages": 6
+      },
+      {
+        "kind": "tree",
+        "players": 20,
+        "manualPlayers": 1,
+        "rewards": 6,
+        "xp": 60,
+        "counts": {
+          "readQueries": 391,
+          "writeQueries": 461,
+          "rowsReturned": 445,
+          "batches": 108,
+          "roomRequests": 57
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 3,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 175,
+              "writeQueries": 211,
+              "rowsReturned": 193,
+              "batches": 54,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 3,
+            "resourceVersion": 6,
+            "operations": {
+              "readQueries": 175,
+              "writeQueries": 211,
+              "rowsReturned": 193,
+              "batches": 54,
+              "roomRequests": 19
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 3,
+          "version": 6
+        },
+        "activityMessages": 6
+      },
+      {
+        "kind": "ore",
+        "players": 20,
+        "manualPlayers": 0,
+        "rewards": 4,
+        "xp": 40,
+        "counts": {
+          "readQueries": 352,
+          "writeQueries": 256,
+          "rowsReturned": 1688,
+          "batches": 80,
+          "roomRequests": 100
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 1,
+            "resourceVersion": 1,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 372,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 1,
+            "resourceVersion": 2,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 372,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 2,
+            "awarded": 1,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 372,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 3,
+            "awarded": 1,
+            "resourceVersion": 4,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 372,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 1,
+          "version": 4
+        },
+        "activityMessages": 4
+      },
+      {
+        "kind": "ore",
+        "players": 20,
+        "manualPlayers": 1,
+        "rewards": 4,
+        "xp": 40,
+        "counts": {
+          "readQueries": 349,
+          "writeQueries": 248,
+          "rowsReturned": 1612,
+          "batches": 76,
+          "roomRequests": 95
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 1,
+            "resourceVersion": 1,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 57,
+              "rowsReturned": 355,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 1,
+            "resourceVersion": 2,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 57,
+              "rowsReturned": 355,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 2,
+            "awarded": 1,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 57,
+              "rowsReturned": 355,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 3,
+            "awarded": 1,
+            "resourceVersion": 4,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 57,
+              "rowsReturned": 355,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 1,
+          "version": 4
+        },
+        "activityMessages": 4
+      }
+    ],
+    "miningActor": {
+      "counts": {
+        "alarms": 5,
+        "readQueries": 13,
+        "writeQueries": 10,
+        "actorWrites": 6,
+        "roomRequests": 9
+      },
+      "elapsedMs": 17500,
+      "ore": 3,
+      "xp": 30,
+      "hunger": 97
+    }
+  },
+  "optimized": {
+    "description": "Twenty simultaneous gatherers contend on one resource, including mixed manual/Auto cases. Real SQLite transactions and revision checks are used; clock and room transport are simulated. Tests include regrowth and stale-generation rejection. Counts are queries/returned rows, not Cloudflare billing or network-capacity measurements.",
+    "rows": [
+      {
+        "kind": "tree",
+        "players": 20,
+        "manualPlayers": 0,
+        "rewards": 6,
+        "xp": 60,
+        "counts": {
+          "readQueries": 188,
+          "writeQueries": 134,
+          "rowsReturned": 248,
+          "batches": 40,
+          "roomRequests": 60
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 3,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 74,
+              "writeQueries": 57,
+              "rowsReturned": 94,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 3,
+            "resourceVersion": 6,
+            "operations": {
+              "readQueries": 74,
+              "writeQueries": 57,
+              "rowsReturned": 94,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 3,
+          "version": 6
+        },
+        "activityMessages": 6
+      },
+      {
+        "kind": "tree",
+        "players": 20,
+        "manualPlayers": 1,
+        "rewards": 6,
+        "xp": 60,
+        "counts": {
+          "readQueries": 187,
+          "writeQueries": 127,
+          "rowsReturned": 241,
+          "batches": 38,
+          "roomRequests": 57
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 3,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 73,
+              "writeQueries": 54,
+              "rowsReturned": 91,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 3,
+            "resourceVersion": 6,
+            "operations": {
+              "readQueries": 73,
+              "writeQueries": 54,
+              "rowsReturned": 91,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 3,
+          "version": 6
+        },
+        "activityMessages": 6
+      },
+      {
+        "kind": "ore",
+        "players": 20,
+        "manualPlayers": 0,
+        "rewards": 4,
+        "xp": 40,
+        "counts": {
+          "readQueries": 352,
+          "writeQueries": 256,
+          "rowsReturned": 456,
+          "batches": 80,
+          "roomRequests": 100
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 1,
+            "resourceVersion": 1,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 99,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 1,
+            "resourceVersion": 2,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 99,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 2,
+            "awarded": 1,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 99,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          },
+          {
+            "round": 3,
+            "awarded": 1,
+            "resourceVersion": 4,
+            "operations": {
+              "readQueries": 78,
+              "writeQueries": 59,
+              "rowsReturned": 99,
+              "batches": 20,
+              "roomRequests": 20
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 1,
+          "version": 4
+        },
+        "activityMessages": 4
+      },
+      {
+        "kind": "ore",
+        "players": 20,
+        "manualPlayers": 1,
+        "rewards": 4,
+        "xp": 40,
+        "counts": {
+          "readQueries": 349,
+          "writeQueries": 243,
+          "rowsReturned": 443,
+          "batches": 76,
+          "roomRequests": 95
+        },
+        "rounds": [
+          {
+            "round": 0,
+            "awarded": 1,
+            "resourceVersion": 1,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 56,
+              "rowsReturned": 96,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 1,
+            "awarded": 1,
+            "resourceVersion": 2,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 56,
+              "rowsReturned": 96,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 2,
+            "awarded": 1,
+            "resourceVersion": 3,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 56,
+              "rowsReturned": 96,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          },
+          {
+            "round": 3,
+            "awarded": 1,
+            "resourceVersion": 4,
+            "operations": {
+              "readQueries": 77,
+              "writeQueries": 56,
+              "rowsReturned": 96,
+              "batches": 19,
+              "roomRequests": 19
+            }
+          }
+        ],
+        "resource": {
+          "cuts": 1,
+          "version": 4
+        },
+        "activityMessages": 4
+      }
+    ],
+    "miningActor": {
+      "counts": {
+        "alarms": 3,
+        "readQueries": 7,
+        "writeQueries": 6,
+        "actorWrites": 4,
+        "roomRequests": 7
+      },
+      "elapsedMs": 17500,
+      "ore": 3,
+      "xp": 30,
+      "hunger": 97
+    }
+  },
+  "localCloudflareRuntime": {
+    "requests": 20,
+    "accepted": 3,
+    "rejectedStale": 17,
+    "rewards": 3,
+    "xp": 30,
+    "fellingReceipts": 1,
+    "unexpected": []
+  },
+  "localCompatibilityDate": "2026-09-25 (installed local runtime maximum; production remains 2026-09-30)"
+}
