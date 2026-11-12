@@ -1,7 +1,7 @@
 'use strict';
 (async()=>{
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
-  const {createActionPointGate}=await import('./action-point-gate.js');let pointGate=null;
+  const {createActionPointGate}=await import('./action-point-gate.js');let pointGate=null,apFeedback=null;
   const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const bedRules=await import('./bed-rest.js');Object.assign(window,bedRules);
@@ -44,6 +44,7 @@
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
     }
+    apFeedback?.update(data);
     return data;
   }
   function conflict(message){
@@ -566,6 +567,8 @@
       script.onload=async()=>{
         const {initializeLearning}=await import('./learning-ui.js');
         window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
+        const {initializeActionPointFeedback}=await import('./action-point-feedback.js');
+        apFeedback=initializeActionPointFeedback({doc:document,initial:packet,onEarn:()=>window.towerLearning.open()});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');
         window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks);
 

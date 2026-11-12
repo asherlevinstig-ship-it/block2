@@ -7,20 +7,20 @@ export function requireActionPoint(state){
 export function spendActionPoint(state,at,{stopAuto=true}={}){
  requireActionPoint(state);
  const p=normalizeActionPoints(state.actionPoints);
- state.actionPoints={...p,value:p.value-1,at};
+ state.actionPoints={...p,value:p.value-1,at,spent:Math.min(Number.MAX_SAFE_INTEGER,(p.spent??0)+1)};
  if(stopAuto&&state.actionPoints.value===0&&(state.plan?.source==='rules'||state.controlMode==='auto')){stopForActionPoints(state,at);return true;}
  return false;
 }
 
 export function beginAutoPoints(state,at){
  const p=normalizeActionPoints(state.actionPoints);
- state.actionPoints={value:availableActionPoints(p,at),at,active:true};
+ state.actionPoints={...p,value:availableActionPoints(p,at),at,active:true};
  if(!state.actionPoints.value){stopForActionPoints(state,at);return false;}
  delete state.autoDisconnected;return true;
 }
 export function releaseAutoPoints(state,at){
  const p=normalizeActionPoints(state.actionPoints);
- if(p.active)state.actionPoints={value:p.value,at,active:false};
+ if(p.active)state.actionPoints={...p,at,active:false};
 }
 export function autoHasNoPoints(state,at=Date.now()){
  const p=normalizeActionPoints(state.actionPoints),value=p.active||state.plan?.source==='rules'?p.value:availableActionPoints(p,at);
@@ -42,7 +42,7 @@ export function stopForActionPoints(state,at,plan=state.plan){
  for(const key of ['fishingCast','timberCut','miningCut','bedRest','campRest'])delete state[key];
  if(state.hunting?.encounter){state.hunting.encounter=null;delete state.combatReceipt;}
  state.depthsRun=null;state.controlMode='play';state.routineLastSeen=at;
- state.actionPoints={value:0,at,active:false};if(automatic)state.autoDisconnected={reason:'action-points',at};
+ state.actionPoints={...normalizeActionPoints(state.actionPoints),value:0,at,active:false};if(automatic)state.autoDisconnected={reason:'action-points',at};
  state.location='home';
  const boxes=roomBoxes('home',state.homeFurniture??[]),tiles=[{x:5,y:7}];
  for(let y=1;y<10;y++)for(let x=1;x<12;x++)tiles.push({x,y});

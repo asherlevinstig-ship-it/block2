@@ -371,7 +371,7 @@ export async function handlePlayerApi(request,env){
       }
       case "/api/player/reconnect":{
         if(state.autoDisconnected){
-          const at=Date.now();state.actionPoints={value:availableActionPoints(state.actionPoints,at),at,active:false};
+          const at=Date.now();state.actionPoints={...state.actionPoints,value:availableActionPoints(state.actionPoints,at),at,active:false};
           delete state.autoDisconnected;state.controlMode='play';state.routineLastSeen=at;
           if(state.report?.reason==='action-points')delete state.report;
         }

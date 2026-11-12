@@ -161,7 +161,7 @@ function updateWoodPanel(){
   $('equipAxe').textContent=woodcutting.equipped?'Unequip axe':'Equip axe';$('equipAxe').disabled=busy;
   $('woodSkill').textContent='Woodcutting '+level+' · '+progress+' / '+target+' XP';
   $('woodTimber').textContent=woodcutting.timber+' timber in your bag · '+woodcutting.timber*woodRules.price+' gold value';
-  $('woodAction').textContent=!woodcutting.axeOwned?'Meet woodcutter · Free axe':!woodcutting.equipped?'Equip basic axe':busy?'Chopping…':regrowing?'Waiting for regrowth':'Chop timber';
+  $('woodAction').textContent=!woodcutting.axeOwned?'Meet woodcutter · Free axe':!woodcutting.equipped?'Equip basic axe':busy?'Chopping · 1 AP / cut':regrowing?'Waiting for regrowth':'Chop timber · 1 AP / cut';
   $('woodAction').disabled=busy||(regrowing&&woodcutting.equipped)||health<=0||woodcutting.timber>=1000000;
   updateTreeStatus();
   $('woodChopProgress').hidden=!busy;
@@ -1490,7 +1490,7 @@ function updateCombatPanel(){
   else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
   const approach=$('approachBeetle');
   approach.hidden=(!beetle&&!stag&&!enemy.archetype&&stage<0)||!!encounter||now<respawn;
-  approach.textContent='Approach '+enemy.name;
+  approach.textContent='Approach '+enemy.name+' · 1 AP / attack';
   approach.disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   const shell=$('beetleShell');
   shell.hidden=(!beetle&&!enemy.archetype)||now<respawn;
@@ -1505,6 +1505,7 @@ function updateCombatPanel(){
   const counterReady=!!encounter&&now<encounter.counterUntil;
   $('combatAttack').classList.toggle('counter-ready',counterReady);
   $('combatAttack').textContent=counterReady?'Counter ready · +'+(encounter.counterPercent??50)+'%':encounter?(characterRules.combat.enabled?'Auto-attack · Tactics active':'Auto-attacking'):'Auto-attack';
+  $('combatAttack').textContent+=' · 1 AP / strike';
   $('combatFlee').disabled=!encounter||remaining>0;
   const stamina=encounter?combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped):100;
   const dodgeCost=combatDodgeCost(armourSelection(combatGear));
@@ -1518,7 +1519,7 @@ function updateCombatPanel(){
   $('quickDodge').classList.toggle('dodge-ready',timing&&!$('quickDodge').disabled);
   $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
-  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
+  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
   $('combatLog').textContent=(encounter&&window.playerCloud?.initial?.actionPoints?.value===0?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
@@ -1529,7 +1530,7 @@ function updateCombatPanel(){
   else if(beetle)$('adventureLandmark').hidden=!!encounter;
   else{
     $('adventureLandmark').hidden=!!encounter||now<respawn;
-    $('adventureLandmark').textContent='Approach '+enemy.name;
+    $('adventureLandmark').textContent='Approach '+enemy.name+' · 1 AP / attack';
     $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   }
 }
@@ -3222,6 +3223,7 @@ function updateWorldLabels(){
   worldLabelKey=labelKey;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
   const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
+    if(['Fishing station','Hidden fishing pool'].includes(text)&&!subtitle)subtitle='1 AP / catch';
     const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
     if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
     const title=document.createElement('span');title.textContent=text;label.append(title);
@@ -3264,6 +3266,7 @@ function updateWorldLabels(){
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
     const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.side==='wild'?explorationName(door.to):door.label;
     const sign=add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
+    sign.dataset.apCost='1';sign.title=label+' · Travel · 1 AP';sign.setAttribute('aria-label','Go to '+label+' · Travel · 1 AP');
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
   if(currentRoom==='tailor')add('Tailor · Browse outfits',...point(4.5,2.5,39),'npc',()=>use(tailorFurniture[0]),'The Gilded Thread');
@@ -3301,14 +3304,14 @@ function updateWorldLabels(){
     for(const node of roomFurniture().filter(item=>item.type==='oreDeposit')){
       if(node.id!=='copper-west'&&node.id!=='iron-north')continue;
       const ore=oreProducts[node.ore],depleted=oreState[node.id]?.readyAt>combatNow();
-      add(ore.name,...point(node.x+.5,node.y+.5,34),'npc',()=>use(node),depleted?'Depleted · recovering':miningLevel(mining)<ore.level?'Mining '+ore.level:'Mine deposit');
+      add(ore.name,...point(node.x+.5,node.y+.5,34),'npc',()=>use(node),depleted?'Depleted · recovering':miningLevel(mining)<ore.level?'Mining '+ore.level:'Mine deposit · 1 AP / strike');
     }
   }
   if(currentRoom===deepMiningRoom){
     for(const node of roomFurniture().filter(item=>item.type==='oreDeposit')){
       if(node.id==='deep-iron-south'||player.inCombat)continue;
       const ore=oreProducts[node.ore],depleted=oreState[node.id]?.readyAt>combatNow();
-      add('Rich '+ore.name,...point(node.x+.5,node.y+.5,34),'npc',()=>use(node),depleted?'Depleted · recovering':node.guarded&&miningGuardAwake({hunting},combatNow())?'Guarded · 2 ore per swing':'2 ore per swing');
+      add('Rich '+ore.name,...point(node.x+.5,node.y+.5,34),'npc',()=>use(node),depleted?'Depleted · recovering':node.guarded&&miningGuardAwake({hunting},combatNow())?'Guarded · 2 ore per swing':'2 ore per swing · 1 AP / strike');
     }
   }
   if(currentRoom===moonwood.trailCamp.room){
@@ -3316,8 +3319,8 @@ function updateWorldLabels(){
     add('Trail camp',...point(fire.x+.5,fire.y+.5,30),'npc',()=>use(fire),({cold:'Cold fire',embers:'Fading embers',burning:'Fire lit'})[phase]);
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
-  if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name);
-  if(poolLabel)add(poolLabel,...point(moonfinPool.water.x,moonfinPool.water.y,21),'shoal',poolBite?reelFish:useMoonfinPool,poolBite?'Space':'Rare catch');
+  if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name+' · 1 AP / catch');
+  if(poolLabel)add(poolLabel,...point(moonfinPool.water.x,moonfinPool.water.y,21),'shoal',poolBite?reelFish:useMoonfinPool,poolBite?'Space':'Rare catch · 1 AP / catch');
   if(clue){
     const {inside,tile,to}=clue.door,x=inside.x+.5+(inside.x-tile.x)*.75,y=inside.y+.5+(inside.y-tile.y)*.75;
     add('Fresh stag tracks',...point(x,y,13),'tracks',followMoonbackTracks,explorationName(to));
@@ -3338,7 +3341,7 @@ function updateWorldLabels(){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
     add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
     if(stump)add('Regrowing',...point(6.5,5.5,13),'sign');
-    else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
+    else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()),'1 AP / completed cut');
   }
   if(depthsRun&&!player.inCombat){
     for(const item of roomFurniture().filter(i=>i.type==='dungeonArch'||i.type==='dungeonExit')){
@@ -3348,7 +3351,8 @@ function updateWorldLabels(){
         :currentRoom==='depthsGallery'?'To the Sunken Vault'
         :depthsRun.routeChoice==='pending'?'Choose a passage'
         :depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated?'To the Sealed Alcove':'To Shell Gallery';
-      add(name,...point(item.x+.5,item.y+.5,60),'npc',()=>use(item));
+      const exit=add(name,...point(item.x+.5,item.y+.5,60),'npc',()=>use(item));
+      if(!['Passage locked','Choose a passage'].includes(name)){exit.dataset.apCost='1';exit.title=name+' · Travel · 1 AP';}
     }
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
     if(passage&&depthsSideForRoom(currentRoom))add('Shell Gallery ←',...point(passage.x+.5,passage.y+.5,38),'npc',()=>visitDungeonSide('return'));
@@ -5750,7 +5754,7 @@ function equippedEssenceStatus(now,slot='q'){
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth();
   const lowMana=manaAvailable(playerVitals,combatNow())<MANA_COST;
-  return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active)&&!remaining&&!fullHealth&&!lowMana};
+  return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active)&&!remaining&&!fullHealth&&!lowMana&&(window.playerCloud?.initial?.actionPoints?.value??1)>0};
 }
 function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
@@ -5775,6 +5779,7 @@ function updateEssenceHotbar(now=Date.now()){
   for(const slot of ['q','e']){
     const suffix=slot==='q'?'':'E';
     const {power,remaining,fullHealth,lowMana,canCast}=equippedEssenceStatus(now,slot);
+    const noPoints=window.playerCloud?.initial?.actionPoints?.value===0;
     const button=$('essenceHotbarPower'+suffix);
     let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
       :!(player.inCombat||window.millRaidClient?.active)?allEssences[power.gem].name+' · Cast in combat'
@@ -5786,8 +5791,8 @@ function updateEssenceHotbar(now=Date.now()){
     button.dataset.equipped=String(!!power);
     button.disabled=player.inCombat&&!canCast;
     button.style.setProperty('--power-color',power?.color??'#b7a4ed');
-    if(power)status+=' · '+MANA_COST+' MP';
-    button.title=power?powerDescription(power)+' · Costs '+MANA_COST+' mana · Regenerates '+MANA_REGEN+'/sec'+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
+    if(power)status='1 AP + '+MANA_COST+' MP · '+(noPoints?'Answer questions to earn AP':status);
+    button.title=power?powerDescription(power)+' · Costs 1 Action Point + '+MANA_COST+' mana · Regenerates '+MANA_REGEN+'/sec'+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
     button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
     const name=$('essenceHotbarName'+suffix),label=$('essenceHotbarStatus'+suffix),symbol=$('essenceHotbarSymbol'+suffix);
     if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
@@ -5808,7 +5813,7 @@ function currentActivityPrompt(){
   }
   if(currentRoom===quarryRoom&&!miningCut){
     const progress=skillProgress(mining.xp);
-    return {label:'MINING '+progress.level+' · '+progress.progress+' / '+progress.target+' XP',title:mining.pickOwned?'Choose a deposit':'Collect your free pickaxe',text:mining.pickOwned?'Break deposits for a chance at quartz, fossils and runic fragments. Iron unlocks at Mining 3.':'Speak to the quarry miner to get started.'};
+    return {label:'MINING '+progress.level+' · '+progress.progress+' / '+progress.target+' XP',title:mining.pickOwned?'Choose a deposit':'Collect your free pickaxe',text:mining.pickOwned?'Each pickaxe strike costs 1 AP. Break deposits for quartz, fossils and runic fragments. Iron unlocks at Mining 3.':'Speak to the quarry miner to get started.'};
   }
   if(playerVitals.hunger<=LOW_HUNGER&&(meals[towerBread.id]??0)>0&&!fishingSession&&!woodSession&&!player.inCombat)
     return {label:'FOOD FOR THE ROAD',title:playerVitals.hunger===0?'You’re exhausted':'You’re hungry',text:'Tower Bread restores 25 hunger. Open your bag to eat a ration.',action:'rationBag'};
@@ -5827,11 +5832,11 @@ function currentActivityPrompt(){
   if(clue)return {label:'MOONBACK TRAIL',title:'Follow the fresh tracks',text:'The trail leads toward '+explorationName(clue.door.to)+'. The stag moves quickly.',action:'moonbackTracks'};
   if(currentRoom==='logging'){
     const tree=focusedTimber();
-    if(woodSession)return {label:'WOODCUTTING',title:'Chopping timber',text:'Walk away to stop. Each cut earns timber and Woodcutting XP.'};
+    if(woodSession)return {label:'WOODCUTTING',title:'Chopping timber',text:'Walk away to stop. Each completed cut costs 1 AP and earns timber and Woodcutting XP.'};
     if(!woodcutting.axeOwned)return {label:'START WOODCUTTING',title:'Collect your free axe',text:'The woodcutter will give you an axe to start gathering timber.',action:'woodAction'};
     if(!woodcutting.equipped)return {label:'WOODCUTTING',title:'Equip your axe',text:'Get your axe ready before chopping a tree.',action:'woodAction'};
     if(tree&&treeState(tree).regrowsAt)return {label:'TREE FELLED',title:'Choose another tree',text:'Click another tree to keep gathering while this stump regrows.'};
-    return {label:'WOODCUTTING',title:'Gather some timber',text:'Three cuts fell a tree. Your timber can be sold or used for crafting.',action:'woodAction'};
+    return {label:'WOODCUTTING',title:'Gather some timber',text:'Each cut costs 1 AP. Three cuts fell a tree. Sell your timber or use it for crafting.',action:'woodAction'};
   }
   if(isFishingRoom(currentRoom)){
     if(fishingSession){
@@ -5843,7 +5848,7 @@ function currentActivityPrompt(){
     }
     if(fishingGear.bait<1)return {label:'FISHING SUPPLIES',title:'You need bait',text:'Riverworms are sold at Silverfin Outfitters in the Tower.',action:'baitRoute'};
     if(currentRoom==='pond'&&window.playerCloud?.gameplay)return {label:'SILVERFIN SHOAL',title:'Fish the shoal',text:'Follow the bright ripples. Reel at the bite for a better chance of a fine fish.',action:'pondShoal'};
-    return {label:'FISHING',title:'Cast a line',text:'Watch the float. Reel when you see a bite for bonus Patience XP.',action:'adventureLandmark'};
+    return {label:'FISHING',title:'Cast a line',text:'Each completed catch costs 1 AP. Watch the float and reel on a bite for bonus Patience XP.',action:'adventureLandmark'};
   }
   if(currentRoom==='beaconwatch'&&!adventure.watchBeacon)return {label:'BEACONWATCH EXPEDITION',title:'Light the watchtower beacon',text:'Restore the beacon to open a permanent bridge back to Millbrook.',action:'watchBeaconGuide'};
   if(currentRoom==='creek'&&!adventure.bridge)return {label:'CREEK CROSSING',title:'Continue to the ruins',text:'Use the stepping stones to cross Glass Creek.',action:'adventureLandmark'};
@@ -5884,10 +5889,10 @@ function updateActivityPrompt(){
   else if(prompt.action==='baitRoute')button.textContent='Show route to bait shop';
   else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
   else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
-  else if(prompt.action==='pondShoal')button.textContent='Fish the shoal';
-  else if(prompt.action==='cellarGuardian')button.textContent='Approach the custodian';
+  else if(prompt.action==='pondShoal')button.textContent='Fish the shoal · 1 AP / catch';
+  else if(prompt.action==='cellarGuardian')button.textContent='Approach · 1 AP / attack';
   else if(prompt.action==='cellarChest')button.textContent='Open the chest';
-  else if(prompt.action==='engageMoonback')button.textContent='Approach the stag';
+  else if(prompt.action==='engageMoonback')button.textContent='Approach · 1 AP / attack';
   else if(prompt.action==='moonbackTracks')button.textContent='Follow tracks';
   else button.textContent=$(prompt.action).textContent||prompt.title;
 }
@@ -5923,7 +5928,7 @@ function updateAdventurePanel(){
   $('offlinePlanPanel').hidden=currentRoom!=='pond';
   $('startOfflineFishing').disabled=routineControlled()||fishingGear.bait<1||!!fishingSession;
   $('planBait').max=fishingGear.bait;
-  $('planPace').textContent='One catch about every '+Math.round(60*fishingCatalog.rods[fishingGear.equippedRod].duration/4500)+' seconds with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Each catch uses one bait and earns 10 Patience XP.';
+  $('planPace').textContent='One catch about every '+Math.round(60*fishingCatalog.rods[fishingGear.equippedRod].duration/4500)+' seconds with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Each catch uses 1 AP and one bait, and earns 10 Patience XP.';
   updatePlayerStats();
   $('adventureProgress').hidden=depthsIndex>=0;
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).filter(room=>depthsStageIndex(room)<0).length+' places discovered';
@@ -5934,7 +5939,7 @@ function updateAdventurePanel(){
   landmark.disabled=(!!fishingSession&&!bite)||(isFishingRoom(currentRoom)&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
   landmark.classList.toggle('cross-creek',currentRoom==='creek');
-  landmark.textContent=action??'';
+  landmark.textContent=(action??'')+(action&&isFishingRoom(currentRoom)&&!fishingSession?' · 1 AP / catch':action&&currentRoom==='clearing'?' · 1 AP / attack':action&&currentRoom==='creek'?' · Travel 1 AP':'');
   const links=$('adventureRoutes');
   links.replaceChildren();
   for(const door of roomDoors[currentRoom].filter(item=>moonwood.open(item,adventure))){
