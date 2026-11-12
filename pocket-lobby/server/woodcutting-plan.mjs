@@ -1,4 +1,5 @@
 import {useHunger,exertionDuration} from '../public/player-vitals.js';
+import {spendAutoPoint} from './action-points.mjs';
 import {checkAutoWorkFood} from './auto-food.mjs';
 import {autoStoreVault} from './vault.mjs';
 import {normalizeWoodcutting,harvestTimber,woodcuttingLevel,woodRules} from '../public/woodcutting.js';
@@ -38,6 +39,7 @@ export function settleWoodcuttingPlan(state,now,{stop=false}={}){
     useHunger(state,amount);plan.timber+=amount;plan.xp+=amount*woodRules.xp;changed=true;
     if(plan.source==='rules'&&state.bank?.vault?.rules?.timber!==undefined)autoStoreVault(state,plan,at);
     plan.nextCutAt+=exertionDuration(plan.interval,state.vitals);
+    if(spendAutoPoint(state,plan,at))return true;
     if(checkFood(at))return true;
   }
   if(foodStop||now>=plan.endAt||stop||wood.timber>=1000000){

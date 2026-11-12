@@ -1,5 +1,13 @@
 # Cloudflare efficiency
 
+## Action Points and disconnected Auto
+
+Characters have a separate 100-point Action Point meter. Completed Auto catches, timber cuts, ore awards, exploration stops, table rounds, cooking actions and fights spend one point each. Travel, shopping, selling and manual play do not spend points. The last affordable action keeps its reward; batches cannot process extra actions after depletion.
+
+At zero, the server cancels unfinished work, saves rewards, moves the character to a walkable home tile, removes its room presence and fishing reservation, and closes its room connection. Auto actors delete their alarms and the director excludes disconnected characters. The browser stops polling and reconnecting until the player chooses Return to game. Refill alone never restarts Auto.
+
+Points refill by one per minute while Auto is off, capped at 100. Refill is calculated from timestamps on the next read/start/reconnect; it requires no scheduled database writes or wake-ups. Historical benchmark reports below predate this budget. The current repeatable gambling benchmark uses a half-hour window (60 rounds), so it measures running Auto without crossing the new 100-point limit.
+
 Quiet gambling now resolves up to two minutes of rounds together through the normal server engine. Stakes, total-loss limits, profit targets, reserve gold, maximum rounds and Luck awards remain checked for each round. A player viewing the character or joining its room wakes the actor immediately. Returning to manual play settles due rounds before stopping the plan. Resting wakes at completion instead of polling every two seconds.
 
 Fishing retains its existing reservation-bounded catch batches. Tree cuts and ore strikes stay individually timed and atomically committed against the shared resource revision. These cannot safely be replaced by isolated offline yield estimates: other players can cut the same tree or mine the same deposit. Their preparatory pose updates now avoid a duplicate room-activity request because the actor publishes that pose itself.

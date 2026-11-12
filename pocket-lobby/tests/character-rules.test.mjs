@@ -32,8 +32,8 @@ test('away work respects grace period, bait reserve, timber target and time cap'
   capped.characterRules.timberTarget = 1000000;
   capped.meals.silverfinFeast = 20;
   touchPresence(capped, 86400000);
-  assert.equal(capped.report.timber, 480);
-  assert.equal(capped.report.reason, 'away-cap');
+  assert.equal(capped.report.timber, 100);
+  assert.equal(capped.report.reason, 'action-points');
 });
 
 test('missing requirements trigger rest and combat is left untouched', () => {

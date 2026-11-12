@@ -1,4 +1,6 @@
 import {normalizeMining} from '../public/mining.js';
+import {normalizeActionPoints} from '../public/action-points.js';
+import {autoHasNoPoints,stopForActionPoints,spendAutoPoint} from './action-points.mjs';
 import {cellarFlags} from '../public/mill-cellar.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
@@ -112,6 +114,8 @@ export function normalizeState(input={}){
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<(input.location===wildlifeRoom?wildlifeView.cols:18)&&position.y<(input.location===wildlifeRoom?wildlifeView.rows:16)?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
+  state.actionPoints=normalizeActionPoints(input.actionPoints);
+  if(input.autoDisconnected?.reason==='action-points'&&Number.isSafeInteger(input.autoDisconnected.at)&&input.autoDisconnected.at>=0)state.autoDisconnected={reason:'action-points',at:input.autoDisconnected.at};
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
   state.safeVersion=input.safeVersion;migrateHomeSafe(state);
   if((state.ownedFurniture.safe??0)>1)throw new Error('Invalid home safe count.');
@@ -205,6 +209,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     const caughtAt=plan.nextCatchAt;autoStoreVault(state,plan,caughtAt);
     changed=true;
     plan.nextCatchAt+=exertionDuration(plan.interval,state.vitals);
+    if(spendAutoPoint(state,plan,caughtAt))return true;
     if(plan.baitUsed>=plan.baitLimit||state.fishingGear.bait===0){
       finishPlan(state,state.fishingGear.bait===0?"out-of-bait":"bait-limit",caughtAt);
       return true;
@@ -223,6 +228,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
 }
 
 export function settlePlan(state,now,options={}){
+  if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);finishRoutineReport(state,now);return true;}
   const changed=settleWorkPlan(state,now,options);
   if(changed)finishRoutineReport(state,now);
   return changed;

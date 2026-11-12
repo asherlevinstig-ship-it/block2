@@ -1,6 +1,7 @@
 'use strict';
 (async()=>{
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
+  const {createActionPointGate}=await import('./action-point-gate.js');let pointGate=null;
   const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const bedRules=await import('./bed-rest.js');Object.assign(window,bedRules);
@@ -12,6 +13,7 @@
   const gateText=document.getElementById('cloudGateText');
   const retry=document.getElementById('cloudRetry');
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
+  let pausedForPoints=false,shiftTimer=null,shiftPolling=false;
   let presenceBusy=null,acting=0,gameplayBusy=false,lastInputAt=Date.now(),lastReportedInputAt=0,resumeAutoView=false;
   const recordInput=event=>{
     if(!event.isTrusted)return;
@@ -27,7 +29,8 @@
     try{localStorage.setItem('pocket-lobby:cloud-pending',JSON.stringify(value));}catch{}
   };
   const setStatus=text=>{status.textContent=text;};
-  async function request(path,body){
+  async function request(path,body,allowPaused=false){
+    if(pausedForPoints&&path!=='reconnect'&&!allowPaused)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
     const sentAt=performance.now();
     const response=await fetch('/api/player/'+path,{
       method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',
@@ -36,6 +39,7 @@
       signal:AbortSignal.timeout(15000)
     });
     const data=await response.json();combatClock.sample(data.serverTime,sentAt);
+    if(data.state?.autoDisconnected&&path!=='reconnect')suspendForPoints(data);
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -56,7 +60,7 @@
     if(!gate.open)gate.showModal();
   }
   function enqueue(state){
-    if(packet.state.plan||packet.state.report||conflicted||gameplayBusy)return;
+    if(pausedForPoints||packet.state.plan||packet.state.report||conflicted||gameplayBusy)return;
     pending={state,operation:crypto.randomUUID()};
     ownOperations.push(pending.operation);
     if(ownOperations.length>64)ownOperations.shift();
@@ -89,6 +93,7 @@
     return sending;
   }
   async function flush(){
+    if(pausedForPoints)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
     await drain();
     if(conflicted||pending||retryJob)throw new Error('Wait for Server saved before starting a plan.');
   }
@@ -130,7 +135,7 @@
     acting++;try{return await performAction(path,body);}finally{acting--;}
   }
   async function pulse(){
-    if(document.hidden)return;
+    if(document.hidden||pausedForPoints)return;
     if(conflicted||presenceBusy||acting||gameplayBusy||(!packet?.state.characterRules?.enabled&&packet?.state.controlMode!=='auto'&&packet?.state.plan?.source!=='rules')||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report&&!packet.state.autoSwitch)return;
     await flush();if(presenceBusy||acting||gameplayBusy||conflicted)return;
     const inputAt=lastInputAt,active=packet.state.controlMode!=='auto'&&!document.hidden&&inputAt>lastReportedInputAt;
@@ -138,6 +143,7 @@
     presenceBusy=(async()=>{
       try{
         await action('presence',{active,idleForMs:Math.max(0,Math.min(AWAY_GRACE_MS,Date.now()-inputAt))});
+        if(pausedForPoints)return;
         if(active)lastReportedInputAt=inputAt;
         const showRecap=recap?.resume();
         if(!document.hidden&&(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'||hadRoutine&&!packet.state.plan)){
@@ -156,7 +162,7 @@
   function schedulePresence(delay){
     clearTimeout(presenceTimer);presenceTimer=null;
     const cadence=autoPresenceDelay(packet?.state,combatClock.now(),document.hidden);
-    if(cadence===null||conflicted)return;
+    if(cadence===null||conflicted||pausedForPoints)return;
     presenceTimer=setTimeout(async()=>{
       presenceTimer=null;
       try{await pulse();}catch{}
@@ -248,6 +254,7 @@
     if(plan.foodTrip||foodStop(plan.reason)){const info=autoStatus(state);document.getElementById('offlineReason').textContent=info.reason||info.decision;}
   }
   function showReport(state,details=false){
+    if(pausedForPoints)return;
     renderAutoPanel(state);
     if((state.plan??state.report)?.source==='rules'&&!details)return;
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
@@ -309,6 +316,25 @@
     dialog.oncancel=event=>{if(plan.source!=='rules')event.preventDefault();};
     if(!dialog.open)dialog.showModal();
   }
+  function suspendForPoints(latest){
+    if(latest?.state)packet=latest;
+    pointGate??=createActionPointGate({gate,text:gateText,button:retry,title:document.getElementById('cloudTitle'),
+      stop:()=>{pausedForPoints=true;pending=retryJob=null;backup(null);clearTimeout(timer);clearTimeout(presenceTimer);clearTimeout(shiftTimer);window.towerMultiplayer?.disconnect();},
+      apply:()=>window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true}),status:setStatus,
+      reconnect:async()=>{
+        await action('reconnect');pausedForPoints=false;
+        window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true});
+        setStatus('Server saved');lastInputAt=Date.now();lastReportedInputAt=lastInputAt;
+        renderAutoPanel(packet.state);window.towerJoinRoom?.();schedulePresence();
+      }});
+    pointGate.suspend(packet);
+  }
+  async function pauseAutoConnection(){
+    if(pausedForPoints)return;
+    pausedForPoints=true;window.towerMultiplayer?.disconnect();
+    try{suspendForPoints(await request('state',undefined,true));}
+    catch{suspendForPoints(packet);}
+  }
   function attach(){
     window.towerRefreshAutoStatus=()=>renderAutoPanel(packet.state);
     recap=initializeAutoRecap({
@@ -353,10 +379,9 @@
     document.getElementById('planBait').value=Math.min(10,packet.state.fishingGear.bait);
     if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules')window.towerApplyRoutineState?.(packet.state);
     showReport(packet.state);
-    let shiftTimer=null,shiftPolling=false;
     const scheduleShift=(delay=15000)=>{
       clearTimeout(shiftTimer);
-      if(document.hidden||!packet.state.plan||packet.state.plan.source==='rules')return;
+      if(pausedForPoints||document.hidden||!packet.state.plan||packet.state.plan.source==='rules')return;
       const poll=async()=>{
         if(document.hidden||shiftPolling)return;
         shiftPolling=true;
@@ -372,6 +397,7 @@
     window.addEventListener('online',()=>drain());
     schedulePresence(packet.state.plan?.source==='rules'?150:20000);
     document.addEventListener('visibilitychange',()=>{
+      if(pausedForPoints)return;
       if(document.hidden){recap.leave();resumeAutoView=true;schedulePresence();scheduleShift();return;}
       lastInputAt=Date.now();
       if(packet.state.report?.source==='rules')recap.resume();
@@ -459,7 +485,7 @@
       const explorationFog=await import('./exploration-fog.js');
       const worldActivity=await import('./world-activity.js');
       const {autoWalkPosition}=await import('./auto-walk.js');
-      const playerVitals=await import('./player-vitals.js');const familiars=await import('./familiars.js');const wildlife=await import('./wildlife.js');
+      const playerVitals=await import('./player-vitals.js');window.towerActionPoints=await import('./action-points.js');const familiars=await import('./familiars.js');const wildlife=await import('./wildlife.js');
       const autoFeedback=await import('./auto-feedback.js');
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
@@ -481,6 +507,7 @@
         try{return await action('gameplay/'+name,body);}
         finally{gameplayBusy=false;}
       },setupExplorer:async()=>{await flush();await action('auto/explore/setup');pending=retryJob=null;backup(null);lastInputAt=Date.now();lastReportedInputAt=lastInputAt;window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);showReport(packet.state);schedulePresence(150);return packet.state;},get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},startSimpleAuto:async(mode,options)=>{await flush();await action('auto/simple',{mode,options});pending=retryJob=null;backup(null);window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);schedulePresence(150);return packet.state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
+      window.playerCloud.pauseAuto=pauseAutoConnection;
       const {initializeRankings}=await import('./rankings.js');
       initializeRankings(window.playerCloud,document,window);
       const {initializeFactions}=await import('./factions.js');
@@ -533,8 +560,8 @@
         window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks);
 
         if(!(pending||retryJob||sending))setStatus('Server saved');
-        gate.close();
-        recap?.resume({initial:true});
+        if(packet.state.autoDisconnected)suspendForPoints(packet);
+        else{gate.close();recap?.resume({initial:true});}
       };
       script.onerror=()=>{
         gateText.textContent='The game could not load. Reload to retry.';

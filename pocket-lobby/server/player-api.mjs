@@ -1,4 +1,6 @@
 import {cellarFlags} from '../public/mill-cellar.js';
+import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
+import {autoHasNoPoints} from './action-points.mjs';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
 import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
@@ -48,6 +50,7 @@ const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
 function readPlayerState(row){
   const state=JSON.parse(row.state_json);
+  state.actionPoints=normalizeActionPoints(state.actionPoints);
   state.mining=normalizeMining(state.mining);
   migrateProgression(state);
   migrateHomeSafe(state);
@@ -90,6 +93,7 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     const now=Date.now();
     if(!idle&&state.plan?.fishingWork?.batchUntil)return row;
     const initial=JSON.stringify(state);enablePhysicalWork(state,env);
+    if(autoHasNoPoints(state,now))settlePlan(state,now);
     if(idle&&state.plan?.fishingWork?.batchUntil){
       await settleFishingBatch(env,id,state,now,motion,{observed});
       if(!state.plan)finishRoutineReport(state,now);
@@ -103,6 +107,7 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     enablePhysicalWork(state,env);
     const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
     const oreMutation=idle?await advanceMiningWork(db,state,now,motion):null;
+    if(state.autoDisconnected&&state.report?.reason==='action-points')finishRoutineReport(state,now);
     if(idle&&state.plan?.oreSaleTrip&&motion?.room==='market'&&motion.x===timberMarketCounter.x&&motion.y===timberMarketCounter.y){
       completeOreSale(state,now);
       if(!state.plan)finishRoutineReport(state,now);
@@ -164,6 +169,7 @@ export async function handlePlayerApi(request,env){
       const body=await bodyOf(request);
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
+      delete legacy.actionPoints;delete legacy.autoDisconnected;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
       const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
@@ -341,6 +347,14 @@ export async function handlePlayerApi(request,env){
         if(resume&&!state.plan){state.location=resume.room;state.position={x:resume.x,y:resume.y};}
         settleActivities(state,Date.now());
         if(before!==null&&JSON.stringify(state)===before)return json(packet(row));
+        break;
+      }
+      case "/api/player/reconnect":{
+        if(state.autoDisconnected){
+          const at=Date.now();state.actionPoints={value:availableActionPoints(state.actionPoints,at),at,active:false};
+          delete state.autoDisconnected;state.controlMode='play';state.routineLastSeen=at;
+          if(state.report?.reason==='action-points')delete state.report;
+        }
         break;
       }
       case "/api/player/control":{

@@ -1,4 +1,5 @@
 import {oreDeposits,oreProducts,miningRules,miningDuration,quarryRoom,besideDeposit} from '../public/mining.js';
+import {spendAutoPoint} from './action-points.mjs';
 import {exertionDuration,LOW_HUNGER} from '../public/player-vitals.js';
 import {autoTilePath} from './auto-motion.mjs';
 import {readOreDeposits,readOreDeposit,awardOreStrike} from './mining.mjs';
@@ -44,6 +45,7 @@ export async function advanceMiningWork(db,state,now,motion){
    const started=now+MINING_SWING_PAUSE_MS;
    plan.miningWork={phase:'mining',node:node.id,stand:{...work.stand},cut:{id:crypto.randomUUID(),node:node.id,revision:snapshot.revision+1,started,endsAt:started+exertionDuration(miningDuration(state.mining),state.vitals)}};
   }
+  spendAutoPoint(state,plan,now);
   return {node:node.id,revision:snapshot.revision,hits,readyAt:hits===miningRules.hits?now+miningRules.respawnMs:0};
  }
  if(work.phase==='waiting'&&now<work.readyAt)return null;

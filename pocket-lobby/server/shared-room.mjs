@@ -35,6 +35,7 @@ export async function handleWorldConnect(request,env){
   const row=await env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(identity.playerId).first();
   if(!row)return json({error:'Character not found.'},401);
   const state=JSON.parse(row.state_json);
+  if(state.autoDisconnected)return json({error:'Auto stopped: out of Action Points. Return to the game to reconnect.'},403);
   if(room==='lounge'&&!isSmartlyDressed(state.wardrobe))return json({error:'Choose a Tailored Suit or Moonlit Dress in Wardrobe before entering the lounge.'},403);
   if(state.location!==room||state.plan&&state.plan.source!=='rules'||state.report)return json({error:'Save your current location before joining.'},409);
   const access=room===factionHall?await factionHallAccess(env.TOWER_DB,identity.playerId):null;
@@ -133,12 +134,15 @@ export class SharedRoom{
     return json({spot,observed,leaseUntil});
   }
   async autoPresence(request){
-    const {playerId,peer,until,remove}=await request.json();
+    const {playerId,peer,until,remove,disconnectReason}=await request.json();
     if(!peer?.fishingBatch&&!peer?.workBatch)this.observedBatches.delete(playerId);
     if((remove||!peer?.fishingSpot)&&this.fishingSpots.delete(playerId))await this.ctx.storage.put('fishingSpots',[...this.fishingSpots]);
     if(peer?.room&&this.room!==peer.room&&this.sessions.size)await this.loadTrees(peer.room);
     const before=JSON.stringify(this.autoPeers.has(playerId)?publicPeer(this.autoPeers.get(playerId)):null);
-    if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
+    if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&(meta.serverAuto||disconnectReason==='action-points')){
+      if(disconnectReason==='action-points')this.send(ws,{type:'autoDisconnected',reason:disconnectReason});
+      ws.close(disconnectReason==='action-points'?4004:1000,disconnectReason==='action-points'?'Out of Action Points':'Server character changed area');this.sessions.delete(ws);
+    }}
     else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
       this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+(peer.fishingBatch?255000:peer.workBatch?135000:90000))});
       for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&!meta.serverAuto){recordPlayUsage(this.env,meta,Date.now(),{flush:true});meta.serverAuto=true;ws.serializeAttachment?.(meta);}
@@ -218,12 +222,13 @@ export class SharedRoom{
     else if((await this.env.TOWER_DB.prepare('SELECT account_id FROM tower_accounts WHERE player_id = ?').bind(meta.playerId).first())?.account_id)return false;
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();
     if(!row)return false;
+    const state=JSON.parse(row.state_json);if(state.autoDisconnected)return false;
     if(meta.room===factionHall&&(await factionHallAccess(this.env.TOWER_DB,meta.playerId))?.id!==meta.factionId)return false;
     // Auto's saved work destination can change before its visible actor reaches
     // the next doorway. The trusted room lease owns that transition, not login auth.
     const actor=this.autoPeers.get(meta.playerId);
     if(meta.serverAuto&&actor?.until>Date.now()&&actor.room===meta.room)return true;
-    const state=JSON.parse(row.state_json);return (!state.plan||state.plan.source==='rules')&&!state.report&&state.location===meta.room;
+    return (!state.plan||state.plan.source==='rules')&&!state.report&&state.location===meta.room;
   }
   async webSocketMessage(ws,raw){
     const meta=this.sessions.get(ws);if(!meta)return;

@@ -1,4 +1,5 @@
 import {forestTrees,roomTreeSnapshot,readSharedTree,treeKey,describeTreeCut} from './shared-trees.mjs';
+import {spendAutoPoint} from './action-points.mjs';
 import {autoTilePath} from './auto-motion.mjs';
 import {cutTimberTree,choppingDuration,timberFacing,timberTreeRules} from '../public/woodcutting.js';
 import {useHunger,exertionDuration,LOW_HUNGER} from '../public/player-vitals.js';
@@ -48,6 +49,7 @@ export async function advanceTreeWork(env,state,now,motion){
   // The next award still checks the shared tree and commits atomically.
   const started=now+2000,duration=swingDuration(state);
   if(started+duration<p.endAt&&canContinueTree(state,p,work,mutation,now))scheduleSwing(p,work,shared,started,duration);
+  spendAutoPoint(state,p,now);
   return mutation;
  }
  if(work.phase==='waiting'&&now<work.readyAt)return null;

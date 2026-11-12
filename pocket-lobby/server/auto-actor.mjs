@@ -14,6 +14,7 @@ import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.m
 import {autoUsage,autoUsagePhase,recordAutoUsage} from './auto-usage.mjs';
 import {autoWorkDue,quietWorkDeadline,PRESENCE_RENEW_MS} from './auto-cadence.mjs';
 import {combatWakeAt} from './combat-schedule.mjs';
+import {autoHasNoPoints} from './action-points.mjs';
 
 export class AutoActor{
  constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};this.savedActor=JSON.stringify(this.actor);});}
@@ -36,7 +37,7 @@ export class AutoActor{
   return {...motion,x,y,direction,back};
  }
  alarm(){return this.ctx.blockConcurrencyWhile(async()=>{try{await this.tick(true);}catch(error){console.warn('Auto actor retry',error.message);await this.ctx.storage.setAlarm(Date.now()+5000);}});}
- async relay(room,remove=false,state=null,usage=null){
+ async relay(room,remove=false,state=null,usage=null,disconnectReason=null){
   if(!Object.hasOwn(socialRooms,room??''))return;
   const name=room==='home'?'home:'+this.actor.playerId:publicRoomNamespace(room);
   const stub=this.env.SHARED_ROOMS.get(this.env.SHARED_ROOMS.idFromName(name));
@@ -56,7 +57,7 @@ export class AutoActor{
   if(!remove&&this.actor.publishedRoom===room&&this.actor.peerSignature===signature&&now-this.actor.lastRelayAt<PRESENCE_RENEW_MS)return;
   const until=Math.max(now+90000,(peer?.fishingBatch??peer?.workBatch??0)+15000);
   if(usage)usage.presence++;
-  const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until})}));
+  const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until,disconnectReason})}));
   if(!response.ok)throw new Error('Could not update the shared room');
   if(!remove){
    const {observed}=await response.json();
@@ -70,8 +71,10 @@ export class AutoActor{
   if(advance&&this.actor.quietUntil<=started)delete this.actor.quietUntil;
   if(observed){this.actor.audience='observed';delete this.actor.quietUntil;}
   let usage=advance?autoUsage(this.env,previousUsage,observed?'observe':'alarm',started):null;
-  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),observed,usage,autoRelay:true}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  let row=advance?await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),observed,usage,autoRelay:true}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  if(!advance&&row&&autoHasNoPoints(JSON.parse(row.state_json),started))row=await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),autoRelay:true});
   const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
+  if(!state?.autoDisconnected)delete this.actor.disconnectedAt;
   if(!advance&&!active&&previousUsage)usage=autoUsage(this.env,previousUsage,'stop',started);
   if(active){
    if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
@@ -86,7 +89,11 @@ export class AutoActor{
    if(previous&&previous!==this.actor.motion.room)await this.relay(previous,true,null,usage);
    await this.relay(this.actor.motion.room,false,state,usage);this.actor.publishedRoom=this.actor.motion.room;
   }else{
-   if(previous)await this.relay(previous,true,null,usage);delete this.actor.publishedRoom;
+   if(state?.autoDisconnected&&this.actor.disconnectedAt!==state.autoDisconnected.at){
+    for(const room of new Set([previous,this.actor.motion?.room,'home'].filter(Boolean)))await this.relay(room,true,null,usage,'action-points');
+    this.actor.disconnectedAt=state.autoDisconnected.at;
+   }else if(previous)await this.relay(previous,true,null,usage);
+   delete this.actor.publishedRoom;
    delete this.actor.audience;
    delete this.actor.quietUntil;
    delete this.actor.walk;delete this.actor.destination;
@@ -111,7 +118,7 @@ export class AutoActor{
    const cap=fighting&&plan.endAt<=now?Infinity:plan.endAt??Infinity;
    next=fishing?.batchUntil??this.actor.quietUntil??Math.min(cap,boundary,workDue);
   }
-  else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
+  else if(!state?.autoDisconnected&&state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(active&&(advance||!previousUsage)){
    const audience=this.actor.audience??'unknown';
    const phase=autoUsagePhase(state,this.actor.motion,sharedActivity(state));
@@ -135,7 +142,7 @@ export class AutoDirector{
  alarm(){return this.ctx.blockConcurrencyWhile(async()=>{
   try{
    const cursor=await this.ctx.storage.get('cursor')??'';
-   const {results}=await this.env.TOWER_DB.prepare("SELECT player_id FROM tower_players WHERE player_id > ? AND (json_extract(state_json,'$.plan.source') = 'rules' OR (json_extract(state_json,'$.characterRules.enabled') = 1 AND json_extract(state_json,'$.plan') IS NULL AND json_extract(state_json,'$.report') IS NULL)) ORDER BY player_id LIMIT 50").bind(cursor).all();
+   const {results}=await this.env.TOWER_DB.prepare("SELECT player_id FROM tower_players WHERE player_id > ? AND json_extract(state_json,'$.autoDisconnected') IS NULL AND (json_extract(state_json,'$.plan.source') = 'rules' OR (json_extract(state_json,'$.characterRules.enabled') = 1 AND json_extract(state_json,'$.plan') IS NULL AND json_extract(state_json,'$.report') IS NULL)) ORDER BY player_id LIMIT 50").bind(cursor).all();
    // A failed registration is retried on the next scan; other players still wake.
    for(let offset=0;offset<results.length;offset+=5){
     const outcomes=await Promise.allSettled(results.slice(offset,offset+5).map(async({player_id:playerId})=>{

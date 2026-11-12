@@ -1,4 +1,5 @@
 import {normalizeCharacterRules} from '../public/character-rules.js';
+import {spendAutoPoint} from './action-points.mjs';
 export const EXPLORE_STOP_MS=45000;
 // Peaceful, ungated routes only. No harvesting, spending, fights or quest-item collection.
 export const explorationStops=[{room:'outside',x:6,y:8},{room:'trail',x:5,y:6},{room:'creek',x:2,y:4},{room:'pond',x:4,y:5},{room:'logging',x:5,y:5}];
@@ -20,6 +21,7 @@ export function settleExplorationPlan(state,now,{stop=false}={}){
     const room=explorationStops[plan.stopIndex].room;plan.visited.push(room);
     if(room!=='outside'&&!state.adventure.discovered.includes(room))state.adventure.discovered.push(room);
     plan.stopIndex++;plan.nextAt+=EXPLORE_STOP_MS;changed=true;
+    if(spendAutoPoint(state,plan,plan.nextAt-EXPLORE_STOP_MS))return true;
     if(plan.stopIndex<explorationStops.length)moveToStop(state,plan.stopIndex);
   }
   if(stop||now>=plan.endAt){

@@ -1,4 +1,5 @@
 import {finishRoutineReport} from './routine-report.mjs';
+import {spendAutoPoint} from './action-points.mjs';
 import {isSmartlyDressed} from '../public/wardrobe.js';
 import {autoBankGold} from './banking.mjs';
 import {gamblingAction,handTotal} from './gambling.mjs';
@@ -28,6 +29,7 @@ export function settleAutoGambling(state,now,{stop=false,random=Math.random}={})
   p.recent=[...p.recent,{at,outcome:round.outcome,net,bet:round.bet,...(c.game==='roulette'?{number:round.number,color:round.resultColor}:{player:handTotal(round.player),dealer:handTotal(round.dealer)})}].slice(-8);
   autoBankGold(state,p,at);
   p.nextRoundAt+=AUTO_GAMBLE_INTERVAL;changed=true;
+  if(spendAutoPoint(state,p,at))return true;
   const reason=limit();if(reason)return finish(state,p,reason,at);
  }
  if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',Math.min(now,p.endAt));

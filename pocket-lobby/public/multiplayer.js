@@ -1,5 +1,5 @@
 import {socialRooms} from './shared-world.js';
-export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
+export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
   let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
   function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);}
@@ -38,9 +38,12 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
         if(data.type==='correction')onCorrection(data);
         if(data.type==='unseat')onUnseat();
         if(data.type==='notice')onStatus(data.text);
+        if(data.type==='autoDisconnected'&&!stopped){stopped=true;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);onStatus('Out of Action Points · Home and disconnected');onAutoDisconnected();}
       };
       ws.onclose=event=>{
         if(current!==generation)return;socket=null;clearInterval(tick);clearInterval(ping);onPeers([]);onTrails([]);
+        if(event.code===4004){const notify=!stopped;stopped=true;onStatus('Out of Action Points · Home and disconnected');if(notify)onAutoDisconnected();return;}
+        if(stopped)return;
         if(event.code===4001){stopped=true;onStatus('Open in another window');onSessionChanged('This character opened in another window.');return;}
         if(event.code===4003){stopped=true;onStatus('Session changed');onSessionChanged('Your character session changed.');return;}
         scheduleRetry(current,'Room connection lost');

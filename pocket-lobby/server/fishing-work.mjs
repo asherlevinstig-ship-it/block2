@@ -1,4 +1,5 @@
 import {autoTilePath} from './auto-motion.mjs';
+import {spendAutoPoint} from './action-points.mjs';
 import {publicRoomNamespace} from './shared-trees.mjs';
 import {completeRoutineFish,finishRoutineQueue} from './routine-queue.mjs';
 import {finishAutoFoodWork,finishPlan} from './player-state.mjs';
@@ -73,6 +74,7 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    if(plan.kind==='queue')completeRoutineFish(state,fish,xp,now);
    else{plan.catches[fish]=(plan.catches[fish]??0)+1;plan.baitUsed++;plan.xp+=xp;}
    autoStoreVault(state,plan,now);
+   spendAutoPoint(state,plan,now);
    return;
  }
  state.location=room;

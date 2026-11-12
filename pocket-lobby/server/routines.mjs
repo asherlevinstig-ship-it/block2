@@ -1,4 +1,6 @@
 import {simpleAutoRisks} from '../public/simple-auto.js';
+import {beginAutoPoints} from './action-points.mjs';
+import {finishRoutineReport} from './routine-report.mjs';
 import {startExplorationPlan} from './exploration-plan.mjs';
 import {applyAutoFood} from './auto-food.mjs';
 import {homeRestDuration} from '../public/bed-rest.js';
@@ -12,6 +14,7 @@ import {jobPreview} from '../public/jobs.js';
 import {depthsStageIndex} from '../public/depths.js';
 import {boarRules} from '../public/hunting.js';
 export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random,forceStart=false,physicalTimber=false,physicalFishing=false}={}){
+  if(state.autoDisconnected&&!forceStart)return;
   if(state.autoSwitch&&!state.plan){
     const restartAt=state.report?.endedAt??now;delete state.autoSwitch;delete state.report;
     state.controlMode='auto';touchPresence(state,restartAt,{active:false,forceStart:true,random,physicalTimber,physicalFishing});
@@ -40,6 +43,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   // Unfinished manual casts/cuts pay nothing. The saved routine starts cleanly.
   delete state.fishingCast;delete state.timberCut;delete state.miningCut;
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget,...(rules.simpleMode?{simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'}:{}),...(rules.food?{foodPolicy:rules.food}:{})};
+  if(!beginAutoPoints(state,startedAt)){finishRoutineReport(state,now);return;}
   if(physicalTimber)metadata.physicalTimber=true;
   if(physicalFishing)metadata.physicalFishing=true;
   if(rules.timberMarket)metadata.timberMarket=rules.timberMarket;

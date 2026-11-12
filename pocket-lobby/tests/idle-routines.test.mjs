@@ -31,8 +31,8 @@ test('offline catch-up and incremental idle fishing earn identical rewards and p
 test('ordinary state settlement finishes rule-driven plans with one correctly labelled report',()=>{
  const s=idle();pulse(s,G);assert(settlePlan(s,G+120000));assert.equal(s.report.reason,'target-reached');assert.equal(s.activityLog[0].count,2);
  assert.equal(settlePlan(s,G+180000),false);assert.equal(s.activityLog.length,1);
- const capped=idle('woodcutting',{meals:{silverfinFeast:10},characterRules:{enabled:true,activity:'woodcutting',timberTarget:1000000}});pulse(capped,G);settlePlan(capped,86400000);
- assert.equal(capped.report.reason,'away-cap');assert.equal(capped.report.timber,480);
+ const capped=idle('woodcutting',{meals:{silverfinFeast:10},characterRules:{enabled:true,activity:'woodcutting',timberTarget:1000000}});pulse(capped,G);capped.plan.interval=10*60000;capped.plan.nextCutAt=G+capped.plan.interval;settlePlan(capped,86400000);
+ assert.equal(capped.report.reason,'away-cap');assert.equal(capped.report.timber,48);
 });
 test('rest restores health when recovery completes and missing tools explain the fallback',()=>{
  const rest=idle('rest',{health:25});pulse(rest,G);assert.equal(rest.plan.kind,'rest');assert.equal(rest.health,25);

@@ -21,11 +21,11 @@ test('quiet batching respects observers, walking, work type and existing deadlin
  assert.equal(autoWorkDue({miningWork:{cut:{endsAt:12000}},nextAt:1000}),12000);
 });
 
-test('one hour of quiet gambling reduces wake-ups and saves while resolving all 120 rounds',async()=>{
+test('half an hour of quiet gambling reduces wake-ups and saves while resolving all 60 rounds',async()=>{
  const watched=await runAutoCostScenario({observed:true}),quiet=await runAutoCostScenario({observed:false});
  // Quiet mode can be at most three rounds behind in its persisted projection.
  // An observer/control request settles that outstanding time immediately.
- assert.equal(watched.rounds,120);assert(quiet.rounds>=117&&quiet.rounds<=120);
+ assert.equal(watched.rounds,60);assert(quiet.rounds>=57&&quiet.rounds<=60);
  assert(quiet.counts.alarms<watched.counts.alarms*.4);
  assert(quiet.counts.writes<watched.counts.writes*.4);
  assert.equal(watched.states[0].stats.luckXp,watched.rounds*2);

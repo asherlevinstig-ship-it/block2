@@ -1,4 +1,5 @@
 import {applyAutoSettings} from './auto-settings.mjs';
+import {releaseAutoPoints} from './action-points.mjs';
 import {homeRestDuration} from '../public/bed-rest.js';
 import {autoBankGold} from './banking.mjs';
 import {boarRules} from '../public/hunting.js';
@@ -7,9 +8,10 @@ import {miningReportText} from '../public/mining.js';
 // Shared completion path for live-idle and offline rule-driven plans.
 export function finishRoutineReport(state,now){
   const report=state.report;if(report?.source!=='rules')return;
+  releaseAutoPoints(state,report.endedAt);
   autoBankGold(state,report,report.endedAt);
   state.controlMode='play';
-  const foodStop=['out-of-food','food-reserve'].includes(report.reason);
+  const foodStop=['action-points','out-of-food','food-reserve'].includes(report.reason);
   if(!foodStop&&report.kind==='woodcutting'&&state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=report.timberTarget)report.reason='target-reached';
   else if(!foodStop&&report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.kind!=='rest'&&report.kind!=='woodcutting'&&state.fishingGear.bait<=report.keepBait)report.reason='bait-reserve';
   else if(!foodStop&&report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.endedAt>=report.routineCapAt)report.reason='away-cap';

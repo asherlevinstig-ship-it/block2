@@ -27,7 +27,7 @@ test('online and offline settlement share timing, payouts, Luck throttling and b
  const policy={lossLimit:100000,profitTarget:100000,maxRounds:1000},online=start(policy),offline=start(policy);
  for(let at=1000;at<=601000;at+=1000)settlePlan(online,at,{random:()=>.03});settlePlan(offline,601000,{random:()=>.03});
  for(const key of ['credits','stats'])assert.deepEqual(online[key],offline[key]);assert.equal(offline.plan.rounds,20);assert.equal(offline.plan.recent.length,8);assert.equal(online.plan.goldEarned,offline.plan.goldEarned);
- settlePlan(offline,24*3600000,{random:()=>.03});assert.equal(offline.report.reason,'away-cap');assert.equal(offline.report.rounds,960);assert.equal(offline.credits,5000);assert.equal(offline.stats.luckXp,1920);
+ settlePlan(offline,24*3600000,{random:()=>.03});assert.equal(offline.report.reason,'action-points');assert.equal(offline.report.rounds,100);assert.equal(offline.credits,700);assert.equal(offline.stats.luckXp,200);assert(offline.autoDisconnected);
 });
 test('Take control before a round stakes nothing and manual table actions cannot bypass a plan',()=>{
  const s=start();assert.equal(s.location,'lounge');assert.equal(s.plan.rounds,0);assert.throws(()=>gamblingAction(s,'gamble',{game:'roulette',bet:5,color:'red'},2000,()=>0),/Invalid table activity/);

@@ -4484,6 +4484,7 @@ function animation(time){
 let lastVitalsPaint=-Infinity;
 function updateVitalsHud(){
  const values={health:Math.ceil(homeBedRest?bedRestHealth(homeBedRest,combatNow()):health),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
+ values.actionPoints=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
  const hungerStatus=$('hungerStatus');
  const condition=values.hunger===0?'Exhausted':values.hunger<=LOW_HUNGER?'Hungry':'';
  if(hungerStatus.textContent!==condition){
@@ -7135,7 +7136,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
-    onCorrection:correctRoomPosition,
+    onCorrection:correctRoomPosition,onAutoDisconnected:()=>window.playerCloud.pauseAuto?.(),
     onUnseat:()=>{if(player.seat?.type==='riverBench'&&hunting.recoveryUntil)standFromRiverBench();else player.seat=null;},onSessionChanged:message=>window.playerCloud.invalidate?.(message)
   });
   window.towerMultiplayer=multiplayer;connectRoom();

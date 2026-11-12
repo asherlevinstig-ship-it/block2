@@ -31,7 +31,7 @@ test('continuous adaptive planning matches fine polling, preserves reserves, and
  const setup=()=>start(character({meals:{silverfinFeast:10},woodcutting:{axeOwned:true,equipped:true,timber:0,xp:0},fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:5}}));
  const online=setup(),offline=setup();for(let at=1000;at<=3601000;at+=1000)settlePlan(online,at,{random:()=>.5});settlePlan(offline,3601000,{random:()=>.5});
  for(const key of ['credits','woodcutting','stats'])assert.deepEqual(online[key],offline[key]);assert.equal(online.plan.goldEarned,offline.plan.goldEarned);assert(online.woodcutting.timber>=10);assert(online.plan.entries.length<=64);
- settlePlan(offline,24*3600000,{random:()=>.5});assert.equal(offline.report.reason,'away-cap');assert.equal(offline.controlMode,'play');const gold=offline.credits;settlePlan(offline,48*3600000,{random:()=>.5});assert.equal(offline.credits,gold);
+ settlePlan(offline,24*3600000,{random:()=>.5});assert.equal(offline.report.reason,'action-points');assert.equal(offline.controlMode,'play');const gold=offline.credits;settlePlan(offline,48*3600000,{random:()=>.5});assert.equal(offline.credits,gold);
 });
 test('manual handoff and visible goal explanation use the shared Auto flow',()=>{
  const s=start(character());assert.match(autoStatus(s).decision,/Fishing/);assert.match(autoStatus(s).next,/Reassess/);settlePlan(s,62000,{stop:true,random:()=>.5});assert.equal(s.report.reason,'returned');assert.equal(Object.values(s.report.catches).reduce((a,b)=>a+b,0),1);

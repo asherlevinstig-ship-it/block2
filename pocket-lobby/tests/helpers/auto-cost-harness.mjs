@@ -11,7 +11,7 @@ export function actorContext(counters={}){
 
 // Runs real actor alarms and SQLite settlements with a simulated clock. The
 // room transport is counted, not a claim about Cloudflare latency or billing.
-export async function runAutoCostScenario({players=1,observed=false,minutes=60,kind='gambling',onStep=null}={}){
+export async function runAutoCostScenario({players=1,observed=false,minutes=30,kind='gambling',onStep=null}={}){
  const originalNow=Date.now,clock={now:1800000000000},start=clock.now,end=start+minutes*60000;
  const {db,sql}=testDatabase(),counts={alarms:0,reads:0,writes:0,actorWrites:0,presence:0,activity:0};
  const prepare=db.prepare.bind(db);
