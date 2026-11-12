@@ -1,4 +1,5 @@
 import {normalizeMagic,awardAwakeningStone,stoneForms} from './essences.js';
+import {spendMana} from './player-vitals.js';
 
 export const essenceCacheGold=50;
 export const depthsSafePassage={gold:10,healing:20};
@@ -36,6 +37,8 @@ export const depthsStages=[
 ];
 
 export const depthsFinds={
+  galleryCrack:{label:'Cold draught',title:'A crack behind the roots',room:'depthsGallery',text:'The loose stones slide aside. A sealed coffer glows behind the wall. It asks for 60 mana; keep your magic for the Vault, or take its gold.'},
+  runeCoffer:{label:'Runic coffer',title:'Trade magic for treasure?',room:'depthsGallery',requires:'galleryCrack',mana:60,gold:45,text:'The seal drinks 60 mana. You recover 45 gold in expedition spoils. Leave safely to keep it.'},
   sideSeal:{label:'Awakening Seal',title:'The sentinel’s reward',room:'depthsTrial',text:'Claim your guaranteed Awakening Stone. Once collected, it is yours to keep.'},
   sideTreasure:{label:'Treasury spoils',title:'The guarded hoard',room:'depthsTreasury',text:'60 gold and 2 Shell Fragments are held with your expedition spoils. Bank them before you fall.'},
   essenceCache:{label:'Essence Cache',title:'An ancient Essence Cache',room:depthsCacheRoom,text:'The guardian’s seal has broken. Gold and an Awakening Stone wait inside.'},
@@ -46,7 +49,7 @@ export const depthsFinds={
   vaultRelief:{label:'Vault relief',title:'A warning carved in stone',room:'depthsVault',text:'Ironclad armour, unbound blades, then a runic heart. Stagger the plating, dodge and counter its swings, then interrupt the charged spell with three quick hits or dodge the blast.'}
 };
 
-export function inspectDepthsFind(state,item){
+export function inspectDepthsFind(state,item,now=Date.now()){
   const {depthsRun,location,position}=state;
   const find=item&&Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
   if(!depthsRun||!find||find.room!==location||!position||Math.abs(position.x-item.x)+Math.abs(position.y-item.y)!==1){
@@ -55,6 +58,8 @@ export function inspectDepthsFind(state,item){
   const found=depthsRun.finds??[];
   if(find.requires&&!found.includes(find.requires))throw new Error('Choose a discovery you can reach.');
   if(found.includes(item.type))return;
+  if(['galleryCrack','runeCoffer'].includes(item.type)&&depthsRun.cleared<2)throw new Error('Choose this discovery after defeating the Shell Warden.');
+  if(find.mana&&!spendMana(state,now,find.mana))throw new Error('Choose the coffer with at least 60 mana. Let your mana recover, or leave it sealed.');
   if(item.type==='sideTreasure'&&!depthsRun.sideWins?.includes('treasure'))throw new Error('Defeat the Ironhide Guardian first.');
   if(item.type==='sideSeal'){
     if(!depthsRun.sideWins?.includes('trial'))throw new Error('Defeat the Thornblade Duelist first.');
@@ -134,6 +139,7 @@ export function normalizeDepthsRun(input,room,encounter){
   if(input.victorySeen!==undefined&&typeof input.victorySeen!=='boolean')throw new Error('Invalid victory acknowledgment.');
   if(input.vaultWeapon!==undefined&&!['breakerSpear','duelistBlade','quickfang'].includes(input.vaultWeapon))throw new Error('Invalid vault reward.');
   const finds=[...new Set(Array.isArray(input.finds)?input.finds.filter(id=>Object.hasOwn(depthsFinds,id)):[])];
+  if(finds.includes('runeCoffer')&&!finds.includes('galleryCrack')||input.cleared<2&&finds.some(id=>['galleryCrack','runeCoffer'].includes(id)))throw new Error('Invalid gallery discovery.');
   if(finds.includes('sideSeal')&&!input.sideWins?.includes('trial')||finds.includes('sideTreasure')&&!input.sideWins?.includes('treasure'))throw new Error('Invalid optional room reward.');
   return {cleared:input.cleared,...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
@@ -161,7 +167,7 @@ export function depthsStageSpoils(stage,includeTreasure=true){
 
 export function depthsSpoils(run){
   const loot={};
-  let gold=run?.finds?.includes('galleryCache')?depthsFinds.galleryCache.gold:0;
+  let gold=['galleryCache','runeCoffer'].reduce((sum,id)=>sum+(run?.finds?.includes(id)?depthsFinds[id].gold:0),0);
   for(const stage of depthsStages.slice(0,run?.cleared??0)){
     const reward=depthsStageSpoils(stage,run.shardEarned===true);
     gold+=reward.gold;

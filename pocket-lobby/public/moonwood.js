@@ -24,7 +24,7 @@ export const moonwood=(()=>{
     [wildlifeRoom]:wildlifeArea,
     ...willowmereAreas,...watchAreas,
     depthsGate:{number:'D1',name:'Flooded Gate',description:'Broken walkways surround a flooded gate. A Mire Skitter darts between the stones. Pull the sluice lever to reach the far passage.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['depthsSkitter',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
-    depthsGallery:{number:'D2',name:'Shell Gallery',description:'Roots split this ancient hall. A stone Shell Warden guards the passage. Escape its slam, then strike its exposed core. A shell chime reveals a secret cache.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
+    depthsGallery:{number:'D2',name:'Shell Gallery',description:'Roots split this ancient hall. A stone Shell Warden guards the passage. Escape its slam, then strike its exposed core. A shell chime reveals a secret cache.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['galleryCrack',2,7],['runeCoffer',2,8],['cachePassage',10,4]]},
     depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Rune Channeler protects 50 gold and an Awakening Stone. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['depthsSeer',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
     depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Heavy plating shields the Ironhide Guardian. Build stagger to crack its armour. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
     depthsRest:{number:'D2·R',name:'The Quiet Shrine',description:'A peaceful spring offers 30 HP for 15 gold from your unbanked haul. One blessing per expedition.',badge:'OPTIONAL · REST',floor:'Shrine branch',center:[4,5],palette:['#344f52','#4c6a68','#99b6aa'],authored:[['pillar',3,2],['pillar',8,2],['glowFungus',3,7],['glowFungus',9,3],['cachePassage',2,5],['restAltar',6,4]]},
@@ -40,7 +40,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -294,7 +294,7 @@ export const moonwood=(()=>{
       }
       return;
     }
-    if(['sluiceLever','gateSupply','shellChime','galleryCache','sideTreasure','vaultRelief','glowFungus','vaultCrystal'].includes(type)){
+    if(['galleryCrack','runeCoffer','sluiceLever','gateSupply','shellChime','galleryCache','sideTreasure','vaultRelief','glowFungus','vaultCrystal'].includes(type)){
       const found=depthsRun?.finds?.includes(type);
       const color=type==='vaultCrystal'||type==='vaultRelief'?'#c5b0f4':type==='glowFungus'||type==='shellChime'?'#9be2ba':'#f8cd81';
       const flicker=reduced?0:Math.sin(time/320+x*.7+y);
@@ -303,16 +303,22 @@ export const moonwood=(()=>{
         surface(x-.18,y-.18,1.36,1.36,.25,color);
         ctx.restore();
       }
-      if(type==='sluiceLever'){
+      if(type==='galleryCrack'){
+        part(.05,.15,.9,.7,0,22,stone);
+        polygon([[px-3,py-24],[px+2,py-19],[px-2,py-14],[px+3,py-9],[px-1,py-3]],found?'#b6e6d0':'#162f37');
+        rect(px+4,py-15,2,2,'#a5cfb0');
+        if(found)part(.1,.2,.3,.3,0,5,stone);
+      }else if(type==='sluiceLever'){
         part(.19,.23,.63,.55,0,6,stone);
         part(.36,.4,.24,.25,6,5,['#8a7b63','#455460','#686967']);
         polygon([[px-2,py-10],[px+1,py-10],[px+(found?8:-8),py-21],[px+(found?5:-11),py-21]],'#dba765');
         rect(px+(found?4:-12),py-22,8,3,color);
-      }else if(type==='gateSupply'||type==='galleryCache'||type==='sideTreasure'){
+      }else if(type==='runeCoffer'||type==='gateSupply'||type==='galleryCache'||type==='sideTreasure'){
         part(.12,.22,.76,.59,0,8,['#9d7854','#56454b','#73564d']);
         part(.11,.20,.78,.63,8,found?2:4,found?['#6d6656','#474447','#595252']:['#c39462','#755343','#996c50']);
         rect(px-2,py-9,4,4,found?'#879094':color);
         if(!found)rect(px-1,py-8,2,2,'#fff1b5');
+        if(type==='runeCoffer'&&!found){rect(px-9,py-12,2,9,'#bba3ff');rect(px+7,py-12,2,9,'#bba3ff');polygon([[px,py-22],[px+4,py-17],[px,py-12],[px-4,py-17]],'#c8b5ff');}
       }else if(type==='shellChime'){
         part(.14,.24,.72,.56,0,4,stone);
         rect(px-8,py-25,3,23,'#a89976');rect(px+6,py-25,3,23,'#806f65');

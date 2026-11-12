@@ -1,5 +1,5 @@
 export function initializeHudClearance(doc=document,win=window){
- const panels=['autoPanel','contextGuide'].map(id=>doc.getElementById(id)).filter(Boolean);if(!panels.length)return;
+ const panels=['autoPanel','contextGuide','galleryExplore','depthsDecision','depthsCampRibbon'].map(id=>doc.getElementById(id)).filter(Boolean);if(!panels.length)return;
  const obstacles=['essenceHotbar'].map(id=>doc.getElementById(id));
  obstacles.push(...doc.querySelectorAll('.hud-quickbar,.hud-actionbar'));
  let queued=false;

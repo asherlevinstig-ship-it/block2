@@ -288,7 +288,7 @@ export function activityAction(state,action,body,now,random){
   if(action==='depthsInspect'){
     idle(state);
     const item=moonwood.layouts[state.location]?.scenery.find(prop=>prop.type===body.id);
-    inspectDepthsFind(state,item);
+    inspectDepthsFind(state,item,now);
     return true;
   }
   if(action==='depthsPassage'){

@@ -106,7 +106,8 @@ test('returning from every optional room keeps the gallery floor and onward pass
   assert.equal(g.read('currentRoom'),'depthsGallery');
   assert.equal(g.read('depthsExploring'),true);
   assert.equal(g.nodes.get('depthsDecision').hidden,true);
-  assert.equal(g.nodes.get('depthsCampRibbon').hidden,false);
+  assert.equal(g.nodes.get('galleryExplore').hidden,false);
+  assert.equal(g.nodes.get('depthsCampRibbon').hidden,true);
   g.run("interaction=roomFurniture().find(item=>item.type==='dungeonExit');finishInteraction()");
   assert.equal(g.read('currentRoom'),'depthsVault');
   assert.deepEqual(g.errors,[]);

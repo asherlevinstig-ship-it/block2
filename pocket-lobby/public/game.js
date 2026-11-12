@@ -1138,22 +1138,32 @@ function reviewDepthsEntrance(){
   $('depthsEntryTitle').scrollIntoView({block:'nearest'});
   $('depthsEntryTitle').focus({preventScroll:true});
 }
-async function examineDepths(item){
+async function examineDepths(item,confirmed=false){
   if(unavailable()||!depthsRun)return;
   const find=depthsFinds[item.type],already=depthsRun.finds?.includes(item.type);
+  if(item.type==='runeCoffer'&&!already&&!confirmed){
+    $('runeCofferBalance').textContent='Your mana · '+manaAvailable(playerVitals,combatNow())+' / 100';
+    $('runeCofferError').textContent='';$('runeCofferDialog').showModal();return;
+  }
   const before=health;
   try{
     if(!already){
       if(window.playerCloud?.gameplay)await serverGameplay('depthsInspect',{id:item.type});
       else{
-        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health,credits,goldEarned,magic:magicState};
-        inspectDepthsFind(state,item);
+        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health,credits,goldEarned,magic:magicState,vitals:playerVitals};
+        inspectDepthsFind(state,item,combatNow());playerVitals=state.vitals;
         health=state.health;credits=state.credits;goldEarned=state.goldEarned;magicState=state.magic;
       }
       savePlayerState();
     }
     if(item.type==='sluiceLever'&&depthsRun.cleared===1&&depthsRun.routeChoice==='pending')depthsExploring=false;
     updateDepthsPanel();
+    if(item.type==='runeCoffer'){
+      $('runeCofferDialog').close();updatePlayerStats();
+      if(!already)showTransaction('Runic coffer opened',[{icon:'✦',text:'−60 mana'},{icon:'◈',text:'+45 gold · Unbanked until you extract'}]);
+      else note('The coffer is empty. Its gold is already in your expedition spoils.');
+      return;
+    }
     if(item.type==='sideSeal'){
       if(already){note('You have already claimed this expedition’s stone.');return;}
       updatePlayerStats();updateEssenceHotbar();showTransaction('Challenge reward claimed',[{icon:'◆',text:'+1 '+stoneForms[depthsRun.sideStone].name+' Awakening Stone · Yours to keep'}]);return;
@@ -1170,7 +1180,7 @@ async function examineDepths(item){
       note(find.text,8000);
     }
     if(!already&&find.gold)showTransaction('Hidden cache discovered',[{icon:'✦',text:find.gold+' gold added to unbanked spoils'}]);
-  }catch(error){note(error.message,6500);}
+  }catch(error){if(item.type==='runeCoffer'&&$('runeCofferDialog').open)$('runeCofferError').textContent=error.message;else note(error.message,6500);}
 }
 function updateDepthsPanel(){
   updateDungeonLootUi();
@@ -1222,7 +1232,15 @@ function updateDepthsPanel(){
   $('depthsOpenCache').hidden=!cacheRoom||!cleared||!!depthsRun?.finds?.includes('essenceCache');
   const atCamp=cleared&&!unavailable();
   const canDecide=atCamp&&!depthsExploring;
-  $('depthsCampRibbon').hidden=!atCamp||!depthsExploring;
+  const galleryExploring=atCamp&&depthsExploring&&currentRoom==='depthsGallery';
+  $('galleryExplore').hidden=!galleryExploring;
+  $('depthsCampRibbon').hidden=!atCamp||!depthsExploring||galleryExploring;
+  if(galleryExploring){
+    const crack=depthsRun.finds?.includes('galleryCrack'),opened=depthsRun.finds?.includes('runeCoffer');
+    $('galleryExploreTitle').textContent=opened?'45 gold added to your haul':crack?'A coffer behind the wall':'A cold draught stirs the roots';
+    $('galleryExploreText').textContent=opened?'45 extra gold is at risk. Leave now, recover at the Shrine, or push toward the Vault.':crack?'Spend 60 mana for 45 unbanked gold, or keep your magic for the next fight.':'Look for the loose, glowing stones along the lower wall. Click to walk over and investigate.';
+    $('gallerySearch').hidden=!!opened;$('gallerySearch').textContent=crack?'Examine runic coffer':'Search loose stones';
+  }
   const decision=$('depthsDecision');
   const newlyCleared=canDecide&&decision.hidden;
   if(!canDecide)$('depthsBankError').hidden=true;
@@ -1240,6 +1258,9 @@ function updateDepthsPanel(){
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next||atFork||pendingGuardian;
+  $('depthsNext').textContent=currentRoom==='depthsGallery'?'Risk the Vault · 1 AP':'Press deeper · 1 AP';
+  $('depthsExplore').textContent=currentRoom==='depthsGallery'?'Search this room':'Explore chamber';
+  $('depthsSideOptions').textContent='Side routes · Rest, treasure or trial';
   $('depthsLeave').hidden=!canDecide;
   if(!canDecide)return;
 
@@ -1989,6 +2010,7 @@ function roomFurniture(){
     return [...moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
+      if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
       return true;
     }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
@@ -6203,7 +6225,14 @@ $('depthsNext').onclick=advanceMoonwellDepths;
 $('depthsExplore').onclick=()=>{
   depthsExploring=true;
   updateDepthsPanel();
-  $('depthsCampRibbon').focus({preventScroll:true});
+  (currentRoom==='depthsGallery'?$('galleryRoutes'):$('depthsCampRibbon')).focus({preventScroll:true});
+};
+$('galleryRoutes').onclick=()=>{depthsExploring=false;updateDepthsPanel();};
+$('gallerySearch').onclick=()=>{const type=depthsRun?.finds?.includes('galleryCrack')?'runeCoffer':'galleryCrack';const item=roomFurniture().find(p=>p.type===type);if(item)use(item);};
+$('runeCofferCancel').onclick=()=>$('runeCofferDialog').close();
+$('runeCofferOpen').onclick=async()=>{
+  const button=$('runeCofferOpen');if(button.disabled)return;button.disabled=true;
+  try{const item=roomFurniture().find(p=>p.type==='runeCoffer');if(item)await examineDepths(item,true);else $('runeCofferDialog').close();}finally{button.disabled=false;}
 };
 $('depthsCampRibbon').onclick=()=>{
   depthsExploring=false;
