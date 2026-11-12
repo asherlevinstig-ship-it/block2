@@ -14,7 +14,7 @@ import {useHunger,exertionDuration,isExhausted} from '../public/player-vitals.js
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {settleTrailCampRest} from './trail-camp.mjs';
-import {awardDungeonWeapon} from '../public/dungeon-loot.js';
+import {awardDungeonWeapon,awardGuardianRelic} from '../public/dungeon-loot.js';
 import {awardLeadership} from '../public/leadership.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {nextCombatTactic} from '../public/character-rules.js';
@@ -39,6 +39,7 @@ export function startCombatEncounter(state,enemy,now){
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
   state.hunting.encounter.buildId=detectCombatBuild(state).id;
+  const relics=detectCombatBuild(state).relics;if(relics?.length)state.hunting.encounter.buildRelics=relics;
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths')||enemy.room==='millCellar'||enemy.room==='crystaldeep')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
   if(enemy.room==='millCellar'||enemy.room==='crystaldeep')state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
@@ -80,6 +81,7 @@ function result(state,event,now,random=Math.random){
     if(event.stone)rewards.stones={[event.stone]:1};
     if(state.depthsRun){
       const cleared=clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
+      if(cleared&&state.combatId){const drop=awardGuardianRelic(state,enemy.id,random);if(drop){event.clothingDrop=rewards.clothing=drop.item;event.guaranteedClothing=drop.guaranteed;}}
       if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){
         rewards.xp.leadershipXp=awardLeadership(state,'vaultClear');
         const drop=awardDungeonWeapon(state,now,random);
@@ -146,7 +148,7 @@ export function advanceServerCombat(state,now,random=Math.random){
       if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery,combatStamina(encounter,state.stats,due,state.combatGear.moonwellCharmEquipped));
       else if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
       else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
-      if(event){event.automatic=true;if(tactic.action==='move'&&event.encounter?.brainVersion===2)event.encounter.brainAutoStepAt=due+900;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
+      if(event){event.automatic=true;if(tactic.action==='move'&&event.encounter?.brainVersion===2)event.encounter.brainAutoStepAt=due+(event.encounter.buildRelics?.includes('guardianMantle')?1125:900);event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
     }else if(due===addsDue)event=advanceDungeonAdds(state,due,random);
     else if(encounter.brainVersion===2&&due===encounter.brainNextThinkAt)event=brainThinkEvent(state,huntEnemy(encounter),enemyAttack(encounter),due);
     else{

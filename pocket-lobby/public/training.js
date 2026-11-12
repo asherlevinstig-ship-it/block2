@@ -7,7 +7,7 @@ const lessonSteps=['dodge','counter','stagger','weak'];
 export function createTrainingSession(source,weapon=source.combatGear?.equippedWeapon??'trainingSword'){
  if(!Object.hasOwn(weaponCatalog,weapon))throw new Error('Choose a practice weapon.');
  const gear=structuredClone(source.combatGear??{}),stats=structuredClone(source.stats??{});
- const encounter=createHunt(0,1000);encounter.nextBoarAt=2500;encounter.buildId=combatBuild({...source,hunting:{encounter:null},combatGear:{...gear,equippedWeapon:weapon}}).id;
+ const encounter=createHunt(0,1000);encounter.nextBoarAt=2500;const build=combatBuild({...source,hunting:{encounter:null},combatGear:{...gear,equippedWeapon:weapon}});encounter.buildId=build.id;if(build.relics?.length)encounter.buildRelics=build.relics;
  return {now:0,weapon,gear,stats,appearance:structuredClone(source.avatar??{}),encounter,events:{bursts:[]},completed:{},damage:0,perfects:0,counters:0,staggers:0,weakHits:0,misses:0,lastDodgeAt:null,lastTiming:null,feedback:'Watch the amber attack warning. Press Space just before impact.',log:[]};
 }
 function accept(session,event){
@@ -78,7 +78,7 @@ export function initializeTrainingCourtyard({document:doc=globalThis.document,ge
   $('trainingLesson').textContent=titles[stage];$('trainingStep').textContent=stage===4?'LESSON COMPLETE':'COMBAT BASICS · '+(stage+1)+' / 4';
   $('trainingFeedback').textContent=session.feedback;$('trainingTiming').textContent=session.lastTiming??'Timing feedback appears after each attack.';
   for(const [i,id] of lessonSteps.entries()){$('trainingStep'+i).dataset.done=String(!!session.completed[id]);$('trainingStep'+i).setAttribute('aria-label',(session.completed[id]?'Complete: ':'To practise: ')+id);}
-  const stamina=combatStamina(e,session.stats,session.now,session.gear.moonwellCharmEquipped),cost=combatDodgeCost(armourSelection(session.gear),buildProfile(e.buildId));
+  const stamina=combatStamina(e,session.stats,session.now,session.gear.moonwellCharmEquipped),cost=combatDodgeCost(armourSelection(session.gear),buildProfile(e.buildId,e.buildRelics));
   $('trainingDodge').disabled=session.now<e.nextDodgeAt||stamina<cost;$('trainingDodge').textContent=ready?'Dodge now! · Space':'Dodge · Space';
   $('trainingDodge').classList.toggle('dodge-ready',ready&&!$('trainingDodge').disabled);
   $('trainingTelegraph').textContent=stunned?'Dummy staggered · Safe opening':remaining<=move.tell?(ready?'DODGE NOW · ':'INCOMING · ')+move.name:weak?'Weak spot open · Damage +25%':'Next attack in '+Math.max(0,remaining/1000).toFixed(1)+'s';

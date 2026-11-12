@@ -95,7 +95,7 @@ export function normalizeState(input={}){
   adventure.millCellarCleared=adventure.millCellarFound&&adventure.millCellarCleared;
   adventure.millCellarClaimed=adventure.millCellarCleared&&adventure.millCellarClaimed;
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
-  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>13||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>15||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
   const combatGear=normalizeCombatGear(input.combatGear);
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");

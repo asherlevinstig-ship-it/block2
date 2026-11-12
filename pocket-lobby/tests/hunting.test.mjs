@@ -82,7 +82,7 @@ function gameHarness(){
     huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
-    window:{},characterRules:normalizeCharacterRules(),activityBusy:false,serverActionBusy:false,meals:{},magicState:null,firstUpgrade:{},tradeCatalog:{boar:{name:'Boar Meat'},stonebackShell:{name:'Shell Fragment'},moonwellShard:depthsRules.moonwellShard},history:{fishCaught:false,boarDefeated:false},adventure:{discovered:[]},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
+    window:{},wardrobe:normalizeState({}).wardrobe,characterRules:normalizeCharacterRules(),activityBusy:false,serverActionBusy:false,meals:{},magicState:null,firstUpgrade:{},tradeCatalog:{boar:{name:'Boar Meat'},stonebackShell:{name:'Shell Fragment'},moonwellShard:depthsRules.moonwellShard},history:{fishCaught:false,boarDefeated:false},adventure:{discovered:[]},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
     currentRoom:'clearing',roomEnemy:()=>huntEnemyForRoom(context.currentRoom),playerStats:{strengthXp:0,agilityXp:0,vitalityXp:0},huntingLoot:{boar:0},
     editing:false,fishingSession:null,woodSession:null,route:[],step:null,interaction:null,target:null,
     $:get,Date:{now:()=>now},performance:{now:()=>now},

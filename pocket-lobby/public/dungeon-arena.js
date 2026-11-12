@@ -73,7 +73,7 @@ export function arenaMoveEvent(state,tile,now,scenery=[],stamina=state.hunting?.
  if(state.location==='depthsGate'&&tile.x===8&&!(tile.y===4&&state.depthsRun?.finds?.includes('sluiceLever')))return null;
  const foe=arenaEnemy(e);if(tile.x===foe.x&&tile.y===foe.y||(e.adds??[]).some(a=>a.x===tile.x&&a.y===tile.y))return null;
  if(e.brainVersion===2&&stamina<ARENA_STEP_COST)return null;
- const next={...e,arenaPlayer:{x:tile.x,y:tile.y},arenaStepAt:now+240};
+ const next={...e,arenaPlayer:{x:tile.x,y:tile.y},arenaStepAt:now+(e.buildRelics?.includes('guardianMantle')?300:240)};
  if(e.brainVersion===2){Object.assign(next,{stamina:stamina-ARENA_STEP_COST,staminaAt:now,brainStepsSinceAttack:(e.brainStepsSinceAttack??0)+1,brainPlayerHistory:[...(e.brainPlayerHistory??[]),{dx:tile.x-from.x,dy:tile.y-from.y,at:now}].slice(-4)});}
  state.position={...next.arenaPlayer};
  return {action:'move',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting',tile:next.arenaPlayer};

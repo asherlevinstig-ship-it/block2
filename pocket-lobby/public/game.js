@@ -853,7 +853,7 @@ function questAction(){
 function combatNow(){return window.playerCloud?.combatNow?.()??Date.now();}
 let combatMessage='',lastCombatUi=0;
 let dungeonLootState=normalizeDungeonLoot(savedPlayerState?.dungeonLoot),selectedDungeonRelic=null,activeDungeonDrop=null,dungeonLootBusy=false,lastDungeonLootUi='';
-function dungeonLootView(){return {bank:(window.playerCloud?.initial??savedPlayerState)?.bank,stats:playerStats,combatGear,dungeonLoot:dungeonLootState};}
+function dungeonLootView(){return {bank:(window.playerCloud?.initial??savedPlayerState)?.bank,stats:playerStats,combatGear,wardrobe,dungeonLoot:dungeonLootState};}
 function updateDungeonLootUi(){
   const p=dungeonLootProgress(dungeonLootView()),text=p.complete?'Dungeon arsenal complete · All 3 relics collected':weaponCatalog[p.target].name+' · Guaranteed within '+p.remaining+' more Vault clear'+(p.remaining===1?'':'s');
   $('dungeonRelicEntrance').textContent=text;$('dungeonRelicCamp').textContent=p.complete?'Review dungeon relics':'Relic hunt · '+p.remaining+' clears or fewer';
@@ -861,8 +861,16 @@ function updateDungeonLootUi(){
   if($('dungeonLootDialog').open&&key!==lastDungeonLootUi){lastDungeonLootUi=key;renderDungeonLoot();}
 }
 function renderDungeonLoot(){
+  const collection=$('guardianRelicCollection');collection.replaceChildren();
+  for(const [item,relic] of Object.entries(guardianRelics)){
+    const progress=guardianRelicProgress(dungeonLootView(),item),card=document.createElement('article'),art=document.createElement('div'),copy=document.createElement('div'),title=document.createElement('b'),source=document.createElement('small'),bonus=document.createElement('p'),cost=document.createElement('p'),status=document.createElement('strong');
+    art.className='guardian-relic-art';art.innerHTML=clothingArt(item);title.textContent=relic.name;source.textContent=relic.guardian+' · '+relic.room;bonus.textContent=relic.bonus;cost.textContent=relic.cost;cost.className='guardian-relic-cost';status.textContent=progress.owned?'Collected · Add to an outfit in Inventory':progress.misses+' / 5 toward guaranteed · '+progress.remaining+' more victories or fewer';
+    copy.append(title,source,bonus,cost,status);card.append(art,copy);collection.append(card);
+  }
   const p=dungeonLootProgress(dungeonLootView()),id=selectedDungeonRelic??p.target??dungeonRelics[0],comparison=compareDungeonWeapon(dungeonLootView(),id);
-  $('dungeonLootTitle').textContent=activeDungeonDrop?'Rare weapon found!':'The dungeon arsenal';
+  const clothingView=!$('guardianCollection').hidden;
+  $('dungeonLootTitle').textContent=clothingView?'Guardian clothing':activeDungeonDrop?'Rare weapon found!':'The dungeon arsenal';
+  $('dungeonShowWeapons').setAttribute('aria-pressed',String(!clothingView));$('dungeonShowClothing').setAttribute('aria-pressed',String(clothingView));
   $('dungeonLootProgress').textContent=p.complete?'All three relics are yours.':weaponCatalog[p.target].name+' · '+p.streak+' / 5 toward a guaranteed drop · At most '+p.remaining+' more Sunken Vault clears';
   $('dungeonLootMeter').value=p.complete?5:p.streak;
   const cloakOwned=wardrobe.owned.includes(veilCloakId);
@@ -881,9 +889,9 @@ function renderDungeonLoot(){
   $('dungeonLootEquip').hidden=!comparison.owned;$('dungeonLootEquip').textContent=combatGear.equippedWeapon===id?'Equipped':'Equip '+comparison.item.name;$('dungeonLootEquip').disabled=dungeonLootBusy||!comparison.canEquip||combatGear.equippedWeapon===id||unavailable();
   $('dungeonLootKeep').textContent=activeDungeonDrop?'Keep current weapon & continue':'Close';
 }
-function openDungeonLoot(id=null,notice=null){
+function openDungeonLoot(id=null,notice=null,clothing=false){
   if(unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
-  window.towerPauseForAccount();selectedDungeonRelic=id;activeDungeonDrop=notice;$('dungeonLootError').textContent='';renderDungeonLoot();$('dungeonLootDialog').showModal();
+  window.towerPauseForAccount();selectedDungeonRelic=id;activeDungeonDrop=notice;$('dungeonLootError').textContent='';$('guardianCollection').hidden=!clothing;$('dungeonWeaponsSection').hidden=clothing;renderDungeonLoot();$('dungeonLootDialog').showModal();$('dungeonLootDialog').scrollTop=0;
 }
 async function changeDungeonTarget(){
   if(dungeonLootBusy||!selectedDungeonRelic)return;dungeonLootBusy=true;
@@ -1342,7 +1350,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   else if(result.wardAbsorbed)combatMessage+=' Rune Ward absorbed '+result.wardAbsorbed+' damage · Defeat its Rune Wisp.';
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
-  if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for 1.8 seconds.';
+  if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for '+(1.8+(currentCombatBuild().counterWindow??0)/1000).toFixed(1)+' seconds.';
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
   if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
@@ -1364,7 +1372,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=depthsSideForRoom(currentRoom)?(currentRoom==='depthsTrial'?'Challenge won! Claim the Awakening Seal.':'Treasury secured. Your extra loot is unbanked.'):currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
+      showTransaction(result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -6202,6 +6210,10 @@ $('depthsForkBank').onclick=leaveMoonwellDepths;
 $('depthsCacheRoute').onclick=visitDepthsCache;
 $('dungeonRelicCamp').onclick=$('dungeonRelicEntrance').onclick=()=>openDungeonLoot();
 $('bagRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot();};
+$('bagGuardianRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot(null,null,true);};
+$('dungeonShowWeapons').onclick=()=>{$('guardianCollection').hidden=true;$('dungeonWeaponsSection').hidden=false;renderDungeonLoot();};
+$('dungeonShowClothing').onclick=()=>{$('guardianCollection').hidden=false;$('dungeonWeaponsSection').hidden=true;renderDungeonLoot();};
+$('guardianCollectionClose').onclick=async()=>{await closeDungeonLoot();if(!$('dungeonLootDialog').open)openInventory();};
 $('dungeonLootTarget').onclick=changeDungeonTarget;$('dungeonLootEquip').onclick=()=>closeDungeonLoot(true);$('dungeonLootKeep').onclick=$('dungeonLootClose').onclick=()=>closeDungeonLoot();
 $('dungeonLootDialog').oncancel=event=>{event.preventDefault();closeDungeonLoot();};
 $('depthsSideOptions').onclick=openDungeonSideChoices;

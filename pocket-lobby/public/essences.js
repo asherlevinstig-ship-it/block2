@@ -71,7 +71,7 @@ export function essencePower(id,stats,magic,build){
   const [gem,form,extra]=id.split(':');
   if(extra!==undefined||!Object.hasOwn(allEssences,gem)||!Object.hasOwn(stoneForms,form))return null;
   const essence=allEssences[gem],stone=stoneForms[form];
-  const rank=magicRank(stats),base=essence.values[forms.indexOf(form)]+(rank-1)*stone.scaling,value=Math.round(base*(['sword','shield','renewal'].includes(form)?build?.spell??1:1));
+  const rank=magicRank(stats),base=essence.values[forms.indexOf(form)]+(rank-1)*stone.scaling,value=Math.round(base*(['sword','shield','renewal'].includes(form)?build?.spell??1:1)*(form==='shield'?build?.ward??1:form==='renewal'?build?.heal??1:1));
   return {id,gem,form,rank,value,masteryLevel:essenceMastery(magic,gem)?.level??1,name:essence.name+' '+stone.power,color:essence.color,cooldown:stone.cooldown};
 }
 export function powerDescription(power){
