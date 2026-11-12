@@ -370,6 +370,7 @@ export function protectFishingState(previous,next){
   next.fishStock=previous.fishStock;
   next.fishingGear=previous.fishingGear;
   next.stats=previous.stats;
+  next.robbery=previous.robbery;
   if(previous.gambling)next.gambling=previous.gambling;else delete next.gambling;
   next.history=previous.history;
   next.quest={...previous.quest,...next.quest,fish:previous.quest.fish};

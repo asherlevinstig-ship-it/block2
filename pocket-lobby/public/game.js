@@ -83,7 +83,7 @@ let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
   ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
-const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
+const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,stealthXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10;
 const patienceLevel=()=>skillLevel(playerStats.patienceXp);
 const maxHealth=()=>100;
@@ -588,7 +588,7 @@ avatar=outfitAppearance(wardrobe,avatar);
 let draft;
 let messages = [];
 let multiplayer=null;
-const remotePeers=new Map();
+const remotePeers=new Map();let lastRobberyNotice=null;
 const worldActivityTracker=typeof createWorldActivityTracker==='function'?createWorldActivityTracker(savedPlayerState):null;
 const worldFloats=[],worldFloatSeen=new Set();
 function addWorldFloat(actor,event){
@@ -663,14 +663,15 @@ function updateActorNameplates(){
    seen.add(key);
    let plate=actorNameplates.get(key);
    if(!plate){
-    const node=document.createElement(kind==='enemy-label'?'button':'span');
-    if(kind==='enemy-label')node.type='button';
+    const node=document.createElement(kind==='enemy-label'||kind==='remote-player-label'?'button':'span');
+    if(kind==='enemy-label'||kind==='remote-player-label')node.type='button';
     node.className='player-label '+kind;node.dataset.actor=key;layer.append(node);
     plate={node};actorNameplates.set(key,plate);
    }
    const caption=detail?name+' · '+detail:name;
    if(plate.caption!==caption){plate.caption=caption;plate.node.textContent=caption;plate.node.title=caption;}
    if(color&&plate.color!==color){plate.color=color;plate.node.style.setProperty('--pet-label-color',color);}
+   if(kind==='remote-player-label')plate.node.onclick=()=>window.towerRobbery?.open(key);
    if(kind==='enemy-label'){plate.node.onclick=action;plate.node.disabled=!action;plate.node.dataset.target=String(detail==='Target');}
    plate.node.style.left=Math.round(position.x)+'px';plate.node.style.top=Math.round(position.y)+'px';
   };
@@ -3526,7 +3527,7 @@ function draw(time){
   let drawn=false;hitboxes=[];
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
-    if(item.type==='remotePlayer'){drawRemote(item.peer,time);continue;}
+    if(item.type==='remotePlayer'){drawRemote(item.peer,time);const [px,py]=point(item.peer.rx+.5,item.peer.ry+.5);hitboxes.push({item,shape:[[px-9,py+3],[px+9,py+3],[px+9,py-38],[px-9,py-38]]});continue;}
     if(item.type==='wildAnimal'){drawWildAnimal(item,time);continue;}
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
@@ -4800,7 +4801,7 @@ function bagEntries(){
   if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetle’s shell.',stats:'Absorbs 4 damage · Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
   for(const id of wardrobe.owned){
     const item=clothingCatalog[id],included=outfit[item.slot]===id;
-    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:item.description??'Starter clothing. Yours to keep and reuse in any outfit.',stats:(item.loot?'Rare loot · Grants '+item.power:item.dress?'Full dress · Covers trousers':item.slot==='jacket'?'Top slot':item.slot[0].toUpperCase()+item.slot.slice(1)+' slot')+(item.slot==='trousers'&&clothingCatalog[outfit.jacket].dress?' · Hidden under this dress':'')+(!included?' · Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
+    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:(item.description??'Clothing. Yours to keep and reuse in any outfit.')+(window.towerItemStatText?.(item)?' Pickpocket bonus: '+window.towerItemStatText(item)+'.':''),stats:(item.loot?'Rare loot · Grants '+item.power:item.dress?'Full dress · Covers trousers':item.slot==='jacket'?'Top slot':item.slot[0].toUpperCase()+item.slot.slice(1)+' slot')+(item.slot==='trousers'&&clothingCatalog[outfit.jacket].dress?' · Hidden under this dress':'')+(!included?' · Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
   }
   for(const [type,name] of Object.entries(types)){
     const quantity=availableFurniture(type);if(!quantity)continue;
@@ -5026,13 +5027,14 @@ function updatePlayerStats(){
     $(id).setAttribute('aria-label','Health '+health+' of '+totalHealth+'. Five hearts, 20 HP each.');
     $(id).title=health+' / '+totalHealth+' HP - 20 HP per heart';
   }
-  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['luck','Luck'],['leadership','Leadership']]){
+  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['stealth','Stealth'],['luck','Luck'],['leadership','Leadership']]){
     const {level:rank,progress:towardNext,target}=skillProgress(playerStats[id+'Xp']);
     $('attribute-'+id+'-level').textContent=rank;
     $('attribute-'+id+'-xp').textContent=towardNext+' / '+target+' XP';
     $('attribute-'+id+'-progress').max=target;$('attribute-'+id+'-progress').value=towardNext;
     $('attribute-'+id+'-progress').setAttribute('aria-label',name+' level '+rank+', '+towardNext+' of '+target+' XP toward the next level');
   }
+  const stealingGear=window.towerEquipmentStats?.(wardrobe)??{stealth:0,luck:0};$('attribute-stealth-equipment').textContent='Pickpocket gear · +'+stealingGear.stealth+' Stealth · +'+stealingGear.luck+' Luck';
   $('attributeName').textContent=avatar.name;
   const {level,progress:xp,target}=skillProgress(playerStats.patienceXp);
   $('patienceLevel').textContent='Patience '+level;
@@ -5042,7 +5044,7 @@ function updatePlayerStats(){
   const odds=fishingChances(level,fishingGear.equippedRod,playerStats.luckXp);
   const luck=fishingLuckBonus(playerStats.luckXp);
   const luckText='+'+luck.fine.toFixed(1)+' fine / +'+luck.rare.toFixed(1)+' rare percentage points';
-  $('attribute-luck-fishing').textContent=luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.';
+  $('attribute-luck-fishing').textContent=(luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.')+' Also improves pickpocketing odds.';
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
@@ -6616,6 +6618,7 @@ canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
+  if(!editing&&item?.type==='remotePlayer'){window.towerRobbery?.open(item.peer.id);return;}
   if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(shoalHit)(currentRoom===moonfinPool.room?useMoonfinPool:usePondShoal)();else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
@@ -6733,7 +6736,7 @@ function visitTailor(){
 function openTailor(){
   if(currentRoom!=='tailor')return;
   if(unavailable())return;
-  tailorFacing=0;$('tailorStatus').textContent='Purchases go to Inventory → Clothing. No stat bonuses.';renderTailor();$('tailorDialog').showModal();
+  tailorFacing=0;$('tailorStatus').textContent='Purchases go to Inventory → Clothing. Equip rogue or merchant clothing for pickpocketing bonuses.';renderTailor();$('tailorDialog').showModal();
 }
 function renderTailor(){
   const set=clothingSets[tailorSelection],quote=tailorQuote(wardrobe,tailorSelection),list=$('tailorSets');list.replaceChildren();
@@ -6745,7 +6748,7 @@ function renderTailor(){
   const pieces=$('tailorPieces');pieces.replaceChildren();
   for(const slot of clothingSlots){
     const id=set[slot],item=clothingCatalog[id],owned=wardrobe.owned.includes(id),row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');
-    name.textContent=item.name;button.type='button';button.dataset.tailorPiece=id;button.textContent=owned?'Owned':'Buy · '+item.price+' gold';button.disabled=owned||tailorBusy||credits<item.price;button.onclick=()=>buyTailor(id,'piece');row.append(name,button);pieces.append(row);
+    name.textContent=item.name+(window.towerItemStatText?.(item)?' · '+window.towerItemStatText(item):'');button.type='button';button.dataset.tailorPiece=id;button.textContent=owned?'Owned':'Buy · '+item.price+' gold';button.disabled=owned||tailorBusy||credits<item.price;button.onclick=()=>buyTailor(id,'piece');row.append(name,button);pieces.append(row);
   }
   $('tailorBuySet').textContent=quote.ids.length?'Buy missing pieces · '+quote.price+' gold':'Complete set owned';$('tailorBuySet').disabled=!quote.ids.length||tailorBusy||credits<quote.price;
   $('tailorWear').hidden=quote.ids.length>0;$('tailorWear').disabled=tailorBusy;
@@ -7145,7 +7148,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
+    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,onAutoDisconnected:()=>window.playerCloud.pauseAuto?.(),
@@ -7237,3 +7240,6 @@ async function openMillCellarChest(){
  try{await serverGameplay('millCellarChest');updateAdventurePanel();showTransaction('Millkeeper’s supplies',[{icon:'◆',text:'+1 Shield Awakening Stone · Use in Essences'}],125);}
  catch(error){note(error.message);}
 }
+
+window.towerApplyRobberyState=state=>{credits=state.credits;Object.assign(playerStats,state.stats);$('credits').textContent=new Intl.NumberFormat().format(credits);walletTween=null;updatePlayerStats();};
+window.towerRobberyHooks={peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};

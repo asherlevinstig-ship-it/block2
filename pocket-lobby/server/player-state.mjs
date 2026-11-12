@@ -1,3 +1,4 @@
+import {normalizeRobbery} from '../public/robbery-rules.js';
 import {normalizeMining} from '../public/mining.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
 import {autoHasNoPoints,stopForActionPoints,spendAutoPoint,requireActionPoint} from './action-points.mjs';
@@ -75,8 +76,8 @@ export function normalizeState(input={}){
   if(!Number.isSafeInteger(credits)||credits<0||credits>100000000)throw new Error("Invalid balance.");
   const goldEarned=input.goldEarned??0;
   if(!Number.isSafeInteger(goldEarned)||goldEarned<0)throw new Error("Invalid lifetime earnings.");
-  const stats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,leadershipXp:0,patienceXp:(input.adventure?.silverfin??0)*10,...input.stats};
-  for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp","luckXp","leadershipXp"]){
+  const stats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,leadershipXp:0,stealthXp:0,patienceXp:(input.adventure?.silverfin??0)*10,...input.stats};
+  for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp","luckXp","leadershipXp","stealthXp"]){
     if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>MAX_SKILL_XP)throw new Error("Invalid attribute progress.");
   }
   const maxHealth=100;
@@ -107,13 +108,14 @@ export function normalizeState(input={}){
   if(stats.cookingXp!==undefined&&(!Number.isSafeInteger(stats.cookingXp)||stats.cookingXp<0||stats.cookingXp>MAX_SKILL_XP))throw new Error('Invalid Cooking XP.');
   const state={
     controlMode:input.controlMode??'play',...(input.autoSwitch===true?{autoSwitch:true}:{}),...(['required','complete'].includes(input.autoLesson)?{autoLesson:input.autoLesson}:{}),...(input.autoConfigured===true?{autoConfigured:true}:{}),...(input.pendingCharacterRules?{pendingCharacterRules:normalizeCharacterRules(input.pendingCharacterRules)}:{}),bank:normalizeBank(input.bank),
-    ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,leadershipXp:stats.leadershipXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,stealthXp:stats.stealthXp,leadershipXp:stats.leadershipXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     mining:normalizeMining(input.mining),woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     outfitMagic:normalizeOutfitMagic(input.outfitMagic),wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<(input.location===wildlifeRoom?wildlifeView.cols:18)&&position.y<(input.location===wildlifeRoom?wildlifeView.rows:16)?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
+  state.robbery=normalizeRobbery(input.robbery);
   state.actionPoints=normalizeActionPoints(input.actionPoints);
   if(input.autoTravelReceipt)state.autoTravelReceipt=input.autoTravelReceipt;
   if(input.learning)state.learning=input.learning;

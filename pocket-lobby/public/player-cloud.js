@@ -29,7 +29,7 @@
     try{localStorage.setItem('pocket-lobby:cloud-pending',JSON.stringify(value));}catch{}
   };
   const setStatus=text=>{status.textContent=text;};
-  async function request(path,body,allowPaused=false){
+  async function request(path,body,allowPaused=false,robberyRetry=0){
     if(pausedForPoints&&path!=='reconnect'&&!path.startsWith('learning/')&&!allowPaused)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
     const sentAt=performance.now();
     const response=await fetch('/api/player/'+path,{
@@ -40,6 +40,7 @@
     });
     const data=await response.json();combatClock.sample(data.serverTime,sentAt);
     if(data.state?.autoDisconnected&&path!=='reconnect'&&!path.startsWith('learning/'))suspendForPoints(data);
+    if(response.status===409&&robberyRetry<2&&data.lastOperation?.startsWith('robbed:')&&data.characterKey===packet?.characterKey){packet=data;window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -93,6 +94,11 @@
       }
     })().finally(()=>{sending=null;});
     return sending;
+  }
+  async function refreshRobbery(attempt=0){
+    if(pausedForPoints||conflicted)return;
+    if(sending||presenceBusy||gameplayBusy||acting){if(attempt<20)setTimeout(()=>refreshRobbery(attempt+1),300);return;}
+    try{const data=await request('state');if(data.characterKey===packet.characterKey&&data.revision>=packet.revision){packet=data;window.towerApplyRobberyState?.(data.state);}}catch{}
   }
   async function flush(){
     if(pausedForPoints)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
@@ -507,9 +513,10 @@
       const training=await import('./training.js');
       const dungeonLoot=await import('./dungeon-loot.js');
       Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
+      const robberyRules=await import('./robbery-rules.js');window.towerEquipmentStats=robberyRules.equipmentStats;window.towerItemStatText=robberyRules.itemStatText;
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
-      window.playerCloud={enqueue,flush,attach,prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},readMillRaid:()=>request('mill-raid'),millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
+      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},readMillRaid:()=>request('mill-raid'),millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;
@@ -565,6 +572,7 @@
       initializeHudClearance();
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
+        const {initializeRobbery}=await import('./robbery-ui.js');window.towerRobbery=initializeRobbery({doc:document,cloud:window.playerCloud,hooks:window.towerRobberyHooks});
         const {initializeLearning}=await import('./learning-ui.js');
         window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,onAdventure:async()=>{if(pausedForPoints)await retry.onclick?.();},change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
         const {initializeActionPointFeedback}=await import('./action-point-feedback.js');

@@ -37,6 +37,9 @@ export function worldActivityEvents(before,after,now=Date.now()){
   if(e.healed>0)add(key+':heal','heal','+'+e.healed+' HP',e.healed,e.at,eventRoom);
   if(e.dodged)add(key+':dodge','dodge',e.perfectDodge?'Perfect dodge':'Dodge',0,e.at,eventRoom);
  }
+ for(const [key,role] of [['lastAttempt','thief'],['lastReceived','victim']]){
+  const r=after.robbery?.[key];if(r?.id&&r.id!==before.robbery?.[key]?.id)add('robbery:'+role+':'+r.id,r.gold?(role==='thief'?'gold':'loss'):'push',r.gold?(role==='thief'?'+'+r.gold+' stolen gold':'−'+r.gold+' gold · Pickpocketed'):(role==='thief'?'Spotted! Steal failed':'Caught a pickpocket'),r.gold,r.at,r.room);
+ }
  return events.slice(-16);
 }
 export function createWorldActivityTracker(initial){let previous=initial?structuredClone(initial):null;return {update(state,now){const events=worldActivityEvents(previous,state,now);previous=structuredClone(state);return events;}};}

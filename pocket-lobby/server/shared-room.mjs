@@ -16,6 +16,7 @@ import {besideFishingStation} from '../public/region-catalog.js';
 import {sharedFishingPose} from '../public/fishing.js';
 import {autoWalkPosition} from '../public/auto-walk.js';
 import {recordPlayUsage} from './player-usage.mjs';
+import {robberyRules} from '../public/robbery-rules.js';
 
 function familiarProfile(state){
  const familiar=state.familiars?.equipped;
@@ -112,6 +113,7 @@ export class SharedRoom{
   }
   fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{
     const path=new URL(request.url).pathname;
+    if(path==='/robbery-target'&&request.method==='POST')return this.robberyTarget(await request.json());
     if(path==='/trail-camp'&&request.method==='POST'){
       const camp=await request.json();
       for(const ws of this.sessions.keys())this.send(ws,{type:'trailCamp',camp});
@@ -120,6 +122,16 @@ export class SharedRoom{
     if(path==='/raid'&&request.method==='POST'){const {raid,playerId,receipt,cast}=await request.json();const peer=[...this.sessions.values()].find(m=>m.playerId===playerId);const cue=peer?{player:peer.id,hit:receipt?.hit??0,cast}:null;for(const ws of this.sessions.keys())this.send(ws,{type:'millRaid',raid,cue});return json({ok:true});}
     return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);
   });}
+  robberyTarget({playerId,target,room}){
+    const now=Date.now(),peers=new Map([...this.sessions.values()].filter(p=>!p.serverAuto).map(p=>[p.playerId,p]));
+    for(const [id,p] of this.autoPeers)if(p.until>now)peers.set(id,p);
+    const actor=peers.get(playerId),other=[...peers.values()].find(p=>p.id===target&&p.playerId!==playerId);
+    if(!actor||!other||actor.room!==room||other.room!==room||room==='home'||room==='factionHall'||other.veilUntil>now||actor.veilUntil>now)return json({error:'Choose a visible player in the same public area.'},400);
+    const a=actor.walk?autoWalkPosition(actor.walk,now):actor,b=other.walk?autoWalkPosition(other.walk,now):other;
+    const from={x:Math.round(a.x),y:Math.round(a.y)},to={x:Math.round(b.x),y:Math.round(b.y)};
+    if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>robberyRules.reach||!reachableMove(room,from,to,roomBoxes(room),1))return json({error:'Move next to this player, within one tile, before stealing.'},400);
+    return json({playerId:other.playerId});
+  }
   async reserveFishingSpot(request){
     const {playerId,room,spots}=await request.json(),now=Date.now();
     for(const [id,spot] of this.fishingSpots)if(spot.until<=now)this.fishingSpots.delete(id);
@@ -187,6 +199,7 @@ export class SharedRoom{
     const [ws,meta]=entry;if(!Number.isInteger(revision)||revision<=(meta.activityRevision??0))return json({ok:true});
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
     meta.activityRevision=revision;
+    if(state.robbery?.lastReceived?.at>Date.now()-5000)this.send(ws,{type:'robbery',receipt:state.robbery.lastReceived,revision});
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
     const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});

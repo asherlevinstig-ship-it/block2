@@ -1,3 +1,4 @@
+import {robberyAction} from './robbery.mjs';
 import {cellarFlags} from '../public/mill-cellar.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
 import {autoHasNoPoints,requireActionPoint,spendActionPoint,stopForActionPoints} from './action-points.mjs';
@@ -187,7 +188,7 @@ export async function handlePlayerApi(request,env){
       delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
-      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -250,6 +251,7 @@ export async function handlePlayerApi(request,env){
     const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation){
+      if(path==='/api/player/robbery')return json({...packet(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
       if(path==='/api/player/gameplay/campRefuel')return json({...packet(row),camp:await readTrailCamp(env.TOWER_DB)});
       return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
     }
@@ -267,6 +269,13 @@ export async function handlePlayerApi(request,env){
       return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
     }
     let state=readPlayerState(row),factionId=null,treeMutation=null;
+    if(path==='/api/player/robbery'){
+      const result=await robberyAction(env,row,state,body);
+      if(result.preview)return json({...packet(row),preview:result.preview});
+      await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(result.updated.state_json),result.updated.revision,{fresh:true});
+      if(result.targetUpdated)await publishWorldActivity(env,result.targetUpdated.player_id,result.targetBefore,JSON.parse(result.targetUpdated.state_json),result.targetUpdated.revision,{fresh:true});
+      return json({...packet(result.updated),receipt:result.receipt});
+    }
     if(path.startsWith('/api/player/gameplay/mine')){
       const result=await mineAction(env.TOWER_DB,row,state,body,path.split('/').at(-1),Date.now());
       const updated=result.updated??await write(env.TOWER_DB,id,row.revision,result.state,body.operation);
@@ -448,6 +457,7 @@ export async function handlePlayerApi(request,env){
     return json(packet(updated));
   }catch(error){
     if(error.status===402)return json({error:error.message,code:'action-points'},402);
+    if(error.status===409&&path==='/api/player/robbery')return json({error:error.message,...packet(await read(env.TOWER_DB,(await resolveIdentity(request,env))?.playerId))},409);
     if(error.status===400||error.status===409)return json({error:error.message},error.status);
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
     if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Cache Guardian|Defeat the Treasury Guardian|Defeat the Rune Sentinel|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
