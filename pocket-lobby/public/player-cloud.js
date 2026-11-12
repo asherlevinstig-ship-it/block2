@@ -30,7 +30,7 @@
   };
   const setStatus=text=>{status.textContent=text;};
   async function request(path,body,allowPaused=false){
-    if(pausedForPoints&&path!=='reconnect'&&!allowPaused)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
+    if(pausedForPoints&&path!=='reconnect'&&!path.startsWith('learning/')&&!allowPaused)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
     const sentAt=performance.now();
     const response=await fetch('/api/player/'+path,{
       method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',
@@ -39,7 +39,7 @@
       signal:AbortSignal.timeout(15000)
     });
     const data=await response.json();combatClock.sample(data.serverTime,sentAt);
-    if(data.state?.autoDisconnected&&path!=='reconnect')suspendForPoints(data);
+    if(data.state?.autoDisconnected&&path!=='reconnect'&&!path.startsWith('learning/'))suspendForPoints(data);
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -106,8 +106,8 @@
       }catch(error){
         // Durable Auto alarms can commit between our last packet and this request.
         // Retry only server settlement revisions; another window still triggers conflict handling.
-        if(['presence','control'].includes(path)&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
-        if(path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'){
+        if((['presence','control'].includes(path)||path.startsWith('learning/'))&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
+        if(path.startsWith('learning/')||path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'){
           if((error.status===undefined||path==='timber-orders'&&error.status===503)&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
@@ -556,6 +556,8 @@
       initializeHudClearance();
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
+        const {initializeLearning}=await import('./learning-ui.js');
+        window.towerLearning=initializeLearning({doc:document,getState:()=>packet.state,change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');
         window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks);
 

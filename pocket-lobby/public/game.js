@@ -738,6 +738,7 @@ function updateBedGuide(){
   $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
 }
 function needsAutoLesson(){return (window.playerCloud?.initial??savedPlayerState)?.autoLesson==='required';}
+function needsLearningPoints(){return (window.playerCloud?.initial??savedPlayerState)?.actionPoints?.value===0;}
 function updateAutoLessonGuide(){
   const visible=needsAutoLesson()&&!loungeDressGuiding&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
   $('autoLessonGuide').hidden=!visible;
@@ -749,6 +750,8 @@ function openAutoLesson(){
   window.towerPauseForAccount();
   $('autoLessonStatus').textContent=quest.accepted?'Required quest · Set up once, then choose how you play.':'Meet the Tower Warden in the lobby to start this quest.';
   $('autoLessonStart').disabled=!quest.accepted;
+  if(quest.accepted&&needsLearningPoints())$('autoLessonStatus').textContent='Answer an MCQ to earn 1 Action Point, then come back to start exploring.';
+  $('autoLessonStart').textContent=needsLearningPoints()?'Earn my first Action Point':'Save & start exploring';
   if(!$('autoLessonDialog').open)$('autoLessonDialog').showModal();
 }
 let startingAutoLesson=false;
@@ -756,6 +759,7 @@ $('autoLessonOpen').onclick=openAutoLesson;
 $('autoLessonDialog').oncancel=event=>{if(startingAutoLesson)event.preventDefault();};
 $('autoLessonStart').onclick=async()=>{
   if(startingAutoLesson)return;
+  if(needsLearningPoints()){$('autoLessonDialog').close();window.towerLearning?.open();return;}
   startingAutoLesson=true;$('autoLessonStart').disabled=true;$('autoLessonDialog').querySelector('.close').disabled=true;
   $('autoLessonStatus').textContent='Saving your exploration job…';
   try{

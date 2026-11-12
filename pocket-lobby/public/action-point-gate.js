@@ -4,7 +4,7 @@ export function createActionPointGate({gate,text,button,title,stop,apply,status,
   status('Home · Disconnected · Out of Action Points');
   if(title)title.textContent='Out of Action Points';
   gate.dataset.reason='action-points';
-  text.textContent='Your earned items and gold are saved, and your character is safely at home. Action Points refill by 1 per minute while Auto is off. Auto will not restart while you are disconnected.';
+  text.textContent='Your earned items and gold are saved, and your character is safely at home. Answer questions to earn 1 Action Point per answer. Auto will not restart while you are disconnected.';
   button.hidden=false;button.textContent='Return to game';button.disabled=false;
   button.onclick=async()=>{
    if(button.disabled)return;button.disabled=true;

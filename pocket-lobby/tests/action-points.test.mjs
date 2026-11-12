@@ -13,19 +13,19 @@ import {testDatabase} from './db-helper.mjs';
 import {AutoActor} from '../server/auto-actor.mjs';
 import {SharedRoom} from '../server/shared-room.mjs';
 
-test('Action Points are bounded and refill lazily only while Auto is off',()=>{
+test('Action Points are bounded and never refill with elapsed time',()=>{
  assert.deepEqual(normalizeActionPoints(),{value:100,at:0,active:false});
  assert.equal(normalizeActionPoints({value:-10}).value,0);
  assert.equal(normalizeActionPoints({value:101.5}).value,100);
  const p={value:2,at:1000,active:false};
  assert.equal(availableActionPoints(p,60999),2);
- assert.equal(availableActionPoints(p,61000),3);
+ assert.equal(availableActionPoints(p,61000),2);
  assert.equal(availableActionPoints(p,0),2);
- assert.equal(availableActionPoints(p,10000000),100);
+ assert.equal(availableActionPoints(p,10000000),2);
  assert.equal(availableActionPoints({...p,active:true},10000000),2);
  const s={actionPoints:p};assert(beginAutoPoints(s,61000));
- assert.equal(s.actionPoints.value,3);releaseAutoPoints(s,121000);
- assert.equal(availableActionPoints(s.actionPoints,181000),4);
+ assert.equal(s.actionPoints.value,2);releaseAutoPoints(s,121000);
+ assert.equal(availableActionPoints(s.actionPoints,181000),2);
 });
 
 test('zero points stop Auto at home or outside and cancel unfinished work without rewards',()=>{
@@ -69,7 +69,7 @@ test('a three-cast fishing batch stops after its last affordable catch and prese
  assert.equal(await settleFishingBatch(env,'fisher',s,until+60000,motion),false);
 });
 
-test('reconnect is explicit, preserves rules and resumes manual play with lazily refilled points',async t=>{
+test('reconnect preserves rules and resumes manual play without refilling points',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());let now=1000;t.mock.method(Date,'now',()=>now);
  let cookie='',packet;
  async function call(path,body){
@@ -84,7 +84,7 @@ test('reconnect is explicit, preserves rules and resumes manual play with lazily
  await call('state');assert(packet.state.autoDisconnected);
  const rules=structuredClone(packet.state.characterRules);now=121000;
  await call('reconnect',{revision:packet.revision,operation:crypto.randomUUID()});
- assert.equal(packet.state.actionPoints.value,2);assert(!packet.state.autoDisconnected);
+ assert.equal(packet.state.actionPoints.value,0);assert(!packet.state.autoDisconnected);
  assert.equal(packet.state.controlMode,'play');assert(!packet.state.plan);assert.deepEqual(packet.state.characterRules,rules);
 });
 

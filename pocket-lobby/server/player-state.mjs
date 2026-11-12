@@ -115,6 +115,7 @@ export function normalizeState(input={}){
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   state.actionPoints=normalizeActionPoints(input.actionPoints);
+  if(input.learning)state.learning=input.learning;
   if(input.autoDisconnected?.reason==='action-points'&&Number.isSafeInteger(input.autoDisconnected.at)&&input.autoDisconnected.at>=0)state.autoDisconnected={reason:'action-points',at:input.autoDisconnected.at};
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
   state.safeVersion=input.safeVersion;migrateHomeSafe(state);

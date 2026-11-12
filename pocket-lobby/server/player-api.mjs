@@ -1,6 +1,7 @@
 import {cellarFlags} from '../public/mill-cellar.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
 import {autoHasNoPoints} from './action-points.mjs';
+import {learningAction} from './learning.mjs';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
 import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
@@ -169,10 +170,10 @@ export async function handlePlayerApi(request,env){
       const body=await bodyOf(request);
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
-      delete legacy.actionPoints;delete legacy.autoDisconnected;
+      delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
-      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -300,6 +301,10 @@ export async function handlePlayerApi(request,env){
         if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);
       }
     }else switch(path){
+      case "/api/player/learning/next":
+      case "/api/player/learning/answer":
+        learningAction(state,path.split('/').at(-1),body);
+        break;
       case "/api/player/rankings/participation":
         if(!identity.account)return json({error:"Create an account to join the rankings."},400);
         if(typeof body.joined!=="boolean")return json({error:"Choose whether to join the rankings."},400);
@@ -316,7 +321,7 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);
-        state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required'});
+        state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}});
         {
           const [saved]=await env.TOWER_DB.batch([
             env.TOWER_DB.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? RETURNING *').bind(JSON.stringify(state),body.operation,Date.now(),id,row.revision),

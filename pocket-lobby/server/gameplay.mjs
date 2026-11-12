@@ -344,6 +344,7 @@ export function protectFishingState(previous,next){
   if(previous.autoSwitch)next.autoSwitch=true;else delete next.autoSwitch;
   next.controlMode=previous.controlMode??'play';
   next.actionPoints=previous.actionPoints;
+  if(previous.learning)next.learning=previous.learning;else delete next.learning;
   if(previous.autoDisconnected)next.autoDisconnected=previous.autoDisconnected;else delete next.autoDisconnected;
   next.dungeonLoot=previous.dungeonLoot;
   if(previous.upgradeGoal)next.upgradeGoal=previous.upgradeGoal;else delete next.upgradeGoal;

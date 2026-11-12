@@ -55,6 +55,8 @@ test('new-character API requires setup, saves and starts atomically, and duplica
  await call('session',{newCharacter:true,legacy:{quest:{accepted:true},bedLessonComplete:true,location:'hub',position:{x:10,y:4}}});assert.equal(packet.state.autoLesson,'required');
  await act('create',{avatar:{name:'Explorer',outfit:0,hair:0}});
  assert.equal((await act('rules/save',{rules:{enabled:true,activity:'rest'}})).status,400);
+ assert.equal(packet.state.actionPoints.value,0);
+ await act('learning/next');await act('learning/answer',{attemptId:packet.state.learning.attempt.id,choice:0});
  const body={revision:packet.revision,operation:crypto.randomUUID()};const started=await call('auto/explore/setup',body);assert.equal(started.status,200,JSON.stringify(started));assert.equal(started.state.autoLesson,'complete');assert.equal(started.state.plan.kind,'exploring');
  const repeat=await call('auto/explore/setup',body);assert.equal(repeat.status,200);assert.equal(repeat.state.plan.startedAt,started.state.plan.startedAt);
  await act('control',{mode:'play'});await act('report/ack',{startedAt:packet.state.report.startedAt});
