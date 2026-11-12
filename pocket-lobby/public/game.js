@@ -5035,7 +5035,6 @@ function updatePlayerStats(){
   }
   $('attributeName').textContent=avatar.name;
   const {level,progress:xp,target}=skillProgress(playerStats.patienceXp);
-  $('patienceValue').textContent=level;
   $('patienceLevel').textContent='Patience '+level;
   $('patienceProgress').max=target;$('patienceProgress').value=xp;
   $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of '+target+' XP toward the next level');
