@@ -1,3 +1,4 @@
+import {combatBuild} from '../public/combat-builds.js';
 import {activeAdd,addEncounter,mergeAddEvent} from '../public/dungeon-adds.js';
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
 import {spendMana} from '../public/player-vitals.js';
@@ -51,7 +52,7 @@ export function castEssencePower(state,now,slot='q'){
   const magic=state.magic,encounter=state.hunting.encounter;
   const id=magic?.slots[slot];
   if(!encounter||!id||now<(magic.cooldowns[id]??0)||!magic.unlocked.includes(id))return null;
-  const power=essencePower(id,state.stats,magic);
+  const build=combatBuild(state),power=essencePower(id,state.stats,magic,build);
   if(!power||!bondedEssences(magic.picks).includes(power.gem))return null;
   const {form,value}=power,masteryBonus=power.masteryLevel-1;
   if(form==='renewal'&&state.health>=100)return null;
@@ -67,10 +68,12 @@ export function castEssencePower(state,now,slot='q'){
   if(form==='sword'){
     const enemy=huntEnemy(encounter);
     const armor=now<(encounter.exposedUntil??0)?0:enemy.shellArmor??0;
-    event.damage=Math.min(next.health,Math.max(1,value-armor));
+    const shatter=build.id==='spellweaver'&&encounter.chilledUntil>now;
+    event.damage=Math.min(next.health,Math.max(1,Math.round(value*(shatter?1.15:1))-armor));
+    if(shatter){event.shatter=true;delete next.chilledUntil;}
     next.health-=event.damage;
     if(next.health===0){if(encounter.addActor)event.killedEncounter=next;event.encounter=null;event.outcome='victory';}
-    event.effect='dealt '+event.damage+' damage';
+    event.effect='dealt '+event.damage+' damage'+(event.shatter?' · Shatter!':'');
   }else if(form==='shield'){
     next.magicWard=value;next.magicWardUntil=now+5000;
     event.ward=value;

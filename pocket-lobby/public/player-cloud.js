@@ -513,6 +513,7 @@
       const training=await import('./training.js');
       const dungeonLoot=await import('./dungeon-loot.js');
       Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
+      const combatBuilds=await import('./combat-builds.js');window.towerCombatBuild=combatBuilds.combatBuild;
       const robberyRules=await import('./robbery-rules.js');window.towerEquipmentStats=robberyRules.equipmentStats;window.towerItemStatText=robberyRules.itemStatText;
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
@@ -572,6 +573,7 @@
       initializeHudClearance();
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
+        const {initializeBuildUI}=await import('./combat-build-ui.js');window.towerBuildUI=initializeBuildUI({doc:document,hooks:window.towerBuildHooks});
         const {initializeRobbery}=await import('./robbery-ui.js');window.towerRobbery=initializeRobbery({doc:document,cloud:window.playerCloud,hooks:window.towerRobberyHooks});
         const {initializeLearning}=await import('./learning-ui.js');
         window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,onAdventure:async()=>{if(pausedForPoints)await retry.onclick?.();},change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});

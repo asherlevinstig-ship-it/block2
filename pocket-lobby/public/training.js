@@ -1,3 +1,5 @@
+import {combatBuild,buildProfile} from './combat-builds.js';
+import {armourSelection} from './hunting.js';
 import {createHunt,advanceHunt,huntingTurn,enemyAttack,combatStamina,combatDodgeCost,weaponCatalog,weaponProfile,weaponStagger,canUseWeapon,staggerProfile,huntEnemies} from './hunting.js';
 import {recordCombatFx,drawCombatGroundFx,drawCombatWorldFx,drawCombatOverlayFx} from './combat-fx.js';
 import {playerCombatPose,boarCombatPose} from './combat-art.js';
@@ -5,7 +7,7 @@ const lessonSteps=['dodge','counter','stagger','weak'];
 export function createTrainingSession(source,weapon=source.combatGear?.equippedWeapon??'trainingSword'){
  if(!Object.hasOwn(weaponCatalog,weapon))throw new Error('Choose a practice weapon.');
  const gear=structuredClone(source.combatGear??{}),stats=structuredClone(source.stats??{});
- const encounter=createHunt(0,1000);encounter.nextBoarAt=2500;
+ const encounter=createHunt(0,1000);encounter.nextBoarAt=2500;encounter.buildId=combatBuild({...source,hunting:{encounter:null},combatGear:{...gear,equippedWeapon:weapon}}).id;
  return {now:0,weapon,gear,stats,appearance:structuredClone(source.avatar??{}),encounter,events:{bursts:[]},completed:{},damage:0,perfects:0,counters:0,staggers:0,weakHits:0,misses:0,lastDodgeAt:null,lastTiming:null,feedback:'Watch the amber attack warning. Press Space just before impact.',log:[]};
 }
 function accept(session,event){
@@ -34,13 +36,13 @@ export function advanceTraining(session,to){
   const due=Math.min(session.encounter.nextPlayerAt,session.encounter.nextBoarAt);
   if(due>to)break;
   session.now=due;
-  accept(session,advanceHunt(session.encounter,100,session.stats,due,()=>.5,session.weapon,session.gear.activeSwordUpgrade,session.gear.stonebackVestEquipped,session.gear.moonwellCharmEquipped,session.gear.weaponEnchantments));
+  accept(session,advanceHunt(session.encounter,100,session.stats,due,()=>.5,session.weapon,session.gear.activeSwordUpgrade,armourSelection(session.gear),session.gear.moonwellCharmEquipped,session.gear.weaponEnchantments));
  }
  session.now=to;
 }
 export function dodgeTraining(session){
  if(!session.encounter)return false;
- const event=huntingTurn(session.encounter,100,session.stats,'dodge',session.now,()=>.5,session.weapon,session.gear.activeSwordUpgrade,session.gear.stonebackVestEquipped,session.gear.moonwellCharmEquipped,session.gear.weaponEnchantments);
+ const event=huntingTurn(session.encounter,100,session.stats,'dodge',session.now,()=>.5,session.weapon,session.gear.activeSwordUpgrade,armourSelection(session.gear),session.gear.moonwellCharmEquipped,session.gear.weaponEnchantments);
  if(!event){session.feedback='Your dodge needs stamina or time to recover. Try the next warning.';return false;}
  accept(session,event);if(session.lastEnemyAt!==undefined&&session.now-session.lastEnemyAt<250){session.lastTiming='Too late · '+Math.round(session.now-session.lastEnemyAt)+' ms after impact';session.feedback='That attack already landed. Watch the next warning and dodge just before impact.';}return true;
 }
@@ -76,7 +78,7 @@ export function initializeTrainingCourtyard({document:doc=globalThis.document,ge
   $('trainingLesson').textContent=titles[stage];$('trainingStep').textContent=stage===4?'LESSON COMPLETE':'COMBAT BASICS · '+(stage+1)+' / 4';
   $('trainingFeedback').textContent=session.feedback;$('trainingTiming').textContent=session.lastTiming??'Timing feedback appears after each attack.';
   for(const [i,id] of lessonSteps.entries()){$('trainingStep'+i).dataset.done=String(!!session.completed[id]);$('trainingStep'+i).setAttribute('aria-label',(session.completed[id]?'Complete: ':'To practise: ')+id);}
-  const stamina=combatStamina(e,session.stats,session.now,session.gear.moonwellCharmEquipped),cost=combatDodgeCost(session.gear.stonebackVestEquipped);
+  const stamina=combatStamina(e,session.stats,session.now,session.gear.moonwellCharmEquipped),cost=combatDodgeCost(armourSelection(session.gear),buildProfile(e.buildId));
   $('trainingDodge').disabled=session.now<e.nextDodgeAt||stamina<cost;$('trainingDodge').textContent=ready?'Dodge now! · Space':'Dodge · Space';
   $('trainingDodge').classList.toggle('dodge-ready',ready&&!$('trainingDodge').disabled);
   $('trainingTelegraph').textContent=stunned?'Dummy staggered · Safe opening':remaining<=move.tell?(ready?'DODGE NOW · ':'INCOMING · ')+move.name:weak?'Weak spot open · Damage +25%':'Next attack in '+Math.max(0,remaining/1000).toFixed(1)+'s';
@@ -92,7 +94,7 @@ export function initializeTrainingCourtyard({document:doc=globalThis.document,ge
   const options={ctx,point,time,now:time,events:session.events,encounter:session.encounter,player,reduced};drawCombatGroundFx(options);
   const [dx,dy]=point(6.5,5.5);drawTrainingDummy(ctx,dx,dy,{time,encounter:session.encounter,events:session.events,reduced});
   const [px,py]=point(5.5,5.5),pose=playerCombatPose({...options});
-  renderer?.draw(ctx,px+pose.lunge-pose.dodge,py+pose.dodge*.4,session.appearance,{time,direction:'right',weapon:true,weaponTier:session.weapon,vest:session.gear.stonebackVestEquipped,pose,reduced});
+  renderer?.draw(ctx,px+pose.lunge-pose.dodge,py+pose.dodge*.4,session.appearance,{time,direction:'right',weapon:true,weaponTier:session.weapon,vest:armourSelection(session.gear),pose,reduced});
   drawCombatWorldFx(options);ctx.restore();drawCombatOverlayFx({...options,width:640,height:330,health:100,enemy:{...huntEnemies.boar,name:'Training Dummy',lootName:'',xp:[0,0,0]}});
  }
  function close(){const active=!!session||dialog.open;if(frame!==null)cancelFrame(frame);frame=null;session=null;last=null;if(dialog.open)dialog.close();if(active)onClose?.();}

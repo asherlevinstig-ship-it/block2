@@ -66,12 +66,12 @@ export function awardEssenceMastery(magic,used,xp=masteryXpPerWin){
   return awards;
 }
 export const magicRank=({strengthXp=0,agilityXp=0,vitalityXp=0}={})=>1+Math.min(5,Math.floor(((skillLevel(strengthXp)-1)+(skillLevel(agilityXp)-1)+(skillLevel(vitalityXp)-1))/3));
-export function essencePower(id,stats,magic){
+export function essencePower(id,stats,magic,build){
   if(typeof id!=='string')return null;
   const [gem,form,extra]=id.split(':');
   if(extra!==undefined||!Object.hasOwn(allEssences,gem)||!Object.hasOwn(stoneForms,form))return null;
   const essence=allEssences[gem],stone=stoneForms[form];
-  const rank=magicRank(stats),value=essence.values[forms.indexOf(form)]+(rank-1)*stone.scaling;
+  const rank=magicRank(stats),base=essence.values[forms.indexOf(form)]+(rank-1)*stone.scaling,value=Math.round(base*(['sword','shield','renewal'].includes(form)?build?.spell??1:1));
   return {id,gem,form,rank,value,masteryLevel:essenceMastery(magic,gem)?.level??1,name:essence.name+' '+stone.power,color:essence.color,cooldown:stone.cooldown};
 }
 export function powerDescription(power){

@@ -1296,7 +1296,7 @@ function combatAction(action){
   if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
   const result=huntingTurn(hunting.encounter,health,playerStats,action,combatNow(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,armourSelection(combatGear),combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments);
   if(!result&&action==='dodge'){
-    combatMessage=combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)<combatDodgeCost(armourSelection(combatGear))?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
+    combatMessage=combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)<combatDodgeCost(armourSelection(combatGear),currentCombatBuild())?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
     updateCombatPanel();return;
   }
   applyCombatResult(result);
@@ -1523,7 +1523,7 @@ function updateCombatPanel(){
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
   $('combatLog').textContent=(encounter&&window.playerCloud?.initial?.actionPoints?.value===0?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
-  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
+  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments,currentCombatBuild());
   $('combatIntelligence').hidden=!encounter||!characterRules.combat.enabled;
   $('combatIntelligence').textContent=characterRules.combat.enabled?combatStyles[characterRules.combat.style].name+' · '+(encounter?.lastDecision?.reason??'Watching health and enemy warnings.') :'';
   $('combatGuide').textContent=(weapon?.name??'No weapon equipped')+(weapon?.upgradeName?' · '+weapon.upgradeName:'')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+attackSeconds(attributes.attackInterval)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
@@ -5722,7 +5722,7 @@ function renderEssences(){
   $('essenceMasteryHint').textContent=mastery?'Use this Gem in a victory: Boar +10 mastery XP · Beetle +15 · Depths +20 to +50. Later mastery levels take longer.':'';
   const list=$('essencePowerList');list.replaceChildren();
   for(const [form,stone] of Object.entries(stoneForms)){
-    const id=viewedEssence+':'+form,power=essencePower(id,playerStats,magic);
+    const id=viewedEssence+':'+form,power=essencePower(id,playerStats,magic,currentCombatBuild());
     const awakened=magic.unlocked.includes(id),active=magic.slots[essenceSlot]===id;
     const assigned=['q','e'].find(slot=>magic.slots[slot]===id);
     const row=document.createElement('article'),info=document.createElement('div');
@@ -5751,10 +5751,10 @@ async function changeEssences(action,body){
 const hotbarPowerSymbols={sword:'⚔',shield:'⬡',speed:'ϟ',focus:'✧',renewal:'✚'};
 let hotbarGemsKey='';
 function equippedEssenceStatus(now,slot='q'){
-  const power=essencePower(magicState?.slots[slot],playerStats,magicState);
+  const power=essencePower(magicState?.slots[slot],playerStats,magicState,currentCombatBuild());
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth();
-  const lowMana=manaAvailable(playerVitals,combatNow())<MANA_COST;
+  const lowMana=manaAvailable(playerVitals,combatNow())<currentCombatBuild().mana;
   return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active)&&!remaining&&!fullHealth&&!lowMana&&(window.playerCloud?.initial?.actionPoints?.value??1)>0};
 }
 function updateEssenceHotbar(now=Date.now()){
@@ -5784,7 +5784,7 @@ function updateEssenceHotbar(now=Date.now()){
     const button=$('essenceHotbarPower'+suffix);
     let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
       :!(player.inCombat||window.millRaidClient?.active)?allEssences[power.gem].name+' · Cast in combat'
-      :lowMana?'Needs '+MANA_COST+' mana':fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
+      :lowMana?'Needs '+currentCombatBuild().mana+' mana':fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
     const automated=characterRules.combat.enabled&&characterRules.combat[slot];
     if(automated&&player.inCombat&&power&&!remaining&&!fullHealth&&!lowMana)status='Auto · Waiting for tactic';
     button.dataset.automatic=String(automated);
@@ -5792,8 +5792,8 @@ function updateEssenceHotbar(now=Date.now()){
     button.dataset.equipped=String(!!power);
     button.disabled=player.inCombat&&!canCast;
     button.style.setProperty('--power-color',power?.color??'#b7a4ed');
-    if(power)status='1 AP + '+MANA_COST+' MP · '+(noPoints?'Answer questions to earn AP':status);
-    button.title=power?powerDescription(power)+' · Costs 1 Action Point + '+MANA_COST+' mana · Regenerates '+MANA_REGEN+'/sec'+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
+    if(power)status='1 AP + '+currentCombatBuild().mana+' MP · '+(noPoints?'Answer questions to earn AP':status);
+    button.title=power?powerDescription(power)+' · Costs 1 Action Point + '+currentCombatBuild().mana+' mana · Regenerates '+MANA_REGEN+'/sec'+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
     button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
     const name=$('essenceHotbarName'+suffix),label=$('essenceHotbarStatus'+suffix),symbol=$('essenceHotbarSymbol'+suffix);
     if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
@@ -6382,7 +6382,7 @@ function updateCharacterRulesPreview(){
     $('rulesStyleDescription').textContent=combatStyles[rules.combat.style].description;
     $('rulesCombatStyle').disabled=$('rulesAutoDodge').disabled=savingRules||!rules.combat.enabled;
     for(const slot of ['q','e']){
-      const key=slot.toUpperCase(),power=essencePower(magicState?.slots?.[slot],playerStats,magicState);
+      const key=slot.toUpperCase(),power=essencePower(magicState?.slots?.[slot],playerStats,magicState,currentCombatBuild());
       $('rulesAuto'+key).disabled=savingRules||!rules.combat.enabled||!power;
       $('rules'+key+'Power').textContent=key+' · '+(power?.name??'Empty slot');
       $('rules'+key+'Policy').textContent=describeCombatSpell(power,rules.combat.style);
@@ -7132,7 +7132,7 @@ function openTrainingCourtyard(){
   if(unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report){note('Finish your current activity before practising.');return;}
   trainingController?.open();
 }
-if(typeof initializeTrainingCourtyard==='function')trainingController=initializeTrainingCourtyard({getState:()=>({...currentGoalState(),avatar,stats:playerStats,combatGear}),canOpen:()=>currentRoom==='outside'&&!unavailable()&&!window.playerCloud?.initial?.plan&&!window.playerCloud?.initial?.report,pause:()=>{cancelFishing();window.towerPauseForAccount();},onClose:()=>canvas.focus(),renderer:window.towerCharacterArt});
+if(typeof initializeTrainingCourtyard==='function')trainingController=initializeTrainingCourtyard({getState:()=>({...currentGoalState(),avatar,stats:playerStats,combatGear,wardrobe,magic:magicState}),canOpen:()=>currentRoom==='outside'&&!unavailable()&&!window.playerCloud?.initial?.plan&&!window.playerCloud?.initial?.report,pause:()=>{cancelFishing();window.towerPauseForAccount();},onClose:()=>canvas.focus(),renderer:window.towerCharacterArt});
 if(window.playerCloud)window.playerCloud.attach();
 receiveTrees(savedPlayerState?.sharedTrees);
 function correctRoomPosition(position){
@@ -7243,3 +7243,6 @@ async function openMillCellarChest(){
 
 window.towerApplyRobberyState=state=>{credits=state.credits;Object.assign(playerStats,state.stats);$('credits').textContent=new Intl.NumberFormat().format(credits);walletTween=null;updatePlayerStats();};
 window.towerRobberyHooks={peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};
+
+function currentCombatBuild(){return window.combatBuild({combatGear,wardrobe,magic:magicState,hunting});}
+window.towerBuildHooks={state:()=>({...currentGoalState(),wardrobe,magic:magicState,hunting}),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences()};

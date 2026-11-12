@@ -1,3 +1,4 @@
+import {combatBuild,essenceManaCost} from '../public/combat-builds.js';
 import {millRaidClock,millRaidRules,raidWave,raidThreat,raidDanger,bridgeBarricade,bridgeDanger,besideBarricade} from '../public/mill-raid.js';
 import {weaponProfile,armourProfile,armourSelection} from '../public/hunting.js';
 import {manaAvailable,normalizeVitals,useHunger} from '../public/player-vitals.js';
@@ -67,6 +68,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   if(!bridge||bridge.hp===bridgeBarricade.max)throw invalid('The barricade is at full health.');
   if(!state.woodcutting?.timber)throw invalid('Bring 1 timber from your bag to repair the barricade.');
  }
+ const build=combatBuild(state);
  const weapon=weaponProfile(state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,state.combatGear?.weaponEnchantments);
  const target=event.mobs.find(m=>m.id===body.target&&m.hp>0);
  // Check the initial strike before registering an unarmed or distant visitor.
@@ -83,7 +85,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   const threat=raidThreat(clock.opens,clock.opens+beat*4000+3999,event.wave);
   const flanked=flanker&&threat.lands>flanker.at&&bridgeDanger(state.position);
   if((raidDanger(state.position,threat)||flanked)&&threat.lands>(member.safeUntil??0)){
-   const damage=Math.max(3,threat.damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0));
+   const damage=Math.max(3,threat.damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0)-build.armor);
    const blocked=Math.min(damage,member.shield??0);member.shield=Math.max(0,(member.shield??0)-blocked);suffered+=damage-blocked;
   }
  }
@@ -106,8 +108,8 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   event.healSeq=(event.healSeq??0)+1;member.heals=event.healSeq;state.health=Math.min(100,state.health+12);member.health=state.health;text='Healing pulse · +12 HP to active defenders';
  }
  if(action==='power'){
-  const magic=normalizeMagic(state.magic),id=magic.slots[body.slot],power=essencePower(id,state.stats,magic),mana=manaAvailable(state.vitals,now);
-  if(!['q','e'].includes(body.slot)||!power||mana<10||(magic.cooldowns[id]??0)>now)throw invalid('Equip a ready essence ability and keep 10 mana to cast.');
+  const magic=normalizeMagic(state.magic),id=magic.slots[body.slot],power=essencePower(id,state.stats,magic,build),mana=manaAvailable(state.vitals,now);
+  if(!['q','e'].includes(body.slot)||!power||mana<essenceManaCost(state)||(magic.cooldowns[id]??0)>now)throw invalid('Equip a ready essence ability and keep '+essenceManaCost(state)+' mana to cast.');
   if(power.form==='sword'){
    const mob=mobs.find(m=>m.id===body.target&&m.hp>0);if(!mob||Math.hypot(state.position.x-mob.x,state.position.y-mob.y)>4)throw invalid('Choose a nearby raider for your spell.');
    damage=Math.min(mob.hp,power.value);mob.hp-=damage;mob.hitAt=now;member.damage+=damage;
@@ -118,12 +120,12 @@ export function advanceMillRaid(raid,state,playerId,body,now){
    member.support+=Object.entries(event.members).filter(([id,m])=>id!==playerId&&!m.defeated&&now-m.lastAt<15000&&m.health<100).length;
    event.healSeq=(event.healSeq??0)+1;member.heals=event.healSeq;state.health=Math.min(100,state.health+power.value);member.health=state.health;
   }
-  magic.cooldowns[id]=now+power.cooldown;state.magic=magic;state.vitals={...normalizeVitals(state.vitals),mana:mana-10,manaAt:now};text=power.name+'!';
+  magic.cooldowns[id]=now+power.cooldown;state.magic=magic;state.vitals={...normalizeVitals(state.vitals),mana:mana-essenceManaCost(state),manaAt:now};text=power.name+'!';
  }
- if(action==='strike'&&now-(member.lastStrike??0)>=weapon.interval){
+ if(action==='strike'&&now-(member.lastStrike??0)>=Math.round(weapon.interval*build.interval)){
   const mob=mobs.find(m=>m.id===body.target&&m.hp>0)??mobs.find(m=>m.hp>0);
   if(!mob||Math.hypot(state.position.x-mob.x,state.position.y-mob.y)>2.15)throw invalid('Move closer to that monster to strike.');
-  damage=Math.min(mob.hp,weapon.damage+Math.min(15,Math.floor((state.stats.strengthXp??0)/250)));
+  damage=Math.min(mob.hp,Math.round((weapon.damage+Math.min(15,Math.floor((state.stats.strengthXp??0)/250)))*build.weaponDamage));
   mob.hp-=damage;mob.hitAt=now;member.damage+=damage;member.lastStrike=now;useHunger(state,1);text='Hit '+mob.name+' · -'+damage+' HP';
   if(mob.kind==='warden'&&mob.hp>0&&bridge?.hp>0&&now>=bridge.nextHitAt-bridgeBarricade.tell){
    bridge.nextHitAt+=bridgeBarricade.interval;

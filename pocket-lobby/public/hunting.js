@@ -1,3 +1,5 @@
+export {combatBuild} from './combat-builds.js';
+import {buildProfile} from './combat-builds.js';
 import {FOX_STAGGER} from './familiars.js';
 import {addKinds,activeAdd,addEncounter,mergeAddEvent,normalizeAdds} from './dungeon-adds.js';
 import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-brain.js';
@@ -22,7 +24,7 @@ export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:
 export const armourCatalog={scoutLeather:{name:'Scout Leather',price:180,vitality:1,absorption:2,dodgeCost:35,description:'Layered leather, cross-body straps and light shoulder guards. Less protection, easier dodging.'},towerPlate:{name:'Tower Sentinel Plate',price:650,vitality:3,absorption:7,dodgeCost:65,description:'Steel breastplate, broad pauldrons and a Tower crest. Strong protection, expensive dodges.'}};
 export const armourSelection=gear=>gear?.equippedArmour??(gear?.stonebackVestEquipped?'stonebackVest':null);
 export const armourProfile=id=>id===true||id==='stonebackVest'?stonebackVest:armourCatalog[id]??null;
-export const combatDodgeCost=equipped=>armourProfile(equipped)?.dodgeCost??boarRules.dodgeCost;
+export const combatDodgeCost=(equipped,build)=>Math.max(10,(armourProfile(equipped)?.dodgeCost??boarRules.dodgeCost)+(build?.dodge??0));
 export const canUseArmour=(stats,id)=>!!armourCatalog[id]&&skillLevel(stats.vitalityXp??0)>=armourCatalog[id].vitality;
 const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]};
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
@@ -212,15 +214,15 @@ export function normalizeCombatGear(input){
   return gear;
 }
 const level=skillLevel;
-export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false,enchantments={}){
+export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false,enchantments={},build=buildProfile()){
   const profile=weaponProfile(weapon,upgrade,enchantments);
   return {
-    attackInterval:profile?.interval??1100,
-    damage:(profile?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
+    attackInterval:Math.round((profile?.interval??1100)*build.interval),
+    damage:Math.max(0,Math.round(((profile?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2))*build.weaponDamage)),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
     staminaRegen:Math.min(25,12+(level(stats.agilityXp)-1)*1.5)+(charmEquipped?moonwellCharm.staminaRegen:0),
-    armor:Math.min(10,level(stats.vitalityXp)-1)
+    armor:Math.min(10,level(stats.vitalityXp)-1)+build.armor
   };
 }
 export function normalizeCombatSummary(input){
@@ -246,6 +248,7 @@ export function normalizeHunting(input={}){
     const stamina=input.encounter.stamina??100;
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    if(input.encounter.buildId!==undefined){if(!['adventurer','vanguard','duelist','spellweaver'].includes(input.encounter.buildId))throw new Error('Invalid combat build.');result.encounter.buildId=input.encounter.buildId;}
     if(input.encounter.exhausted===true)result.encounter.exhausted=true;
     if(input.encounter.autoRetreatDisabled===true)result.encounter.autoRetreatDisabled=true;
     if(Number.isSafeInteger(input.encounter.magicWard)&&input.encounter.magicWard>0){
@@ -269,7 +272,7 @@ export function normalizeHunting(input={}){
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
     if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee','move'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
-    if(input.encounter.counterPercent!==undefined){if(![50,75].includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
+    if(input.encounter.counterPercent!==undefined){if(!(input.encounter.buildId==='duelist'?[50,75,110,135]:[50,75]).includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
     if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
     const used=Array.isArray(input.encounter.usedEssences)?[...new Set(input.encounter.usedEssences.filter(gem=>Object.hasOwn(essenceGems,gem)))]:[];
@@ -311,10 +314,10 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
   if(now<encounter[clock])return null;
-  const attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped,enchantments);
+  const build=buildProfile(encounter.buildId),attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped,enchantments,build);
   const enemy=huntEnemy(encounter);
   const stamina=combatStamina(encounter,stats,now,charmEquipped);
-  const dodgeCost=combatDodgeCost(vestEquipped);
+  const dodgeCost=combatDodgeCost(vestEquipped,build);
   if(action==='dodge'&&stamina<dodgeCost)return null;
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
   if(now>=(encounter.counterUntil??0)){delete result.encounter.counterUntil;delete result.encounter.counterPercent;}
@@ -340,7 +343,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.shellGuarded=!exposed;
     }
     if(now<(encounter.counterUntil??0)){
-      result.counter=true;result.counterBonus=Math.ceil(result.damage*(weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus));result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
+      result.counter=true;result.counterBonus=Math.ceil(result.damage*((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)+build.counter));result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
     }
     if(result.counter&&enemy.archetype==='duelist'){result.duelistBonus=Math.ceil(result.damage*.25);result.damage+=result.duelistBonus;result.counterBonus+=result.duelistBonus;}
     if(now<(encounter.staggerWeakUntil??0)){
@@ -354,7 +357,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(result.encounter.health>0&&now>=(encounter.staggerResistUntil??0)){
       const profile=staggerProfile(enemy),before=encounter.stagger??0;
       const armourFactor=result.shellGuarded?Math.max(.25,(attributes.damage-enemy.shellArmor)/Math.max(1,attributes.damage)):1;
-      result.staggerGained=Math.min(profile.limit-before,Math.ceil(weaponStagger(weapon,upgrade,result.counter)*armourFactor)+(encounter.addActor&&encounter.foxBond?FOX_STAGGER:0));
+      result.staggerGained=Math.min(profile.limit-before,Math.ceil(weaponStagger(weapon,upgrade,result.counter)*armourFactor*build.stagger)+(build.id==='vanguard'&&encounter.magicWardUntil>now&&encounter.magicWard>0?8:0)+(encounter.addActor&&encounter.foxBond?FOX_STAGGER:0));
       result.encounter.stagger=before+result.staggerGained;
       if(result.encounter.stagger>=profile.limit){
         result.staggered=true;result.encounter.stagger=0;
@@ -376,7 +379,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.covered=result.spatialAvoided&&arenaBehindCover(encounter,move);
     result.dodged=result.spatialAvoided||result.timedDodge||random()<attributes.dodge;
     result.automaticDodge=result.timedDodge&&encounter.autoDodgeUntil===encounter.dodgeUntil;
-    if(result.timedDodge&&!result.automaticDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)*100);result.encounter.counterPercent=result.counterPercent;}
+    if(result.timedDodge&&!result.automaticDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round(((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)+build.counter)*100);result.encounter.counterPercent=result.counterPercent;}
     if(enemy.shellArmor&&enemy.archetype!=='armoured'&&move.opensShell&&(result.timedDodge||result.spatialAvoided)){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;

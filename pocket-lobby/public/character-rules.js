@@ -1,3 +1,4 @@
+import {combatBuild,essenceManaCost} from './combat-builds.js';
 import {addThreats,combatTargetTile} from './dungeon-adds.js';
 import {advanceOnEnemy} from './enemy-brain.js';
 import {simpleAutoModes,simpleAutoRisks,normalizeTimberMarket} from './simple-auto.js';
@@ -88,7 +89,7 @@ export const combatStyles={
 };
 export function incomingCombatDamage(state){
  const e=state.hunting?.encounter;if(!e)return 0;
- const enemy=huntEnemy(e),attack=enemyAttack(e),attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon);
+ const enemy=huntEnemy(e),attack=enemyAttack(e),attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,false,state.combatGear?.weaponEnchantments,combatBuild(state));
  let damage=Math.max(4,enemy.damage+attack.damage+5-attributes.armor);
  if(e.weakenedUntil>e.nextBoarAt)damage-=Math.floor(damage*(e.weakenPercent??25)/100);
  damage=Math.max(0,damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0));
@@ -111,7 +112,7 @@ export function nextCombatTactic(state){
  const physicalInterrupt=attack.shape==='bolt'&&e.castDeadline===strike&&e.castHits===2&&e.nextPlayerAt<strike;
  const alreadyDodging=e.dodgeUntil>=strike;
  const weapon=weaponProfile(state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,state.combatGear?.weaponEnchantments),enemy=huntEnemy(e);
- const attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,false,state.combatGear?.weaponEnchantments);
+ const attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,false,state.combatGear?.weaponEnchantments,combatBuild(state));
  const minimumHit=enemy.shellArmor&&!(e.exposedUntil>e.nextPlayerAt)?Math.max(1,Math.floor((attributes.damage-enemy.shellArmor)*(enemy.archetype==='armoured'?.5:1))):attributes.damage;
  const burn=e.burn,burnTicks=burn?Math.max(0,Math.floor((Math.min(strike-1,burn.until)-burn.nextAt)/essenceEffects.fire.interval)+1):0;
  const finishingHit=!!weapon&&e.nextPlayerAt<strike&&minimumHit>=e.health||burnTicks*(burn?.damage??0)>=e.health;
@@ -132,16 +133,16 @@ export function nextCombatTactic(state){
  }
  const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;
  if(rules.dodge&&wantsDefense&&!physicalInterrupt&&!alreadyDodging&&!finishingHit){
-  const at=Math.max(earliest,e.nextDodgeAt??0,strike-policy.dodgeLead),cost=combatDodgeCost(armourSelection(state.combatGear));
+  const at=Math.max(earliest,e.nextDodgeAt??0,strike-policy.dodgeLead),cost=combatDodgeCost(armourSelection(state.combatGear),combatBuild(state));
   if(at<strike&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=cost)offer(make(at,'dodge',lethal?'Dodging: this attack could be lethal.':attack.shape==='bolt'?'Dodging the charged spell.':attack.damage>0?'Dodging the heavy '+attack.name+'.':'Defending against '+attack.name+'.',85));
  }
  for(const slot of ['q','e']){
   if(!rules[slot])continue;
-  const id=magic?.slots?.[slot],power=essencePower(id,state.stats,magic);
+  const id=magic?.slots?.[slot],power=essencePower(id,state.stats,magic,combatBuild(state));
   if(!power||!magic.unlocked?.includes(id)||!bondedEssences(magic.picks).includes(power.gem))continue;
   if(power.form==='renewal'&&state.health>policy.healAt)continue;
   if((power.form==='shield'||power.form==='focus')&&(alreadyDodging||physicalInterrupt||finishingHit||style==='aggressive'&&!lethal))continue;
-  let at=manaReadyAt(state.vitals,Math.max(earliest,magic.cooldowns?.[id]??0)),warned=false,priority=40,reason='Attacking with '+power.name+'.';
+  let at=manaReadyAt(state.vitals,Math.max(earliest,magic.cooldowns?.[id]??0),essenceManaCost(state)),warned=false,priority=40,reason='Attacking with '+power.name+'.';
   if(power.form==='speed'&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>60)continue;
   if(power.form==='focus'){at=Math.max(at,warning);warned=true;priority=70;}
   if(power.form==='renewal'){priority=95;reason='Healing: health is below the '+policy.name.toLowerCase()+' target.';}

@@ -1,3 +1,4 @@
+import {detectCombatBuild} from '../public/combat-builds.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {availableActionPoints} from '../public/action-points.js';
 import {requireActionPoint,spendActionPoint,stopForActionPoints,autoHasNoPoints} from './action-points.mjs';
@@ -37,6 +38,7 @@ export function startCombatEncounter(state,enemy,now){
   if(state.outfitMagic)state.outfitMagic.veilUntil=0;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
+  state.hunting.encounter.buildId=detectCombatBuild(state).id;
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths')||enemy.room==='millCellar'||enemy.room==='crystaldeep')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
   if(enemy.room==='millCellar'||enemy.room==='crystaldeep')state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
@@ -131,6 +133,7 @@ function result(state,event,now,random=Math.random){
 // Replay each due strike at its scheduled time. Closing or slowing the client
 // cannot postpone enemy attacks or manufacture additional player strikes.
 export function advanceServerCombat(state,now,random=Math.random){
+  if(state.hunting.encounter&&!state.hunting.encounter.buildId)state.hunting.encounter.buildId=detectCombatBuild(state).id;
   if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);return [];}
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){

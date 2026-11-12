@@ -349,6 +349,12 @@ export function protectFishingState(previous,next){
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
   next.outfitMagic=normalizeOutfitMagic(previous.outfitMagic);
   next.wardrobe=normalizeWardrobe({...normalizeWardrobe(next.wardrobe??previous.wardrobe,next.avatar??previous.avatar),owned});
+  if(previous.hunting?.encounter){
+    // Keep the fight's loadout stable while accepting unrelated movement saves.
+    next.wardrobe=previous.wardrobe;
+    next.combatGear={...next.combatGear};
+    for(const key of ['equippedWeapon','activeSwordUpgrade','equippedArmour','stonebackVestEquipped']){if(previous.combatGear?.[key]===undefined)delete next.combatGear[key];else next.combatGear[key]=previous.combatGear[key];}
+  }
   if(!wearsVeilCloak(next.wardrobe))next.outfitMagic.veilUntil=0;
   if(previous.autoLesson)next.autoLesson=previous.autoLesson;else delete next.autoLesson;
   if(previous.autoConfigured===true)next.autoConfigured=true;else delete next.autoConfigured;
