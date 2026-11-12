@@ -2,6 +2,7 @@ import {addDueAt,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {arenaWarningAt} from '../public/dungeon-arena.js';
 import {enemyAttack} from '../public/hunting.js';
 import {nextCombatTactic} from '../public/character-rules.js';
+import {availableActionPoints} from '../public/action-points.js';
 
 // The actor's alarm and the combat replay engine share this clock. Reading it
 // never consumes an action, changes a target, rolls damage or grants rewards.
@@ -16,8 +17,9 @@ export function combatSchedule(state){
   }
  }
  const addsDue=addDueAt(encounter);
- const coreDue=Math.min(addsDue,encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
- const tactic=nextCombatTactic(state),automatic=!!tactic&&tactic.at<coreDue;
+ const points=availableActionPoints(state.actionPoints);
+ const coreDue=Math.min(addsDue,points?encounter.nextPlayerAt:Infinity,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
+ const candidate=nextCombatTactic(state),tactic=points||candidate?.action==='move'||candidate?.action==='flee'||candidate?.action==='dodge'?candidate:null,automatic=!!tactic&&tactic.at<coreDue;
  const due=automatic?tactic.at:coreDue;
  const warningAt=arenaWarningAt(encounter,enemyAttack(encounter));
  return {encounter,addsDue,tactic,automatic,due,warningAt,at:Math.min(due,warningAt)};

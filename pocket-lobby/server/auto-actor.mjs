@@ -1,4 +1,4 @@
-import {settled,packet} from './player-api.mjs';
+import {settled,packet,chargeAutoJourney} from './player-api.mjs';
 import {planAutoWalk} from './auto-motion.mjs';
 import {autoWalkPosition} from '../public/auto-walk.js';
 import {tokenHash} from './identity.mjs';
@@ -65,23 +65,36 @@ export class AutoActor{
   }
   this.actor.peerSignature=signature;this.actor.lastRelayAt=now;
  }
- async tick(advance,observed=false){
+ async tick(advance,observed=false,carriedUsage=null){
   const id=this.actor.playerId;if(!id)return;
   const started=Date.now(),previousUsage=this.actor.usage;
   if(advance&&this.actor.quietUntil<=started)delete this.actor.quietUntil;
   if(observed){this.actor.audience='observed';delete this.actor.quietUntil;}
-  let usage=advance?autoUsage(this.env,previousUsage,observed?'observe':'alarm',started):null;
+  let usage=carriedUsage??(advance?autoUsage(this.env,previousUsage,observed?'observe':'alarm',started):null);
   let row=advance?await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),observed,usage,autoRelay:true}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
   if(!advance&&row&&autoHasNoPoints(JSON.parse(row.state_json),started))row=await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),autoRelay:true});
-  const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
+  let state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules';const now=Date.now(),previous=this.actor.publishedRoom;
   if(!state?.autoDisconnected)delete this.actor.disconnectedAt;
-  if(!advance&&!active&&previousUsage)usage=autoUsage(this.env,previousUsage,'stop',started);
+  if(!advance&&!active&&previousUsage&&!carriedUsage)usage=autoUsage(this.env,previousUsage,'stop',started);
   if(active){
+   const journey=state.autoTravelReceipt;
+   if(journey?.routineId===(state.plan.routineId??state.plan.startedAt)&&journey.position&&journey.id!==this.actor.journeyId){
+    this.actor.motion={room:journey.to,...journey.position,direction:'right',back:false};this.actor.journeyId=journey.id;
+    delete this.actor.walk;delete this.actor.destination;
+   }
    if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
    const destination=[state.location,state.position?.x,state.position?.y].join(':');
    // Sync reads can replace a changed destination. A door crossing requires an alarm.
    if(!this.actor.active||this.actor.destination!==destination||advance&&(!this.actor.walk||now>=this.actor.walk.endsAt)){
     const {motion,walk}=planAutoWalk(this.positionAt(now),state,now,advance);
+    if(advance&&motion.room!==this.actor.motion.room){
+      const from=this.actor.motion.room,to=motion.room,id=[state.plan.routineId??state.plan.startedAt,from,to,this.actor.walk?.endsAt??0].join(':');
+      const routineId=state.plan.routineId??state.plan.startedAt;
+      row=await chargeAutoJourney(this.env,this.actor.playerId,{id,from,to,at:now,routineId,position:{x:motion.x,y:motion.y}},now,usage);
+      state=row&&JSON.parse(row.state_json);active=state?.plan?.source==='rules';
+      if(!active||routineId!==(state.plan.routineId??state.plan.startedAt))return this.tick(false,observed,usage);
+      this.actor.journeyId=id;
+    }
     Object.assign(this.actor,{motion,walk,destination});
    }
    this.actor.motion.chopping=this.actor.motion.moving?null:choppingPose(state);

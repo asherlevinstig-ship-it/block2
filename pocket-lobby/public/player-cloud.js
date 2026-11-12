@@ -82,6 +82,7 @@
           setStatus(pending?'Saving…':'Server saved');
           if(!pending)backup(null);
         }catch(error){
+          if(error.status===402){await recoverActionPoints();return;}
           retryJob=job;
           if(error.status===409||error.status===401){conflict(error.message);return;}
           setStatus('Save pending · Retrying');
@@ -97,6 +98,12 @@
     await drain();
     if(conflicted||pending||retryJob)throw new Error('Wait for Server saved before starting a plan.');
   }
+  async function recoverActionPoints(){
+    pending=retryJob=null;backup(null);clearTimeout(timer);
+    packet=await request('state',undefined,true);
+    window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true});
+    setStatus('Action Points needed · Answer a question');window.towerLearning?.open();
+  }
   async function performAction(path,body={}){
     const operation=crypto.randomUUID();
     for(let attempt=0;attempt<3;attempt++){
@@ -105,6 +112,7 @@
         return packet;
       }catch(error){
         // Durable Auto alarms can commit between our last packet and this request.
+        if(error.status===402){await recoverActionPoints();throw error;}
         // Retry only server settlement revisions; another window still triggers conflict handling.
         if((['presence','control'].includes(path)||path.startsWith('learning/'))&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
         if(path.startsWith('learning/')||path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'){

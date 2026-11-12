@@ -51,18 +51,20 @@ test('axe swings face the timber from all four adjacent tiles',()=>{
     assert.deepEqual(timberFacing({cx,cy},tree),{direction,back});
   }
 });
-test('offline shifts settle once, preserve other inventories, cap at eight hours and return home',()=>{
+test('offline shifts settle once within the AP budget, preserve other inventories and return home',()=>{
   const state=worker(),bait=state.fishingGear.bait;
   startPlan(state,{kind:'woodcutting',hours:8},0);
   assert.equal(settlePlan(state,59999),false);
   settlePlan(state,60000);assert.equal(state.woodcutting.timber,1);
   assert.equal(settlePlan(state,60000),false);assert.equal(state.woodcutting.timber,1);
   settlePlan(state,100000000);
-  assert.equal(state.woodcutting.timber,404);assert.equal(state.woodcutting.xp,4040);
+  assert.equal(state.woodcutting.timber,100);assert.equal(state.woodcutting.xp,1000);
   assert.equal(state.fishingGear.bait,bait);assert.equal(state.stats.patienceXp,0);assert.equal(state.location,'home');
-  assert.equal(state.report.kind,'woodcutting');assert.equal(state.report.timber,404);assert.equal(state.report.reason,'time-limit');
-  assert.equal(settlePlan(state,100000001),false);assert.equal(state.woodcutting.timber,404);
+  assert.equal(state.report.kind,'woodcutting');assert.equal(state.report.timber,100);assert.equal(state.report.reason,'action-points');assert(!state.autoDisconnected);
+  assert.equal(settlePlan(state,100000001),false);assert.equal(state.woodcutting.timber,100);
   assert.deepEqual(normalizeState(state).woodcutting,state.woodcutting);
+  const capped=worker();startPlan(capped,{kind:'woodcutting',hours:8},0);capped.plan.interval=600000;capped.plan.nextCutAt=600000;
+  settlePlan(capped,100000000);assert.equal(capped.report.reason,'time-limit');assert.equal(capped.woodcutting.timber,48,'the eight-hour cap still bounds slow work before AP runs out');
 });
 test('early stop gives only completed cuts and work plans reject missing tools or overlapping jobs',()=>{
   const early=worker();startPlan(early,{kind:'woodcutting',hours:1},1000);settlePlan(early,60999,{stop:true});

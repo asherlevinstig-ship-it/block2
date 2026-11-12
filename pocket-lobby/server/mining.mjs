@@ -1,5 +1,6 @@
 import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit,miningFind} from '../public/mining.js';
 import {quarryForge,barProducts,forgeCraftReason,pickaxeIngredients} from '../public/forge.js';
+import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {exertionDuration,useHunger} from '../public/player-vitals.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {miningRooms,depositRoom,deepMiningRoom,deepMiningRequirement,miningGuardAwake,miningBonusOre} from '../public/mining.js';
@@ -48,6 +49,7 @@ export async function readOreDeposit(db,node,now=Date.now()){
  return logicalOreDeposit(row,now);
 }
 export async function mineAction(db,row,state,body,action,now){
+ if(['mineStart','mineHit','mineSmelt','mineCraft'].includes(action))requireActionPoint(state);
  if(action==='mineCancel'){delete state.miningCut;return {state};}
  if(state.characterCreated===false||state.controlMode==='auto'||state.plan||state.report||state.hunting?.encounter||state.hunting?.recoveryUntil||state.fishingCast||state.timberCut||state.health<=0)throw invalid('Finish your current activity before mining.');
  if(action==='mineEquip'){
@@ -77,7 +79,7 @@ export async function mineAction(db,row,state,body,action,now){
    for(const [id,quantity] of Object.entries(pickaxeIngredients(body.id))){if(id==='timber')state.woodcutting.timber-=quantity;else state.huntingLoot[id]-=quantity;}
    state.mining.pickOwned=true;state.mining.upgrades.push(body.id);state.mining.pick=body.id;state.mining.equipped=true;
   }
-  return {state};
+  spendActionPoint(state,now);return {state};
  }
  if(action==='minePick'){
   if(state.location!==quarryRoom)throw invalid('Collect your pickaxe in the quarry.');
@@ -108,6 +110,7 @@ export async function mineAction(db,row,state,body,action,now){
  if(cut.id!==body.cutId||now<cut.endsAt)throw invalid('Finish the pickaxe swing before collecting ore.');
  if(cut.revision!==saved.revision)throw invalid('Another miner struck this deposit. Start a new swing.');
  awardOreStrike(state,node,cut,now,hits+1===miningRules.hits);
+ spendActionPoint(state,now);
  delete state.miningCut;
  const nextHits=hits+1,readyAt=nextHits===miningRules.hits?now+miningRules.respawnMs:0;
  const updated=await writeOreStrike(db,row,state,body.operation,now,{node:node.id,revision:saved.revision,hits:nextHits,readyAt});

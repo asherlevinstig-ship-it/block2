@@ -1,5 +1,7 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {spendAutoPoint} from './action-points.mjs';
+import {stopForActionPoints} from './action-points.mjs';
+import {availableActionPoints} from '../public/action-points.js';
 import {familiarFishingTime} from '../public/familiars.js';
 import {useHunger} from '../public/player-vitals.js';
 import {battleLootFull,chooseSimpleTask} from './simple-planner.mjs';
@@ -111,9 +113,13 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     if(p.miningWork?.cut&&!stop&&now<p.endAt)return changed;
     if(p.activeHunt){
       let events=advanceServerCombat(state,until,random);if(events.length)changed=true;
+      if(state.plan!==p)return true;
+      if(!availableActionPoints(state.actionPoints)&&state.hunting.encounter){stopForActionPoints(state,events.at(-1)?.at??until,p);return true;}
       if(state.hunting.encounter&&(stop||now>=p.endAt)){p.returnRequested=true;p.stopReason=now>=p.endAt?'away-cap':'returned';changed=true;
         if(now>until){events=advanceServerCombat(state,now,random);if(events.length)changed=true;}
       }
+      if(state.plan!==p)return true;
+      if(!availableActionPoints(state.actionPoints)&&state.hunting.encounter){stopForActionPoints(state,events.at(-1)?.at??until,p);return true;}
       if(state.hunting.encounter){p.huntHealth=state.health;p.enemyHealth=state.hunting.encounter.health;return changed;}
       const report=p.lastHuntReport;autoStoreVault(state,p,until);
       if(!report)throw new Error('Missing hunting outcome.');
@@ -129,7 +135,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       for(const award of report.rewards.mastery??[])p.hunts.mastery[award.gem]=(p.hunts.mastery[award.gem]??0)+award.xp;
       p.cursorAt=report.endedAt;p.nextAt=null;
       if(report.outcome==='victory')p.stepCount++;
-      if(spendAutoPoint(state,p,report.endedAt))return true;
+      if(!availableActionPoints(state.actionPoints)){stopForActionPoints(state,report.endedAt,p);return true;}
       if(report.outcome!=='victory')return finish(state,p,report.outcome==='escaped'?'hunt-escaped':'hunt-defeat',report.endedAt);
       if(!p.adaptive&&resolveQueueGoal(state,p,report.endedAt))return finish(state,p,'goal-reached',report.endedAt);
       if(p.returnRequested)return finish(state,p,p.stopReason,report.endedAt);
@@ -310,7 +316,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       state.credits-=cost;state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;autoStoreVault(state,p,at);
       nextStep(p,at,'Bought '+p.stepCount+' bait for '+cost+' gold');changed=true;continue;
     }else if(type==='explore'){const room=state.location;if(room!=='outside'&&!state.adventure.discovered.includes(room))state.adventure.discovered.push(room);p.exploreIndex=(p.exploreIndex??0)+1;p.explored=(p.explored??0)+1;nextStep(p,at,'Explored '+room);changed=true;if(spendAutoPoint(state,p,at))return true;continue;
-    }else if(type==='rest'){state.health=100;nextStep(p,at,'Rested at home');changed=true;continue;}
+    }else if(type==='rest'){state.health=100;nextStep(p,at,'Rested at home');changed=true;if(spendAutoPoint(state,p,at))return true;continue;}
     p.cursorAt=at;p.nextAt=null;changed=true;
     if(['fishing','woodcutting'].includes(type)&&spendAutoPoint(state,p,at))return true;
     if(!Object.hasOwn(cookingQueueRecipes,type)&&p.stepCount>=step.amount)nextStep(p,at,'Gathered '+p.stepCount);

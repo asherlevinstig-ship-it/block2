@@ -29,6 +29,7 @@ export function learningAction(state,action,body={},now=Date.now(),random=Math.r
  if(!attempt||body.attemptId!==attempt.id)throw invalid('This question has changed. Open the current question and try again.');
  const correct=body.choice===attempt.answer,before=availableActionPoints(state.actionPoints,now),value=Math.min(MAX_ACTION_POINTS,before+1);
  state.actionPoints={...state.actionPoints,value,at:now};
+ if(before===0&&state.hunting?.encounter)state.hunting.encounter.nextPlayerAt=Math.max(now,state.hunting.encounter.nextPlayerAt);
  learning.answered++;if(correct)learning.correct++;
  learning.last={id:attempt.id,correct,choice:body.choice,correctChoice:attempt.answer,prompt:attempt.prompt,choices:attempt.choices,awarded:value-before,balance:value};
  delete learning.attempt;

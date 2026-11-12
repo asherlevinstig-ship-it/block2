@@ -29,6 +29,7 @@ import {purchaseWeapon} from '../public/hunting.js';
 import {fitSwordUpgrade,craftFurniture,craftStonebackVest,craftMoonwellCharm,enchantWeapon} from '../public/crafting.js';
 import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
+import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
 import {factionHall,factionHallRest,factionHallStove} from '../public/faction-hall.js';
@@ -50,7 +51,21 @@ function location(state,rooms){
   if(!rooms.includes(state.location))throw new Error('Travel to the right location for this action.');
 }
 
-export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,{millRaid,camp}={}){
+const pointActions=new Set(['cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
+const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
+export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
+ const room=state.location,fish=state.fishingReceipt?.castId,timber=state.timberReceipt?.id;
+ const paid=pointActions.has(action),journey=journeyActions.has(action);
+ if(paid||journey||['cast','catch','chop','cut','fight'].includes(action)){
+  const repeat=action==='catch'&&fish===body.castId;
+  if(!repeat)requireActionPoint(state);
+ }
+ const result=applyGameplayActionImpl(state,action,body,now,random,options);
+ if(paid||state.location!==room&&action!=='combat'&&action!=='recover'||state.fishingReceipt?.castId!==fish&&action==='catch'||state.timberReceipt?.id!==timber&&action==='cut')spendActionPoint(state,now);
+ if(action==='cut'&&state.actionPoints?.value===0)delete state.timberCut;
+ return result;
+}
+function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.random,{millRaid,camp}={}){
   if(state.miningCut)throw new Error('Choose a floor tile to stop mining before another activity.');
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
@@ -344,6 +359,7 @@ export function protectFishingState(previous,next){
   if(previous.autoSwitch)next.autoSwitch=true;else delete next.autoSwitch;
   next.controlMode=previous.controlMode??'play';
   next.actionPoints=previous.actionPoints;
+  if(previous.autoTravelReceipt)next.autoTravelReceipt=previous.autoTravelReceipt;else delete next.autoTravelReceipt;
   if(previous.learning)next.learning=previous.learning;else delete next.learning;
   if(previous.autoDisconnected)next.autoDisconnected=previous.autoDisconnected;else delete next.autoDisconnected;
   next.dungeonLoot=previous.dungeonLoot;

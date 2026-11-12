@@ -2,6 +2,7 @@ import {millRaidClock,millRaidRules,raidWave,raidThreat,raidDanger,bridgeBarrica
 import {weaponProfile,armourProfile,armourSelection} from '../public/hunting.js';
 import {manaAvailable,normalizeVitals,useHunger} from '../public/player-vitals.js';
 import {essencePower,normalizeMagic} from '../public/essences.js';
+import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 const invalid=message=>Object.assign(new Error(message),{status:400});
 const eligible=member=>member.damage>=10||member.support>=2||(member.repaired??0)>=bridgeBarricade.hit;
 const millbreaker=event=>event.mobs.find(mob=>mob.kind==='warden'&&mob.hp>0);
@@ -39,6 +40,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
  if(body.raidId!==clock.id)throw invalid('This raid has ended. Refresh the mill event.');
  if(state.location!=='millbrook'||state.characterCreated===false||state.plan||state.report||state.hunting?.encounter||state.fishingCast||state.timberCut)throw invalid('Visit Millbrook in Play mode and finish your current activity first.');
  const action=body.kind;
+ if(['strike','heal','power','repair'].includes(action))requireActionPoint(state);
  if(!['strike','tick','heal','power','claim','buy','repair'].includes(action))throw invalid('Choose a raid action.');
  let member=event.members[playerId];
  if(action==='claim'){
@@ -132,6 +134,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   if(event.wave===2){event.victoryAt=now;text='Millbrook defended! The relief merchant has arrived.';}
   else{event.wave++;const count=Object.values(event.members).filter(m=>m.damage>0&&!m.defeated&&now-m.lastAt<15000).length;event.mobs=raidWave(event.wave,count,now);advanceBarricade(event,now);text='Wave '+(event.wave+1)+' approaches!';}
  }
+ if(damage>0||['heal','power'].includes(action)||repaired>0)spendActionPoint(state,now);
  return {text,damage:suffered,hit:damage,healing:recovered,repaired};
 }
 export async function writeMillRaid(db,row,body,now=Date.now()){

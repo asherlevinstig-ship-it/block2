@@ -1519,7 +1519,7 @@ function updateCombatPanel(){
   $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
-  $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
+  $('combatLog').textContent=(encounter&&window.playerCloud?.initial?.actionPoints?.value===0?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
   $('combatIntelligence').hidden=!encounter||!characterRules.combat.enabled;
@@ -6823,6 +6823,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false,explore=false}={}){
+  if(next!==currentRoom&&window.playerCloud?.initial?.location!==next&&window.playerCloud?.initial?.actionPoints?.value===0){note('Travelling to another area costs 1 AP. Answer an MCQ to earn a point.');window.towerLearning?.open();return;}
   if(miningCut&&next!==currentRoom){stopMining().then(ok=>{if(ok)enterRoom(next,arrival,{automatic,explore});});return;}
   if(next!==currentRoom)window.quarryForgeUI?.close();
   if(window.playerCloud?.gameplay&&next!==currentRoom&&(next==='millCellar'||currentRoom==='millCellar')&&window.playerCloud.initial.location!==next){

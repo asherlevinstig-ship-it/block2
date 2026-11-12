@@ -1,6 +1,6 @@
 import {normalizeMining} from '../public/mining.js';
-import {normalizeActionPoints} from '../public/action-points.js';
-import {autoHasNoPoints,stopForActionPoints,spendAutoPoint} from './action-points.mjs';
+import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
+import {autoHasNoPoints,stopForActionPoints,spendAutoPoint,requireActionPoint} from './action-points.mjs';
 import {cellarFlags} from '../public/mill-cellar.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
@@ -115,6 +115,7 @@ export function normalizeState(input={}){
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   state.actionPoints=normalizeActionPoints(input.actionPoints);
+  if(input.autoTravelReceipt)state.autoTravelReceipt=input.autoTravelReceipt;
   if(input.learning)state.learning=input.learning;
   if(input.autoDisconnected?.reason==='action-points'&&Number.isSafeInteger(input.autoDisconnected.at)&&input.autoDisconnected.at>=0)state.autoDisconnected={reason:'action-points',at:input.autoDisconnected.at};
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
@@ -132,6 +133,7 @@ export function normalizeState(input={}){
   validateVaultGear(state);return state;
 }
 export function startPlan(state,{hours,baitLimit,kind,source},now){
+  requireActionPoint(state);
   if(state.fishingCast)throw new Error("Invalid work plan during an active cast.");
   if(state.timberCut)throw new Error("Invalid work plan while chopping. Walk away from the tree first.");
   if(kind!==undefined&&!['fishing','woodcutting'].includes(kind))throw new Error("Unknown job.");
@@ -181,6 +183,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   if(plan.kind==='rest'){
     if(now>=plan.endAt||stop){
       if(now>=plan.endAt&&plan.restReason!=='out-of-food')state.health=100;
+      if(now>=plan.endAt&&spendAutoPoint(state,plan,plan.endAt))return true;
       state.report={...plan,endedAt:Math.min(now,plan.endAt),reason:now>=plan.endAt?(plan.restReason??'rest'):'returned'};
       delete state.plan;state.location='home';state.position={x:5,y:7};return true;
     }
@@ -229,6 +232,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
 }
 
 export function settlePlan(state,now,options={}){
+  if(state.plan&&!availableActionPoints(state.actionPoints)){stopForActionPoints(state,now);finishRoutineReport(state,now);return true;}
   if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);finishRoutineReport(state,now);return true;}
   const changed=settleWorkPlan(state,now,options);
   if(changed)finishRoutineReport(state,now);

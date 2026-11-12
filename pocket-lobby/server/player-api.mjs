@@ -1,6 +1,6 @@
 import {cellarFlags} from '../public/mill-cellar.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
-import {autoHasNoPoints} from './action-points.mjs';
+import {autoHasNoPoints,requireActionPoint,spendActionPoint,stopForActionPoints} from './action-points.mjs';
 import {learningAction} from './learning.mjs';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
@@ -79,6 +79,20 @@ async function actorMotion(env,id){
   const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(id));
   const response=await stub.fetch(new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})}));
   return (await response.json()).motion;
+}
+export async function chargeAutoJourney(env,id,journey,at,usage=null){
+  for(let attempt=0;attempt<5;attempt++){
+    const row=await read(env.TOWER_DB,id);if(!row)return null;
+    const state=readPlayerState(row);
+    if(journey.routineId!==undefined&&journey.routineId!==(state.plan?.routineId??state.plan?.startedAt))return row;
+    if(state.plan?.source!=='rules'||state.autoTravelReceipt?.id===journey.id)return row;
+    if(autoHasNoPoints(state,at))settlePlan(state,at);else spendActionPoint(state,at);
+    state.autoTravelReceipt=journey;
+    if(!state.plan)finishRoutineReport(state,at);
+    const updated=await write(env.TOWER_DB,id,row.revision,state,'journey:'+crypto.randomUUID());
+    if(updated){if(usage)usage.saves++;return updated;}
+  }
+  throw new Error('Your journey changed. Please retry.');
 }
 async function settleBeforeLeavingFishing(env,id,state,now,motion){
   if(!state.plan?.fishingWork?.batchUntil)return;
@@ -170,7 +184,7 @@ export async function handlePlayerApi(request,env){
       const body=await bodyOf(request);
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
-      delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;
+      delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
       const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
@@ -330,6 +344,7 @@ export async function handlePlayerApi(request,env){
           return saved.results[0]?json(packet(saved.results[0])):json({error:'Another tab saved first. Reload your character.'},409);
         }
       case "/api/player/save":
+        if(body.state?.location&&body.state.location!==state.location)requireActionPoint(state);
         if(body.state?.location==='millCellar'&&(state.location!=='millCellar'||!state.adventure.millCellarFound))throw new Error('Choose the loose bricks at the watermill to enter the cellar.');
         if(state.location==='millCellar'&&body.state?.location&&body.state.location!=='millCellar')throw new Error('Choose the cellar stairs to return to Millbrook.');
         if(body.state?.location===factionHall&&(state.location!==factionHall||!await factionHallAccess(env.TOWER_DB,id)))return json({error:"Enter the hall through your faction board."},403);
@@ -421,12 +436,18 @@ export async function handlePlayerApi(request,env){
       default:return json({error:"Not found."},404);
     }
     enablePhysicalWork(state,env);
+    const oldRoom=JSON.parse(row.state_json).location;
+    if(['/api/player/save','/api/player/gameplay/factionHall','/api/player/plan/start'].includes(path)&&state.location!==oldRoom){
+      spendActionPoint(state,Date.now());
+      if(state.plan&&state.actionPoints.value===0){stopForActionPoints(state,Date.now());finishRoutineReport(state,Date.now());}
+    }
     const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation);
     if(!updated&&treeMutation){const latest=await read(env.TOWER_DB,id);if(latest?.revision===row.revision)return json({error:'Invalid cut: another player felled this tree. Choose a standing tree.'},400);}
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
     await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision,{fresh:!!treeMutation||Date.now()-(row.updated_at??0)<10000});
     return json(packet(updated));
   }catch(error){
+    if(error.status===402)return json({error:error.message,code:'action-points'},402);
     if(error.status===400||error.status===409)return json({error:error.message},error.status);
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
     if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Cache Guardian|Defeat the Treasury Guardian|Defeat the Rune Sentinel|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);

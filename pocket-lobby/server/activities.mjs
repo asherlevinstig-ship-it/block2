@@ -1,4 +1,6 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
+import {availableActionPoints} from '../public/action-points.js';
+import {requireActionPoint,spendActionPoint,stopForActionPoints,autoHasNoPoints} from './action-points.mjs';
 import {cinderPounce} from './familiars.mjs';
 import {initializeAdds,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
@@ -41,6 +43,7 @@ export function startCombatEncounter(state,enemy,now){
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt||state.plan?.miningWork)state.hunting.encounter.tacticsAt=now;
 }
+const combatCostsPoint=event=>event.action==='attack'&&!event.outOfRange||['essence','outfitPower','familiar'].includes(event.action)||event.action==='flee'&&!!event.power;
 function result(state,event,now,random=Math.random){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
   const room=state.location,heldBefore=state.depthsRun?depthsSpoils(state.depthsRun):null;
@@ -121,12 +124,14 @@ function result(state,event,now,random=Math.random){
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
+  if(combatCostsPoint(event))spendActionPoint(state,now,{stopAuto:false});
   return {...event,...(enemy.id==='moonbackStag'?{enemyTile:arenaEnemy(encounter)}:{}),...(encounter.arenaVersion===1?{enemyTile:event.enemyTile??arenaEnemy(encounter),attackTile:event.attackTile??encounter.arenaTarget,attackCenter:event.attackCenter??enemyAttack(encounter).center,attackFan:event.attackFan??enemyAttack(encounter).fan,attackReach:event.attackReach??enemyAttack(encounter).reach}:{}),enemyId:event.enemyId??enemy.id,at:now};
 }
 
 // Replay each due strike at its scheduled time. Closing or slowing the client
 // cannot postpone enemy attacks or manufacture additional player strikes.
 export function advanceServerCombat(state,now,random=Math.random){
+  if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);return [];}
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
     const {encounter,addsDue,tactic,automatic,due,warningAt}=combatSchedule(state);
@@ -141,11 +146,17 @@ export function advanceServerCombat(state,now,random=Math.random){
       if(event){event.automatic=true;if(tactic.action==='move'&&event.encounter?.brainVersion===2)event.encounter.brainAutoStepAt=due+900;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
     }else if(due===addsDue)event=advanceDungeonAdds(state,due,random);
     else if(encounter.brainVersion===2&&due===encounter.brainNextThinkAt)event=brainThinkEvent(state,huntEnemy(encounter),enemyAttack(encounter),due);
-    else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+    else{
+      const hasPoints=availableActionPoints(state.actionPoints)>0;
+      event=advanceHunt(hasPoints?encounter:{...encounter,nextPlayerAt:Number.MAX_SAFE_INTEGER},state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      if(!hasPoints&&event?.encounter)event.encounter.nextPlayerAt=encounter.nextPlayerAt;
+    }
     if(!event)break;
     events.push(result(state,event,due,random));
+    if(!availableActionPoints(state.actionPoints)&&combatCostsPoint(event))break;
   }
   if(events.length)state.combatReceipt={id:crypto.randomUUID(),events};
+  if(autoHasNoPoints(state,now)&&!state.plan?.activeHunt)stopForActionPoints(state,events.at(-1)?.at??now);
   return events;
 }
 export function settleActivities(state,now,random=Math.random){
@@ -192,6 +203,7 @@ export function activityAction(state,action,body,now,random){
   }
   if(action==='fight'){
     idle(state);
+    requireActionPoint(state);
     if(outfitVeilUntil(state)>now)throw new Error('Choose End Veilstep before starting a fight.');
     let sighting=null,enemy=huntEnemyForRoom(state.location);
     const index=depthsStageIndex(state.location);
@@ -219,6 +231,7 @@ export function activityAction(state,action,body,now,random){
     if(state.plan?.activeHunt)throw new Error('Your hunting queue is controlling this fight. Return to stop after the fight.');
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
+    if(state.hunting.encounter&&['essence','familiar','secondWind','veil'].includes(body.input))requireActionPoint(state);
     if(state.hunting.encounter?.addsVersion===1&&body.input==='target'){
       const e=state.hunting.encounter,id=body.slot;
       if(id!=='leader'&&!e.adds.some(a=>a.id===id&&a.spawnAt<=now))throw new Error('Choose an active enemy.');
