@@ -43,7 +43,8 @@ test('AP rewards obey the cap, do not regenerate with time, and never reconnect 
  learningAction(s,'answer',{attemptId:s.learning.attempt.id,choice:0},2000);
  assert.equal(availableActionPoints(s.actionPoints,200000000),1);assert(s.autoDisconnected);assert(!s.plan);assert.equal(s.controlMode,'play');
  s.actionPoints.value=99;learningAction(s,'next',{},2100,()=>0);learningAction(s,'answer',{attemptId:s.learning.attempt.id,choice:0},2200);
- assert.equal(s.actionPoints.value,100);assert.throws(()=>learningAction(s,'next'),/full/);
+ assert.equal(s.actionPoints.value,100);learningAction(s,'next',{},2300,()=>0);learningAction(s,'answer',{attemptId:s.learning.attempt.id,choice:0},2400);
+ assert.equal(s.actionPoints.value,100);assert.equal(s.learning.last.awarded,0);assert.equal(s.learning.session.answered,3,'homework remains available at the AP cap');
 });
 
 test('saved snapshots cannot forge points, attempts or progress and normalization preserves trusted learning',()=>{

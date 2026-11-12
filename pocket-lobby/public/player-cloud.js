@@ -566,7 +566,7 @@
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         const {initializeLearning}=await import('./learning-ui.js');
-        window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
+        window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,onAdventure:async()=>{if(pausedForPoints)await retry.onclick?.();},change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
         const {initializeActionPointFeedback}=await import('./action-point-feedback.js');
         apFeedback=initializeActionPointFeedback({doc:document,initial:packet,onEarn:()=>window.towerLearning.open()});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');
