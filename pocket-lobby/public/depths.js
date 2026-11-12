@@ -4,9 +4,9 @@ export const essenceCacheGold=50;
 export const depthsSafePassage={gold:10,healing:20};
 export const depthsCacheRoom='depthsCache';
 export const depthsSideRooms={
- treasure:{room:'depthsTreasury',name:'The Guarded Treasury',enemy:'treasuryGuardian',gold:60,shells:2,danger:'Dangerous · Treasury Guardian, 306 HP · Break its armour with stagger',reward:'60 unbanked gold + 2 Shell Fragments'},
+ treasure:{room:'depthsTreasury',name:'The Guarded Treasury',enemy:'treasuryGuardian',gold:60,shells:2,danger:'Dangerous · Ironhide Guardian, 306 HP · Break its armour with stagger',reward:'60 unbanked gold + 2 Shell Fragments'},
  rest:{room:'depthsRest',name:'The Quiet Shrine',cost:15,healing:30,danger:'Safe · No combat',reward:'Recover up to 30 HP · Costs 15 unbanked gold'},
- trial:{room:'depthsTrial',name:'The Sealed Chamber',enemy:'sealGuardian',danger:'Very dangerous · Rune Sentinel, 368 HP · Dodge and counter',reward:'Win, then claim 1 guaranteed Awakening Stone'}
+ trial:{room:'depthsTrial',name:'The Sealed Chamber',enemy:'sealGuardian',danger:'Very dangerous · Thornblade Duelist, 368 HP · Dodge and counter',reward:'Win, then claim 1 guaranteed Awakening Stone'}
 };
 export const depthsSideForRoom=room=>Object.entries(depthsSideRooms).find(([,side])=>side.room===room)?.[0]??null;
 export function canEnterDepthsSide(run,room,id){return !!run&&run.cleared===2&&room==='depthsGallery'&&Object.hasOwn(depthsSideRooms,id);}
@@ -55,15 +55,15 @@ export function inspectDepthsFind(state,item){
   const found=depthsRun.finds??[];
   if(find.requires&&!found.includes(find.requires))throw new Error('Choose a discovery you can reach.');
   if(found.includes(item.type))return;
-  if(item.type==='sideTreasure'&&!depthsRun.sideWins?.includes('treasure'))throw new Error('Defeat the Treasury Guardian first.');
+  if(item.type==='sideTreasure'&&!depthsRun.sideWins?.includes('treasure'))throw new Error('Defeat the Ironhide Guardian first.');
   if(item.type==='sideSeal'){
-    if(!depthsRun.sideWins?.includes('trial'))throw new Error('Defeat the Rune Sentinel first.');
+    if(!depthsRun.sideWins?.includes('trial'))throw new Error('Defeat the Thornblade Duelist first.');
     const magic=normalizeMagic(state.magic),stone=awardAwakeningStone(magic);
     if(!stone)throw new Error('Make room for an Awakening Stone before claiming the seal.');
     state.magic=magic;depthsRun.sideStone=stone;
   }
   if(item.type==='essenceCache'){
-    if(!depthsRun.cacheGuardDefeated)throw new Error('Defeat the Cache Guardian to break the seal.');
+    if(!depthsRun.cacheGuardDefeated)throw new Error('Defeat the Rune Channeler to break the seal.');
     if(state.credits+essenceCacheGold>100000000)throw new Error('Make room in your wallet before opening the cache.');
     const magic=normalizeMagic(state.magic);
     const stone=awardAwakeningStone(magic);

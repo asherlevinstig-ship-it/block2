@@ -69,10 +69,10 @@ test('nameplates distinguish the guardian and reinforcements, then clear defeate
  encounter.combatTarget=target.id;
  const g=boot(s);
  g.run('draw(2200)');
- assert.equal(g.read("actorNameplates.get('enemy:leader').node.textContent"),'Rune Sentinel');
+ assert.equal(g.read("actorNameplates.get('enemy:leader').node.textContent"),'Thornblade Duelist');
  assert.match(g.read("actorNameplates.get('enemy:'+hunting.encounter.combatTarget).node.textContent"),/Mire Hatchling · Target/);
  g.run("hunting.encounter.adds=[];hunting.encounter.combatTarget='leader';draw(2400)");
  assert.equal(g.read("Array.from(actorNameplates.keys()).filter(k=>k.startsWith('enemy:')).join(',')"),'enemy:leader');
- assert.match(g.read("actorNameplates.get('enemy:leader').node.textContent"),/Rune Sentinel · Target/);
+ assert.match(g.read("actorNameplates.get('enemy:leader').node.textContent"),/Thornblade Duelist · Target/);
  assert.deepEqual(g.errors,[]);
 });

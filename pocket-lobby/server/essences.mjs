@@ -1,3 +1,4 @@
+import {roleDamage} from '../public/enemy-roles.js';
 import {combatBuild} from '../public/combat-builds.js';
 import {activeAdd,addEncounter,mergeAddEvent} from '../public/dungeon-adds.js';
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
@@ -60,7 +61,7 @@ export function castEssencePower(state,now,slot='q'){
   if(target&&now>=target.spawnAt&&form==='sword'){
     const proxy={...state,hunting:{...state.hunting,encounter:addEncounter(encounter,target)}};
     const event=castEssencePower(proxy,now,slot);state.vitals=proxy.vitals;
-    return mergeAddEvent(encounter,target,event);
+    return mergeAddEvent(encounter,target,event,now);
   }
   if(!spendMana(state,now))return null;
   const next={...encounter};
@@ -70,10 +71,11 @@ export function castEssencePower(state,now,slot='q'){
     const armor=now<(encounter.exposedUntil??0)?0:enemy.shellArmor??0;
     const shatter=build.id==='spellweaver'&&encounter.chilledUntil>now;
     event.damage=Math.min(next.health,Math.max(1,Math.round(value*(shatter?1.15:1))-armor));
+    const roleHit=roleDamage(encounter,event.damage,now,{magic:true});event.damage=Math.min(next.health,roleHit.damage);event.wardAbsorbed=roleHit.wardAbsorbed;event.coreBonus=roleHit.coreBonus;
     if(shatter){event.shatter=true;delete next.chilledUntil;}
     next.health-=event.damage;
     if(next.health===0){if(encounter.addActor)event.killedEncounter=next;event.encounter=null;event.outcome='victory';}
-    event.effect='dealt '+event.damage+' damage'+(event.shatter?' · Shatter!':'');
+    event.effect='dealt '+event.damage+' damage'+(event.shatter?' · Shatter!':'')+(event.wardAbsorbed?' · Rune Ward absorbed '+event.wardAbsorbed:'')+(event.coreBonus?' · Exposed core!':'');
   }else if(form==='shield'){
     next.magicWard=value;next.magicWardUntil=now+5000;
     event.ward=value;

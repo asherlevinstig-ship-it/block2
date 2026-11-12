@@ -5,6 +5,8 @@ export const smartAttacks={
  skitterBite:{name:'Snapping Bite',tell:700,recovery:500,shape:'arc',reach:1.45,angle:1.1,damage:-3},
  skitterPounce:{name:'Leaping Pounce',tell:1100,recovery:950,shape:'lane',reach:5,width:.62,damage:4,cooldown:4500},
  skitterRake:{name:'Flanking Rake',tell:850,recovery:650,shape:'arc',reach:1.9,angle:1.5,damage:1},
+ ironhideSlam:{name:'Faultline Slam',tell:1800,recovery:1600,shape:'ring',radius:2.75,damage:8,cooldown:7000},
+ seerConduit:{name:'Conduit Detonation',tell:1900,recovery:1300,shape:'ring',center:'target',radius:1.75,damage:8,cooldown:7500},
  wardenSweep:{name:'Stone Sweep',tell:900,recovery:650,shape:'arc',reach:2.1,angle:1.5,damage:-2},
  wardenStomp:{name:'Shattering Stomp',tell:1450,recovery:1250,shape:'ring',radius:2.45,damage:6,opensShell:true,cooldown:6500},
  wardenThrow:{name:'Hurled Stone',tell:1200,recovery:850,shape:'bolt',reach:7,width:.6,damage:2,blockable:true,cooldown:4500},
@@ -15,7 +17,7 @@ export const smartAttacks={
  seerRepulse:{name:'Repulsion Pulse',tell:1000,recovery:700,shape:'ring',radius:2.1,damage:0,cooldown:4000},
  sentinelSlash:{name:'Quick Slash',tell:700,recovery:500,shape:'arc',reach:1.8,angle:1.1,damage:-2},
  sentinelLunge:{name:'Pursuing Lunge',tell:1050,recovery:700,shape:'lane',reach:5,width:.62,damage:3,cooldown:4000},
- sentinelDelayed:{name:'Delayed Overhead',tell:1500,recovery:1000,shape:'ring',center:'target',radius:1.4,damage:6,cooldown:5000},
+ sentinelDelayed:{name:'Held Thornstrike',tell:1750,recovery:1000,shape:'ring',center:'target',radius:1.4,damage:6,cooldown:5000},
  sentinelSweep:{name:'Returning Sweep',tell:950,recovery:750,shape:'arc',reach:2.35,angle:1.95,damage:2},
  bossIronSweep:{name:'Anchor Sweep',tell:1100,recovery:800,shape:'arc',reach:2.6,angle:1.9,damage:1},
  bossIronSmash:{name:'Sundering Smash',tell:1550,recovery:1350,shape:'ring',radius:2.7,damage:7,opensShell:true,cooldown:6500},
@@ -34,6 +36,8 @@ export function smartProfile(base){
  return {...base,health:Math.round(base.health*(boss||elite?1.75:1.25)),damage:Math.ceil(base.damage*(boss||elite?1.3:1.1))};
 }
 export function brainAttackIds(enemy){
+ if(enemy.id==='treasuryGuardian')return ['wardenSweep','ironhideSlam','wardenThrow','wardenRush'];
+ if(enemy.id==='cacheGuardian')return ['seerBolt','seerFan','seerConduit','seerRepulse'];
  if(enemy.id==='depthsBoar')return ['skitterBite','skitterPounce','skitterRake'];
  if(enemy.id==='depthsGuardian')return enemy.index===2?['bossCleave','bossDelayed','bossLunge']:enemy.index===3?['bossFan','bossErupt','bossPulse']:['bossIronSweep','bossIronSmash','bossHarpoon'];
  if(enemy.archetype==='caster')return ['seerBolt','seerFan','seerBurst','seerRepulse'];
@@ -45,6 +49,11 @@ export function chooseBrainAttack(e,enemy,now){
  const repeated=history.length>=2&&history.at(-1).dx===history.at(-2).dx&&history.at(-1).dy===history.at(-2).dy;
  const available=brainAttackIds(enemy).filter(id=>now>=(e.brainCooldowns?.[id]??0));
  const ids=available.length?available:brainAttackIds(enemy);
+ if(enemy.id==='sealGuardian'){
+  if(distance<=2.4&&(e.brainAttackCount??0)===0&&ids.includes('sentinelSlash'))return 'sentinelSlash';
+  if(distance<=2.5&&recent.at(-1)==='sentinelSlash'&&ids.includes('sentinelSweep'))return 'sentinelSweep';
+  if((e.brainAttackCount??0)%3===2&&ids.includes('sentinelDelayed'))return 'sentinelDelayed';
+ }
  return ids.map((id,index)=>{
   const m=smartAttacks[id];let score=10+((e.brainAttackCount??0)*7+index*3)%5;
   if(id===recent.at(-1))score-=18;
@@ -62,7 +71,7 @@ export function chooseBrainAttack(e,enemy,now){
 }
 export function planBrainAttack(e,enemy,now,previous=null){
  const id=chooseBrainAttack(e,enemy,now),move=smartAttacks[id],count=e.brainAttackCount??0;
- const combo=!!previous&&(enemy.elite||enemy.id==='depthsGuardian'||enemy.archetype==='duelist')&&count%3===1;
+ const combo=!!previous&&(enemy.id==='sealGuardian'?previous.id==='sentinelSlash':(enemy.elite||enemy.id==='depthsGuardian'||enemy.archetype==='duelist')&&count%3===1);
  const recovery=previous?Math.max(300,Math.round(previous.recovery*(combo?.55:1))):500;
  const approach=combo?150:enemy.archetype==='caster'?400:550;
  return {...e,brainMove:id,brainRecoveryUntil:now+recovery,brainNextThinkAt:now+recovery,nextBoarAt:now+recovery+approach+move.tell,

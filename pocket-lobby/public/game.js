@@ -1213,7 +1213,7 @@ function updateDepthsPanel(){
   $('depthsExplore').hidden=choosingPassage;
   $('depthsSafeReward').textContent='+'+Math.min(depthsSafePassage.healing,maxHealth()-health)+' HP · +'+depthsSafePassage.gold+' gold';
   $('depthsDangerReward').textContent=essenceCacheGold+' gold + Awakening Stone';
-  $('depthsDangerEnemy').textContent='Cache Guardian · '+dungeonEnemyPreview(huntEnemies.cacheGuardian).health+' HP · Elite';
+  $('depthsDangerEnemy').textContent='Rune Channeler · '+dungeonEnemyPreview(huntEnemies.cacheGuardian).health+' HP · Elite';
   $('depthsForkSpoils').textContent='Unbanked · '+formatDepthsSpoils(depthsSpoils(depthsRun));
   $('depthsForkBank').textContent='Bank spoils & leave';
   $('depthsSafePassage').disabled=$('depthsDangerPassage').disabled=unavailable();
@@ -1317,6 +1317,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.behaviour)combatMessage=result.behaviour;
   if(result.action==='reinforcements'&&result.spawned)combatMessage='Reinforcements are summoning!';
   if(result.addKill)combatMessage=enemy.name+' defeated.';
+  if(result.wardBroken)combatMessage='Rune Ward broken! Strike the Channeler now · Damage +25% for 3 seconds.';
+  else if(result.wardAbsorbed)combatMessage+=' Rune Ward absorbed '+result.wardAbsorbed+' damage · Defeat its Rune Wisp.';
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for 1.8 seconds.';
@@ -1475,7 +1477,7 @@ function updateCombatPanel(){
     notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
   }else if(enemy?.elite&&!encounter&&!chamberCleared){
     notice.hidden=false;notice.dataset.cue='watch';
-    notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
+    notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Thornblade Duelist · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
   }else notice.dataset.cue='';
   if(enemy?.id==='depthsGuardian'&&!encounter&&!chamberCleared){notice.hidden=false;notice.textContent='VAULT GUARDIAN · 3 phases: stagger its armour, dodge and counter its blades, then interrupt or dodge its magic.';}
   if(enemy?.tactic&&(currentRoom!=='millCellar'||!!encounter)&&!hunting.recoveryUntil&&!chamberCleared&&!(enemy.id==='moonbackStag'&&encounter)){notice.hidden=false;notice.textContent=enemy.tactic;}
@@ -1839,6 +1841,7 @@ function updateDungeonArenaHud(){
  $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
  $('dungeonEnemyHealth').textContent=(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health;
  $('dungeonEnemyBar').max=targetEnemy.health;$('dungeonEnemyBar').value=selected?.health??e?.health??enemy.health;
+ const role=enemyRoleInfo(e,combatNow(),enemy.id);$('dungeonWeakness').hidden=!role;$('dungeonWeakness').textContent=role?.status??'';$('dungeonWeakness').title=role?.hint??'';
  const targets=$('dungeonTargets');targets.hidden=!e?.adds?.length;
  const targetKey=e?.adds?.length?JSON.stringify([e.combatTarget,e.health,e.adds.map(a=>[a.id,a.health,a.spawnAt<=combatNow()])]):'';
  if(targets.dataset.key!==targetKey){targets.dataset.key=targetKey;const focused=document.activeElement?.dataset.target;targets.replaceChildren();

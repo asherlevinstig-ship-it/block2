@@ -1,3 +1,4 @@
+import {channelerWardActive} from './enemy-roles.js';
 import {drawFamiliar} from './familiars.js';
 import {addEncounter,addKinds} from './dungeon-adds.js';
 export {createCombatSound} from './combat-sound.js';
@@ -42,7 +43,7 @@ const color={
 
 export function recordCombatFx(events,result,time){
   const {action,damage,taken,dodged,dodgeStarted,warded,absorbed,move,attackShape,heavy,
-    staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
+    wardBroken,wardAbsorbed,staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
   if(result.enemyTile)events.enemyTile=result.enemyTile;
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
@@ -59,7 +60,7 @@ export function recordCombatFx(events,result,time){
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
   events.bursts=[...live,{time,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
-    staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
+    wardBroken,wardAbsorbed,staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
@@ -199,6 +200,8 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
       popup(ctx,'−'+effect.damage+suffix,ex,ey-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
+    if(effect.wardBroken&&enemyRow<3)popup(ctx,'RUNE WARD BROKEN!',ex,ey-22-rise-enemyRow++*13,t,'#e7c6ff',10);
+    else if(effect.wardAbsorbed&&enemyRow<3)popup(ctx,'RUNE WARD −'+effect.wardAbsorbed,ex,ey-22-rise-enemyRow++*13,t,'#c3b1ef',9);
     if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',10);
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',9);
     const blocks=(effect.warded??0)+(effect.absorbed??0);
@@ -229,6 +232,13 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     }
     if(stunned){for(let i=0;i<3;i++){const angle=i*Math.PI*2/3+(reduced?0:time/250);cross(ctx,bx+Math.cos(angle)*13,by-24+Math.sin(angle)*4,2);}}
     else if(!recovering&&ratio>=.5){ctx.strokeStyle='#f0c991';ctx.lineWidth=1;for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(bx+i*6,by-9);ctx.lineTo(bx+i*6-2,by-4);ctx.lineTo(bx+i*6+2,by);ctx.lineTo(bx+i*6,by+5);ctx.stroke();}}
+    ctx.restore();
+  }
+  if(channelerWardActive(encounter,now)){
+    const foe=arenaEnemy(encounter),[x,y]=point(foe.x+.5,foe.y+.5,0);
+    ctx.save();ctx.strokeStyle='#c7a3ff';ctx.lineWidth=1.5;ctx.globalAlpha=reduced?.45:.4+Math.sin(time/380)*.1;
+    ctx.beginPath();ctx.ellipse(x,y-15,19,27,0,0,Math.PI*2);ctx.stroke();
+    for(const wisp of encounter.adds.filter(a=>a.kind==='wisp'&&a.health>0&&a.spawnAt<=now)){const [wx,wy]=point(wisp.x+.5,wisp.y+.5,0);ctx.beginPath();ctx.moveTo(wx,wy-18);ctx.lineTo(x,y-18);ctx.stroke();}
     ctx.restore();
   }
   if(encounter?.magicWard>0&&now<encounter.magicWardUntil){

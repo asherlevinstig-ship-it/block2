@@ -190,7 +190,7 @@ test('cache API retries and concurrent claims cannot pay twice',async t=>{
   const sealed={...seed,depthsRun:{cleared:2}};
   sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(sealed),packet.characterKey);
   const blocked=await claim(crypto.randomUUID());assert.equal(blocked.status,400);
-  assert.match((await blocked.json()).error,/Defeat the Cache Guardian/);
+  assert.match((await blocked.json()).error,/Defeat the Rune Channeler/);
   sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(seed),packet.characterKey);
   const first=await claim(operation);assert.equal(first.status,200);
   const awarded=await first.json();

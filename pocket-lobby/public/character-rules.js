@@ -128,7 +128,7 @@ export function nextCombatTactic(state){
  if(e.brainVersion===2){
   const at=Math.max(earliest,e.arenaStepAt??0,e.brainAutoStepAt??0),p=arenaPlayer(e),foe=combatTargetTile(e),reach=playerMeleeReach(state.combatGear?.equippedWeapon);
   if(Math.hypot(p.x-foe.x,p.y-foe.y)>reach&&at<strike-attack.tell&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST){
-   const tile=advanceOnEnemy({...e,arenaEnemy:foe,adds:(e.adds??[]).filter(a=>a.id!==e.combatTarget)},reach);if(tile)offer({...make(at,'move','Closing to weapon range during the opening.',20),tile});
+   const tile=advanceOnEnemy({...e,arenaEnemy:foe,arenaSolids:[...(e.arenaSolids??[]),...(e.combatTarget&&e.combatTarget!=='leader'?[arenaEnemy(e)]:[])],adds:(e.adds??[]).filter(a=>a.id!==e.combatTarget)},reach);if(tile)offer({...make(at,'move','Closing to weapon range during the opening.',20),tile});
   }
  }
  const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;

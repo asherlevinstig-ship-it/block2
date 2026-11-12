@@ -1,3 +1,5 @@
+import {roleDamage} from './enemy-roles.js';
+export {enemyRoleInfo,channelerWardActive} from './enemy-roles.js';
 export {combatBuild} from './combat-builds.js';
 import {buildProfile} from './combat-builds.js';
 import {FOX_STAGGER} from './familiars.js';
@@ -36,9 +38,9 @@ export const huntEnemies={
   thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Mire Skitter',prop:'depthsSkitter',move:'skitterPounce',tactic:'MIRE SKITTER · It darts before pouncing. Step out of the marked lane; close in to strike.',health:100,damage:12,xp:[30,20,30],masteryXp:20},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Shell Warden',prop:'depthsWarden',move:'wardenSlam',tactic:'SHELL WARDEN · Leave the marked slam area, then punish its open core.',health:150,damage:20,xp:[45,35,45],masteryXp:30},
-  cacheGuardian:{...beetle,id:'cacheGuardian',prop:'depthsSeer',room:'depthsCache',name:'Cache Guardian',elite:true,archetype:'caster',tactic:'RUNE CASTER · Land 3 weapon hits during Rune Bolt to interrupt. Fast daggers excel; dodge if the cast completes.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
-  treasuryGuardian:{...beetle,id:'treasuryGuardian',prop:'depthsWarden',room:'depthsTreasury',name:'Treasury Guardian',archetype:'armoured',tactic:'ARMOURED · Build stagger to crack its plating. Heavy weapons excel; dodging alone does not open this armour.',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
-  sealGuardian:{...beetle,id:'sealGuardian',prop:'depthsSentinel',room:'depthsTrial',name:'Rune Sentinel',elite:true,archetype:'duelist',tactic:'DUELIST · Dodge the final flash, then counter. Counters deal 25% extra damage; watch for the follow-up lunge.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
+  cacheGuardian:{...beetle,id:'cacheGuardian',prop:'depthsSeer',room:'depthsCache',name:'Rune Channeler',elite:true,archetype:'caster',tactic:'RUNE CHANNELER · Defeat its Rune Wisp to break the ward. Interrupt charged bolts with 3 fast hits or Storm; leave the purple detonation ring.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
+  treasuryGuardian:{...beetle,id:'treasuryGuardian',prop:'depthsWarden',room:'depthsTreasury',name:'Ironhide Guardian',archetype:'armoured',tactic:'IRONHIDE · Break the plating with stagger or use magic. Dodge Faultline Slam; the exposed core rewards heavy hits and spells.',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
+  sealGuardian:{...beetle,id:'sealGuardian',prop:'depthsSentinel',room:'depthsTrial',name:'Thornblade Duelist',elite:true,archetype:'duelist',tactic:'THORNBLADE · Quick Slash has a second cut. Wait for Held Thornstrike’s final flash, then counter for extra damage.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
   depthsGuardian:{...beetle,id:'depthsGuardian',prop:'depthsColossus',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).filter(enemy=>enemy.id!=='moonbackStag').map(enemy=>[enemy.room,enemy]));
@@ -309,7 +311,7 @@ export function resumeHunt(encounter,now,stats={},charmEquipped=false){
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={}){
   const target=action==='attack'&&!encounter?.addActor&&activeAdd(encounter);
-  if(target&&now>=target.spawnAt)return mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments));
+  if(target&&now>=target.spawnAt)return mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments),now);
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
@@ -349,6 +351,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(now<(encounter.staggerWeakUntil??0)){
       result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
     }
+    const roleHit=roleDamage(encounter,result.damage,now);result.damage=roleHit.damage;result.wardAbsorbed=roleHit.wardAbsorbed;
     result.encounter.health=Math.max(0,encounter.health-result.damage);
     if(result.encounter.health>0&&enemy.archetype==='caster'&&enemyAttack(encounter,enemy).shape==='bolt'&&now>=encounter.nextBoarAt-enemyAttack(encounter,enemy).tell&&now<encounter.nextBoarAt){
       const hits=(encounter.castDeadline===encounter.nextBoarAt?encounter.castHits??0:0)+1;result.encounter.castDeadline=encounter.nextBoarAt;result.encounter.castHits=hits;
@@ -423,11 +426,11 @@ export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon
   const burn=encounter.burn;
   if(burn&&burn.nextAt<=burn.until&&burn.nextAt<=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt)){
     if(now<burn.nextAt)return null;
-    const damage=Math.min(encounter.health,burn.damage);
+    const roleHit=roleDamage(encounter,Math.min(encounter.health,burn.damage),now),damage=roleHit.damage;
     const next={...encounter,health:encounter.health-damage};
     if(burn.nextAt+essenceEffects.fire.interval<=burn.until)next.burn={...burn,nextAt:burn.nextAt+essenceEffects.fire.interval};
     else delete next.burn;
-    return transitionVaultPhase({action:'burn',damage,taken:0,health,powerColor:essenceEffects.fire.color,
+    return transitionVaultPhase({action:'burn',damage,wardAbsorbed:roleHit.wardAbsorbed,taken:0,health,powerColor:essenceEffects.fire.color,
       encounter:next.health?next:null,outcome:next.health?'fighting':'victory'},encounter,now);
   }
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';

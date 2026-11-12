@@ -332,13 +332,13 @@ function advanceDungeonAdds(state,now,random){
  if(a.burn?.nextAt===now){
   const damage=Math.min(a.health,a.burn.damage),next={...view,health:a.health-damage};
   if(a.burn.nextAt+1000<=a.burn.until)next.burn={...a.burn,nextAt:now+1000};else delete next.burn;
-  return mergeAddEvent(e,a,{action:'burn',damage,taken:0,health:state.health,powerColor:'#ffac78',encounter:next.health?next:null,outcome:next.health?'fighting':'victory'});
+  return mergeAddEvent(e,a,{action:'burn',damage,taken:0,health:state.health,powerColor:'#ffac78',encounter:next.health?next:null,outcome:next.health?'fighting':'victory'},now);
  }
  if(a.lockedFor!==a.attackAt&&now===a.attackAt-move.tell)return change({...a,lockedFor:a.attackAt,target:{...e.arenaPlayer},origin:{x:a.x,y:a.y}});
  if(now===a.attackAt){
   const event=huntingTurn(view,state.health,state.stats,'enemy',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
   if(event?.encounter){event.encounter.nextBoarAt=now+addKinds[a.kind].interval;event.nextMove=move.name;}
-  const merged=mergeAddEvent(e,a,event);
+  const merged=mergeAddEvent(e,a,event,now);
   if(merged?.encounter)merged.encounter.adds=merged.encounter.adds.map(b=>b.id===a.id?{...b,thinkAt:now+move.recovery}:b);
   return merged;
  }

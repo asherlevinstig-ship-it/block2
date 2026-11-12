@@ -1,8 +1,8 @@
 import {clothingCatalog,veilCloakId,windstepBootsId,hearthguardLeggingsId} from './wardrobe.js';
 
 export const outfitPowers={
- secondWind:{item:windstepBootsId,name:'Second Wind',key:'B',side:'trial',guardian:'Rune Sentinel',amount:45,cooldown:50000,combat:true,color:'#a4e9e8'},
- emberMend:{item:hearthguardLeggingsId,name:'Ember Mend',key:'H',side:'treasure',guardian:'Treasury Guardian',amount:30,cooldown:90000,combat:false,color:'#ffc291'}
+ secondWind:{item:windstepBootsId,name:'Second Wind',key:'B',side:'trial',guardian:'Thornblade Duelist',amount:45,cooldown:50000,combat:true,color:'#a4e9e8'},
+ emberMend:{item:hearthguardLeggingsId,name:'Ember Mend',key:'H',side:'treasure',guardian:'Ironhide Guardian',amount:30,cooldown:90000,combat:false,color:'#ffc291'}
 };
 
 export function wearsClothing(wardrobe,id){

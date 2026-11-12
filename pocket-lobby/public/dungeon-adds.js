@@ -1,3 +1,4 @@
+import {channelerWardActive} from './enemy-roles.js';
 import {arenaPlayer,arenaEnemy,dungeonFloor,arenaInDanger,arenaBehindCover} from './dungeon-arena.js';
 // One reinforcement schedule belongs to an encounter, never to a connected client.
 // IDs are stable across saves/replays; a later shared party instance uses the same cap.
@@ -20,7 +21,7 @@ export function addEncounter(e,a){
  for(const key of effects){delete out[key];if(a[key]!==undefined)out[key]=a[key];}
  return out;
 }
-export function mergeAddEvent(e,a,event){
+export function mergeAddEvent(e,a,event,now=0){
  if(!event)return null;
  const next=event.encounter??event.killedEncounter,dead=event.outcome==='victory',out={...event,targetId:a.id,enemyId:addKinds[a.kind].id,enemyTile:{x:a.x,y:a.y},attackTile:a.target,attackReach:addKinds[a.kind].move.reach,addKill:dead};
  delete out.killedEncounter;
@@ -31,6 +32,7 @@ export function mergeAddEvent(e,a,event){
  if(next){actor.attackAt=next.nextBoarAt;for(const key of effects){delete actor[key];if(next[key]!==undefined)actor[key]=next[key];}}
  combined.adds=e.adds.filter(b=>b.id!==a.id);if(!dead)combined.adds.push(actor);
  combined.adds.sort((a,b)=>a.id.localeCompare(b.id));combined.addKills=(e.addKills??0)+(dead?1:0);
+ if(dead&&a.kind==='wisp'&&e.enemy==='cacheGuardian'&&!combined.adds.some(b=>b.kind==='wisp'&&b.health>0)){combined.staggerWeakUntil=Math.max(combined.staggerWeakUntil??0,now+3000);out.wardBroken=true;}
  if(dead&&combined.combatTarget===a.id){combined.combatTarget='leader';combined.manualTarget=false;}
  out.encounter=combined;out.outcome='fighting';return out;
 }
@@ -69,7 +71,7 @@ export function addThreats(e,now){return (e?.adds??[]).filter(a=>a.spawnAt<=now&
 export function chooseAutoAddTarget(e,now){
  const p=arenaPlayer(e),ready=(e.adds??[]).filter(a=>a.spawnAt<=now);
  if(!ready.length)return 'leader';
- const ranked=ready.map(a=>({a,score:(a.kind==='wisp'?3:0)+(a.health<20?3:0)-Math.hypot(a.x-p.x,a.y-p.y)})).sort((a,b)=>b.score-a.score||a.a.id.localeCompare(b.a.id));
+ const ranked=ready.map(a=>({a,score:(channelerWardActive(e,now)&&a.kind==='wisp'?100:0)+(a.kind==='wisp'?3:0)+(a.health<20?3:0)-Math.hypot(a.x-p.x,a.y-p.y)})).sort((a,b)=>b.score-a.score||a.a.id.localeCompare(b.a.id));
  return ranked[0].a.id;
 }
 export function normalizeAdds(e){

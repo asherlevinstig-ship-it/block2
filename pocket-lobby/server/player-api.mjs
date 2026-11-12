@@ -460,7 +460,7 @@ export async function handlePlayerApi(request,env){
     if(error.status===409&&path==='/api/player/robbery')return json({error:error.message,...packet(await read(env.TOWER_DB,(await resolveIdentity(request,env))?.playerId))},409);
     if(error.status===400||error.status===409)return json({error:error.message},error.status);
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
-    if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Cache Guardian|Defeat the Treasury Guardian|Defeat the Rune Sentinel|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
+    if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Rune Channeler|Defeat the Ironhide Guardian|Defeat the Thornblade Duelist|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
     console.error("Tower player service error",error.name);
     return json({error:"Your save could not be completed. Please retry."},503);
   }

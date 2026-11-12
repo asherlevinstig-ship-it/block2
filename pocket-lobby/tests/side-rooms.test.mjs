@@ -24,7 +24,7 @@ test('rest shrine spends unbanked gold once, preserves wallet and never charges 
  const full=initial({health:100});act(full,'depthsSide',{id:'rest'});assert.throws(()=>act(full,'depthsShrine'),/full/);assert.equal(depthsSpoils(full.depthsRun).gold,36);assert.equal(full.depthsRun.shrineUsed,undefined);
 });
 test('sealed challenge grants its guaranteed stone only on claiming, once per run, including after reload',()=>{
- const s=initial({health:100});act(s,'depthsSide',{id:'trial'});s.position={x:8,y:5};assert.throws(()=>act(s,'depthsInspect',{id:'sideSeal'}),/Defeat the Rune Sentinel/);
+ const s=initial({health:100});act(s,'depthsSide',{id:'trial'});s.position={x:8,y:5};assert.throws(()=>act(s,'depthsInspect',{id:'sideSeal'}),/Defeat the Thornblade Duelist/);
  s.position={x:5,y:5};act(s,'fight');s.hunting.encounter.health=1;advanceServerCombat(s,121000,()=>.5);assert.equal(s.combatReports.at(-1).outcome,'victory');assert.equal(s.magic?.stones?.sword??0,0);assert.equal(s.combatReports.at(-1).rewards.stones,undefined);
  Object.assign(s,normalizeState(s));s.position={x:8,y:5};act(s,'depthsInspect',{id:'sideSeal'},130000);const stone=s.depthsRun.sideStone;assert.equal(s.magic.stones[stone],1);assert.equal(s.credits,100);assert.equal(depthsSpoils(s.depthsRun).gold,36);
  act(s,'depthsInspect',{id:'sideSeal'},130000);assert.equal(s.magic.stones[stone],1);assert.equal(normalizeState(s).depthsRun.sideStone,stone);
