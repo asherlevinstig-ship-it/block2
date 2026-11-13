@@ -35,7 +35,7 @@ import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
 import {factionHall,factionHallRest,factionHallStove} from '../public/faction-hall.js';
-import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread} from '../public/cooking.js';
+import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread,homeCookingBatch} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
 const besideRiverTrader=state=>state.position&&Math.abs(state.position.x-3)+Math.abs(state.position.y-4)===1;
@@ -181,7 +181,16 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
       const atTrailCamp=state.location===trailCamp.room&&besideTrailCamp(position);
       if(atTrailCamp&&!(camp?.litUntil>now))throw new Error('Choose Add timber to light the Moonwell trail camp before cooking.');
       if(!atStove&&!atCamp&&!atHall&&!atTrailCamp)throw new Error('Travel beside the campfire or your placed home cooking stove.');
-      prepareMeal(state,body.id);
+      if(body.quantity===undefined)prepareMeal(state,body.id);
+      else{
+        if(!atStove)throw new Error('Travel beside your home stove to cook a batch.');
+        const batch=homeCookingBatch(state,body.id,body.quantity);
+        if(batch.reason)throw new Error(batch.message);
+        if(JSON.stringify(body.used)!==JSON.stringify(batch.used))throw new Error('Choose Review again. Your ingredients have changed.');
+        if(state.actionPoints.value<body.quantity)throw Object.assign(new Error('Answer more questions to earn enough AP for this batch.'),{status:402});
+        Object.assign(state,batch.state);
+        for(let i=1;i<body.quantity;i++)spendActionPoint(state,now);
+      }
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');
       if((state.health>=100||!recipe.healing)&&normalizeVitals(state.vitals).hunger>=100)throw new Error('Invalid meal use. Your health and hunger are already full.');

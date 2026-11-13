@@ -1,7 +1,23 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {cookingPlan,prepareMeal,mealRecipes} from '../public/cooking.js';import {skillXpForLevel} from '../public/skill-curve.js';import {normalizeCharacterRules} from '../public/character-rules.js';
+import {cookingPlan,prepareMeal,mealRecipes,homeCookingBatch} from '../public/cooking.js';import {skillXpForLevel} from '../public/skill-curve.js';import {normalizeCharacterRules} from '../public/character-rules.js';
 import {normalizeState,settlePlan} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';import {touchPresence} from '../server/routines.mjs';import {boot} from './helpers/game-client.mjs';
 const setup=(extra={})=>normalizeState({location:'home',position:{x:3,y:4},ownedFurniture:{bed:1,stove:1},homeFurniture:[{id:10,type:'stove',x:3,y:3,rot:0}],fishStock:{silverfin:10,silverfin_fine:2,silverfin_rare:1},huntingLoot:{boar:10},woodcutting:{timber:20},...extra});
+test('a confirmed home batch combines bag and Cooking stacks and preserves bridge timber',()=>{
+ const s=setup({ownedFurniture:{stove:1,chest:1},fishStock:{silverfin:1},woodcutting:{timber:2},chestItems:{'fish:silverfin':1,timber:10},chestPurposes:{'fish:silverfin':'cooking',timber:'bridge'}});
+ const id='grilledSilverfin',quantity=2,{used}=homeCookingBatch(s,id,quantity);
+ assert.deepEqual(used,{bag:{timber:2,'fish:silverfin':1},chest:{'fish:silverfin':1}});
+ assert.throws(()=>applyGameplayAction(s,'cook',{id,quantity,used:{}},1000),/ingredients have changed/);
+ const points=s.actionPoints.value;
+ s.actionPoints.value=1;
+ assert.throws(()=>applyGameplayAction(s,'cook',{id,quantity,used},1000),/enough AP/);
+ assert.equal(s.chestItems['fish:silverfin'],1);
+ s.actionPoints.value=points;
+ applyGameplayAction(s,'cook',{id,quantity,used},1000);
+ assert.equal(s.meals[id],2);
+ assert.equal(s.actionPoints.value,points-2);
+ assert.deepEqual(s.chestItems,{timber:10});
+ assert.deepEqual(s.chestPurposes,{timber:'bridge'});
+});
 test('home stove needs ownership, placement and adjacency; campfire stays available',()=>{
  const s=setup();applyGameplayAction(s,'cook',{id:'grilledSilverfin'},1000);assert.equal(s.meals.grilledSilverfin,1);assert.equal(s.fishStock.silverfin,9);assert.equal(s.woodcutting.timber,19);assert.equal(s.stats.cookingXp,10);
  for(const extra of [{location:'furnishings'},{position:{x:2,y:4}},{homeFurniture:[]},{ownedFurniture:{bed:1}}])assert.throws(()=>applyGameplayAction(setup(extra),'cook',{id:'boarStew'},1000),/Travel/);

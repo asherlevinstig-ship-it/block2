@@ -5113,7 +5113,45 @@ function openCampfire(){
   savePlayerState();if(!dialog.open)dialog.showModal();
   if(pendingCookingId){const id=pendingCookingId;pendingCookingId=null;setTimeout(()=>cookMeal(id),0);}
 }
+function homeCookingState(){
+  return {stats:playerStats,fishStock,huntingLoot,woodcutting,meals,chestItems:window.playerCloud?.initial?.chestItems,chestPurposes:window.playerCloud?.initial?.chestPurposes};
+}
+let homeRecipe=null,homeBatchBusy=false,homeBatchQuote=null;
+function renderHomeCookingBatch(){
+  const quantity=$('homeBatchQuantity').valueAsNumber;
+  const batch=homeCookingBatch(homeCookingState(),homeRecipe,quantity);
+  const line=source=>Object.entries(batch.used[source]).map(([key,count])=>count+' × '+chestCatalog[key].name).join(', ')||'None';
+  $('homeBatchBag').textContent=batch.reason?batch.message:'Bag: '+line('bag');
+  $('homeBatchChest').textContent=batch.reason?'':'Cooking chest stacks: '+line('chest');
+  $('homeBatchYield').textContent=batch.reason?'':quantity+' × '+mealRecipes[homeRecipe].name+' · '+quantity+' AP';
+  $('homeBatchConfirm').disabled=!!batch.reason||homeBatchBusy;
+  homeBatchQuote=batch.reason?null:{id:homeRecipe,quantity,used:batch.used};
+}
+function reviewHomeCooking(id){
+  homeRecipe=id;
+  $('homeBatchQuantity').value=1;
+  $('homeBatchReview').hidden=false;
+  renderHomeCookingBatch();
+  $('homeBatchQuantity').focus();
+}
+$('homeBatchQuantity').oninput=renderHomeCookingBatch;
+$('homeBatchCancel').onclick=()=>{$('homeBatchReview').hidden=true;};
+$('homeBatchConfirm').onclick=async()=>{
+  if(homeBatchBusy||unavailable()||!atHome())return;
+  if(!homeBatchQuote)return;
+  const {quantity,id,used}=homeBatchQuote;
+  homeBatchBusy=true;
+  $('homeBatchConfirm').disabled=true;
+  try{
+    await serverGameplay('cook',{id,quantity,used});
+    renderCampfire();
+    $('campfireStatus').textContent=quantity+' × '+mealRecipes[id].name+' added to Inventory.';
+    showTransaction('Meals prepared',[{icon:'♨',text:'+'+quantity+' × '+mealRecipes[id].name}]);
+  }catch(error){$('campfireStatus').textContent=error.message;renderHomeCookingBatch();}
+  finally{homeBatchBusy=false;if(!$('homeBatchReview').hidden)renderHomeCookingBatch();}
+};
 function renderCampfire(){
+  $('homeBatchReview').hidden=true;
   const state={stats:playerStats,fishStock,huntingLoot,woodcutting,meals},progress=skillProgress(playerStats.cookingXp??0);
   const camping=currentRoom===moonwood.trailCamp.room,cold=camping&&campFirePhase()==='cold';
   $('campfireTitle').textContent=atHome()?'Your home kitchen':currentRoom===factionHall?'Field kitchen':'Campfire cooking';$('cookingPlace').textContent=atHome()?'HOME · COOKING STOVE':currentRoom===factionHall?'FACTION HALL':camping?'MOONWELL TRAIL CAMP':'LANTERN TRAIL';
@@ -5121,7 +5159,7 @@ function renderCampfire(){
   $('cookingNext').textContent=progress.level<2?'Cooking 2 unlocks Hearty Stew · 60 HP':progress.level<4?'Cooking 4 unlocks Silverfin Feast · 80 HP':'All recipes unlocked · Keep preparing for your next adventure.';
   const cards=$('campfireRecipes');cards.replaceChildren();
   for(const [id,recipe] of Object.entries(mealRecipes)){
-    const plan=cookingPlan(state,id),locked=progress.level<recipe.level,card=document.createElement('article');card.className='campfire-recipe';card.dataset.recipe=id;
+    const plan=atHome()?homeCookingBatch(homeCookingState(),id,1):cookingPlan(state,id),locked=progress.level<recipe.level,card=document.createElement('article');card.className='campfire-recipe';card.dataset.recipe=id;
     const art=document.createElement('div');art.className='campfire-meal-art';art.innerHTML=mealArt(id);
     const content=document.createElement('div'),title=document.createElement('h3'),cost=document.createElement('p'),supply=document.createElement('small');
     title.textContent=recipe.name;cost.textContent=recipe.amount+' '+recipe.ingredient+' + '+recipe.timber+' timber';
@@ -5134,6 +5172,7 @@ async function cookMeal(id,button){
   if(unavailable())return;
   const station=atHome()?(homeFurniture.find(i=>i.type==='stove'&&Math.abs(player.cx-i.x)+Math.abs(player.cy-i.y)===1)??homeFurniture.find(i=>i.type==='stove')):currentRoom===factionHall?factionHallFurniture.find(i=>i.type==='stove'):roomFurniture().find(i=>i.type==='campfire'||i.type==='trailCamp');
   if(station&&Math.abs(player.cx-station.x)+Math.abs(player.cy-station.y)!==1){pendingCookingId=id;$('campfireDialog').close();use(station);note('Walking back to the stove to prepare your meal.');return;}
+  if(atHome()){reviewHomeCooking(id);return;}
   if(button)button.disabled=true;savePlayerState();
   try{
     const level=skillLevel(playerStats.cookingXp??0);await serverGameplay('cook',{id});

@@ -42,3 +42,39 @@ export function prepareMeal(state,id,options){
  const before=state.stats.cookingXp??0;state.stats.cookingXp=Math.min(MAX_SKILL_XP,before+plan.recipe.xp);
  return {xp:state.stats.cookingXp-before,recipe:plan.recipe};
 }
+
+// Plan a whole batch on copies so an incomplete batch never consumes ingredients.
+export function homeCookingBatch(state,id,quantity){
+ if(!Number.isInteger(quantity)||quantity<1||quantity>20)return {reason:'quantity',message:'Choose between 1 and 20 meals.'};
+ const draft={...state,stats:{...state.stats},fishStock:{...state.fishStock},huntingLoot:{...state.huntingLoot},woodcutting:{...state.woodcutting},meals:{...state.meals},chestItems:{...state.chestItems},chestPurposes:{...state.chestPurposes}};
+ const used={bag:{},chest:{}};
+ for(let i=0;i<quantity;i++){
+  const combined={...draft,fishStock:{...draft.fishStock},huntingLoot:{...draft.huntingLoot},woodcutting:{...draft.woodcutting}};
+  for(const [key,purpose] of Object.entries(draft.chestPurposes)){
+   if(purpose!=='cooking')continue;
+   const count=draft.chestItems[key]??0;
+   if(key==='timber')combined.woodcutting.timber+=count;
+   else{
+    const [kind,item]=key.split(':');
+    const stock=kind==='fish'?combined.fishStock:combined.huntingLoot;
+    stock[item]=(stock[item]??0)+count;
+   }
+  }
+  const plan=cookingPlan(combined,id);
+  if(plan.reason)return {...plan,message:plan.reason==='cooking-supplies'?'Bring the ingredients in your bag or mark them for Cooking in your chest.':plan.message};
+  const consume=(key,stock,item,amount)=>{
+   const chest=draft.chestPurposes[key]==='cooking'?Math.min(amount,draft.chestItems[key]??0):0;
+   if(chest){
+    used.chest[key]=(used.chest[key]??0)+chest;
+    draft.chestItems[key]-=chest;
+    if(!draft.chestItems[key]){delete draft.chestItems[key];delete draft.chestPurposes[key];}
+   }
+   if(amount>chest){stock[item]-=amount-chest;used.bag[key]=(used.bag[key]??0)+amount-chest;}
+  };
+  consume('timber',draft.woodcutting,'timber',plan.recipe.timber);
+  for(const item of plan.ingredients)consume((item.stock==='fishStock'?'fish:':'loot:')+item.id,draft[item.stock],item.id,item.amount);
+  draft.meals[id]=(draft.meals[id]??0)+1;
+  draft.stats.cookingXp=Math.min(MAX_SKILL_XP,(draft.stats.cookingXp??0)+plan.recipe.xp);
+ }
+ return {used,state:draft};
+}
