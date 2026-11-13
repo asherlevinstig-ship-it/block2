@@ -14,6 +14,7 @@ import {jobPreview} from '../public/jobs.js';
 import {depthsStageIndex} from '../public/depths.js';
 import {boarRules} from '../public/hunting.js';
 export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random,forceStart=false,physicalTimber=false,physicalFishing=false}={}){
+  if(state.vaultCoop)return false;
   if(state.autoDisconnected&&!forceStart)return;
   if(state.autoSwitch&&!state.plan){
     const restartAt=state.report?.endedAt??now;delete state.autoSwitch;delete state.report;

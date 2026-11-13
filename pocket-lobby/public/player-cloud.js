@@ -517,7 +517,7 @@
       const robberyRules=await import('./robbery-rules.js');window.towerEquipmentStats=robberyRules.equipmentStats;window.towerItemStatText=robberyRules.itemStatText;
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
-      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},readMillRaid:()=>request('mill-raid'),millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
+      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},readMillRaid:()=>request('mill-raid'),vaultCoop:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('vault-coop',body);}finally{gameplayBusy=false;}},millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;
@@ -580,7 +580,7 @@
         const {initializeActionPointFeedback}=await import('./action-point-feedback.js');
         apFeedback=initializeActionPointFeedback({doc:document,initial:packet,onEarn:()=>window.towerLearning.open()});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');
-        window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks);
+        window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks); const {initializeVaultCoop}=await import('./vault-coop-ui.js');window.towerVaultCoop=initializeVaultCoop(window.towerVaultCoopHooks);
 
         if(!(pending||retryJob||sending))setStatus('Server saved');
         if(packet.state.autoDisconnected)suspendForPoints(packet);

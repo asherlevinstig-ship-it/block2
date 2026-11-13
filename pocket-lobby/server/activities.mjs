@@ -1,4 +1,5 @@
 import {detectCombatBuild} from '../public/combat-builds.js';
+import {vaultDefeatTip} from '../public/vault-coop.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {availableActionPoints} from '../public/action-points.js';
 import {requireActionPoint,spendActionPoint,stopForActionPoints,autoHasNoPoints} from './action-points.mjs';
@@ -124,6 +125,7 @@ function result(state,event,now,random=Math.random){
   if(event.outcome!=='fighting'&&state.combatId){
     const decision=event.decision??encounter.lastDecision;
     const report={...(decision?{decision}:{}),id:state.combatId,enemy:enemy.id,room,outcome:event.outcome,endedAt:now,endedHealth:event.health,summary,rewards};
+    if(event.outcome==='defeat'&&enemy.id==='depthsGuardian'){const attack=event.move??enemyAttack(encounter,enemy).name;report.defeat={attack,damage:event.taken??0,tip:vaultDefeatTip(attack)};}
     if(event.outcome==='defeat'&&heldBefore)report.lostSpoils=heldBefore;
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);

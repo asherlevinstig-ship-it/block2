@@ -11,6 +11,10 @@ export function roleDamage(e,damage,now,{magic=false}={}){
  return {damage:reduced,wardAbsorbed:raw-reduced,coreBonus:opening};
 }
 export function enemyRoleInfo(e,now,id=e?.enemy){
+ if(id==='depthsGuardian'){
+  const max=e?.brainMaxHealth??240,phase=(e?.health??max)>max*2/3?1:(e?.health??max)>max/3?2:3;
+  return {name:'Vault Guardian',kind:'vault',status:phase===1?(now<Math.max(e?.exposedUntil??0,e?.staggerWeakUntil??0)?'CORE EXPOSED · Strike now':'IRONCLAD · Build stagger; leave the slam ring'):phase===2?(now<(e?.counterUntil??0)?'COUNTER READY · Punish the opening':'UNBOUND · Watch the second cut; dodge, then counter'):'RUNIC HEART · 3 fast hits or Storm interrupt a charged volley',hint:phase===1?'Heavy weapons break the plating. Keep clear of the large ring and attack during recovery.':phase===2?'The first cut is followed by another attack. Hold your dodge for the final warning, then counter.':'Clear the Wisps. Charged volleys can be interrupted; detonation rings must be escaped.'};
+ }
  const role=dungeonEnemyRoles[id];if(!role||e?.addActor)return null;
  if(role.kind==='channeler')return {...role,status:channelerWardActive(e,now)?'RUNE WARD · Defeat the Rune Wisp · Damage reduced 60%':e?.staggerWeakUntil>now?'WARD BROKEN · Strike now · Damage +25%':e?.adds?.some(a=>a.kind==='wisp'&&a.spawnAt>now)?'WISP SUMMONING · Target it when it appears':role.weakness};
  if(role.kind==='ironhide')return {...role,status:e?.exposedUntil>now?'CORE EXPOSED · Strike now':role.weakness};

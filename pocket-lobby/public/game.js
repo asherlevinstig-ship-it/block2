@@ -80,6 +80,7 @@ const renderedActors=[],actorNameplates=new Map();
 let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
+let vaultCoopState=savedPlayerState?.vaultCoop??null;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
   ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
@@ -645,7 +646,7 @@ function drawRemote(peer,time){
   const fishingPhase=cast?fishingMoments.phase(cast,time):null;
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
-  const raidPose=currentRoom==='millbrook'&&time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
+  const raidPose=['millbrook','depthsVault'].includes(currentRoom)&&time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
   const meditating=peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{meditating,direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
@@ -940,7 +941,7 @@ function resetCombatArt(){
 }
 
 const routineControlled=()=>!!autoJourney||!!window.playerCloud?.initial?.plan||!!window.playerCloud?.initial?.report;
-const unavailable=()=>routineControlled()||serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
+const unavailable=()=>!!vaultCoopState||routineControlled()||serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
 function combatRecapAction(report){
   if(hunting.recoveryUntil)return null;
   if(depthsRun&&depthsStageIndex(currentRoom)>=0){
@@ -980,6 +981,8 @@ function renderCombatRecap(report){
   $('combatRecapDodges').textContent=summary.dodges;
   $('combatRecapAutomatic').textContent=summary.staggers+' stagger breaks · '+summary.weakSpotHits+' weak-spot hits · '+summary.perfectDodges+' perfect dodges · '+summary.counters+' counterattacks · +'+summary.counterBonus+' counter bonus damage · '+summary.automaticDodges+' automatic dodges · '+summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
   $('combatRecapDuration').textContent=summary.partial?'Recorded from the latest update.':'Encounter duration · '+Math.max(0,Math.round((report.endedAt-summary.startedAt)/1000))+'s';
+  $('combatRecapCause').hidden=!report.defeat;
+  $('combatRecapCause').textContent=report.defeat?'Final blow: '+report.defeat.attack+' · '+report.defeat.damage+' damage. '+report.defeat.tip:'';
   const action=combatRecapAction(report);
   $('combatRecapNext').hidden=!action;
   $('combatRecapNext').textContent=action?.label??'';
@@ -1880,14 +1883,15 @@ function updateDungeonArenaHud(){
  floorCount.hidden=!depthsRun||depthsStageIndex(currentRoom)<0;
  if(!floorCount.hidden){
   const encounter=hunting.encounter,adds=(encounter?.adds??[]).filter(add=>add.health>0);
-  const alive=(encounter?Number(encounter.health>0):Number(depthsEnemyAvailable(depthsRun,currentRoom)))+adds.length;
+  const shared=vaultCoopState&&window.towerVaultCoop?.view();
+  const alive=shared?Number(shared.hp>0)+shared.adds.length:(encounter?Number(encounter.health>0):Number(depthsEnemyAvailable(depthsRun,currentRoom)))+adds.length;
   const summoning=adds.filter(add=>add.spawnAt>combatNow()).length;
   floorCount.textContent='Enemies on this floor · '+alive+(summoning?' · '+summoning+' summoning':'');
   floorCount.title='Counts living enemies in this zone, including reinforcements being summoned. More may arrive during combat.';
  }
 
  const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
- panel.hidden=currentRoom===deepMiningRoom?!e:!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
+ panel.hidden=!!vaultCoopState||(currentRoom===deepMiningRoom?!e:!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom));if(panel.hidden)return;
  panel.dataset.adds=String(e?.addsVersion===1);
  const selected=e&&activeAdd(e),targetEnemy=selected?addKinds[selected.kind]:enemy;
  $('dungeonEnemyName').textContent=(selected?'Target · ':enemy.elite?'Elite · ':'')+targetEnemy.name;
@@ -2057,7 +2061,7 @@ function roomFurniture(){
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
       return true;
-    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
+    }).map(item=>item.type==='depthsColossus'&&window.towerVaultCoop?.encounter()?{...item,coopBoss:true,defeated:window.towerVaultCoop.view()?.status==='victory'}:item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(window.towerVaultCoop?.adds()??[]).map(a=>({type:a.kind==='wisp'?'depthsSeer':'depthsSkitter',x:a.x,y:a.y,coopAdd:a})),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -2731,21 +2735,22 @@ function object(item,highlight=false,time=0) {
     return;
   }
   if(Object.hasOwn(moonwood.heights,type)){
+    if(item.coopAdd){moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,pose:{now:combatNow()}});const [ax,ay]=point(x+.5,y+.5);rect(ax-13,ay-47,26,4,'#17253b');rect(ax-12,ay-46,24*item.coopAdd.hp/item.coopAdd.max,2,'#e8ac91');renderedActors.push({id:'coop:'+item.coopAdd.id,enemy:true,name:item.coopAdd.name,x:ax,y:ay-58,action:()=>window.towerVaultCoop?.target(item.coopAdd.id)});return;}
     if(type==='oreDeposit'){
       const impact=[miningReceipt,...[...remotePeers.values()].map(peer=>peer.miningImpact)].filter(r=>r?.node===item.id).sort((a,b)=>b.at-a.at)[0];
       drawOreDeposit(item,time,{point,polygon,ctx,reduced:reducedMotion.matches},{...oreState[item.id],broken:impact?.broken,find:impact?.find,bonus:impact?.bonus,hitAge:impact?combatNow()-impact.at:Infinity});return;
     }else if(isTimberTree(item)){
       drawTimberTree(item,time);
     }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
-      const actorEncounter=item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
+      const actorEncounter=item.coopBoss?window.towerVaultCoop?.encounter():item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
-      const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
+      const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat||item.coopBoss?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       let facing=player;
       if(['crystalGuardian','depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
         pose.now=combatNow();
-        pose.lastAttack=(combatArt.bursts??[]).findLast(effect=>effect.action==='enemy'&&!effect.targetId);
+        pose.lastAttack=item.coopBoss?window.towerVaultCoop?.lastAttack():(combatArt.bursts??[]).findLast(effect=>effect.action==='enemy'&&!effect.targetId);
         if(type==='depthsColossus'&&pose.lastAttack?.time<combatArt.phaseAt)pose.lastAttack=null;
-        const attack=player.inCombat&&actorEncounter;
+        const attack=(player.inCombat||item.coopBoss)&&actorEncounter;
         const committed=attack&&attack.arenaLockedFor===attack.nextBoarAt&&pose.now<=attack.nextBoarAt;
         const release=attack&&time>=pose.lastAttack?.time&&time-pose.lastAttack.time<320;
         if(committed&&attack.arenaTarget)facing=attack.arenaTarget;
@@ -2757,7 +2762,7 @@ function object(item,highlight=false,time=0) {
       ctx.save();ctx.translate(mx,my);ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25)*(item.add?.kind==='skitter'?.65:1),pose.squash*(item.add?.kind==='skitter'?.65:1));if(item.add&&combatNow()<item.add.spawnAt)ctx.globalAlpha*=.25;ctx.translate(-bx,-by);
-      moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?actorEncounter:null,pose});
+      moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat||item.coopBoss?actorEncounter:null,pose});
       ctx.restore();
       if(!item.defeated){
         const enemy=item.add?addKinds[item.add.kind]:roomEnemy();
@@ -3508,6 +3513,7 @@ function draw(time){
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:combatNow(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
+  if(currentRoom==='depthsVault')window.towerVaultCoop?.draw({ctx,point,surface,now:combatNow(),time,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -3550,9 +3556,9 @@ function draw(time){
       surface(player.x+.17,player.y+.23,.71,.61,.2,'#43324452');
       surface(player.x+.27,player.y+.34,.50,.38,.3,'#43324462');
     }
-    const cycle=autoServerWalking?time/STEP_MS:step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
+    const cycle=autoServerWalking?time/STEP_MS:step?(player.stride%2)+Math.min(1,(time-step.started)/playerStepMs()):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
+    const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:window.towerVaultCoop?.encounter(),events:combatArt,reduced:reducedMotion.matches});
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
     const chopping=woodSession??(autoChop?automatic:null);
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
@@ -3562,7 +3568,7 @@ function draw(time){
     const miningSwing=miningRooms.includes(currentRoom)&&!step&&!autoServerWalking&&preparedSwing&&combatNow()>=preparedSwing.started&&combatNow()<preparedSwing.endsAt+400&&preparedSwing;
     const spritePose=miningSwing?{...pose,chop:choppingPhase(miningSwing,combatNow())}:woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const meditating=playerMeditating()&&!cast&&!miningSwing;
-    const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
+    const foe=vaultCoopState?(window.towerVaultCoop?.targetPosition()??{x:6,y:5}):combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
@@ -3576,7 +3582,7 @@ function draw(time){
     }
     if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
-    if(player.inCombat||window.millRaidClient?.active){
+    if(player.inCombat||vaultCoopState||window.millRaidClient?.active){
       const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
       for(let heart=0;heart<5;heart++){
         const filled=Math.max(0,Math.min(1,(health-heart*20)/20));
@@ -3739,7 +3745,7 @@ function walkTo(tile){
   if(routineControlled()){note('Your routine is running. Use Take control to move.');return;}
   if(campRest){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(player.seat?.type==='riverBench'&&currentRoom==='millbrook'&&hunting.recoveryUntil){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
-  if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
+  if(unavailable()&&!vaultCoopState){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
   const path=walkingPath(startPosition(),tile);
   if(!path){note('There’s no clear path to that tile.');return;}
@@ -4175,6 +4181,7 @@ function drawHudMiniMap(){
   ink.strokeStyle='#72583b';ink.stroke();
 }
 function use(item){
+  if(vaultCoopState){if(item.coopAdd||item.type==='depthsColossus')window.towerVaultCoop?.target(item.coopAdd?.id??'boss');else note('Retreat from the co-op party before using another activity.');return;}
   if(miningCut){stopMining().then(ok=>{if(ok)use(item);});return;}
   if(item.type==='wildAnimal'){selectWildAnimal(item.animalId);return;}
   if(player.inCombat&&hunting.encounter?.addsVersion===1&&(item.addId||item.type===huntEnemyForRoom(currentRoom)?.prop)){sendServerCombat('target',item.addId??'leader');return;}
@@ -4627,7 +4634,7 @@ function advanceAnimation(time){
     step={from,to,started:time};
   }
   if(step){
-    const {from,to,started}=step,progress=Math.min(1,(time-started)/STEP_MS);
+    const {from,to,started}=step,progress=Math.min(1,(time-started)/playerStepMs());
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
@@ -5122,6 +5129,7 @@ function updatePlayerStats(){
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
+  vaultCoopState=state.vaultCoop??null;
   mining=normalizeMining(state.mining);miningCut=state.miningCut??null;miningReceipt=state.miningReceipt??null;
   receiveTrees(state.sharedTrees);
   const floats=worldActivityTracker?.update(state,window.playerCloud?.serverTime??Date.now())??[];
@@ -5827,9 +5835,9 @@ let hotbarGemsKey='';
 function equippedEssenceStatus(now,slot='q'){
   const power=essencePower(magicState?.slots[slot],playerStats,magicState,currentCombatBuild());
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
-  const fullHealth=power?.form==='renewal'&&health>=maxHealth();
+  const fullHealth=power?.form==='renewal'&&health>=maxHealth()&&!vaultCoopState;
   const lowMana=manaAvailable(playerVitals,combatNow())<currentCombatBuild().mana;
-  return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active)&&!remaining&&!fullHealth&&!lowMana&&(window.playerCloud?.initial?.actionPoints?.value??1)>0};
+  return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active||vaultCoopState)&&!remaining&&!fullHealth&&!lowMana&&(window.playerCloud?.initial?.actionPoints?.value??1)>0};
 }
 function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
@@ -5837,7 +5845,7 @@ function updateEssenceHotbar(now=Date.now()){
   if(bar.hidden)return;
   const activeGems=['q','e'].map(slot=>equippedEssenceStatus(now,slot).power?.gem);
   const gems=bondedEssences(magicState.picks);
-  const key=[gems.join(','),activeGems.join(','),player.inCombat].join('|');
+  const key=[gems.join(','),activeGems.join(','),player.inCombat,!!vaultCoopState].join('|');
   if(key!==hotbarGemsKey){
     hotbarGemsKey=key;
     const slots=gems.map((id,index)=>{
@@ -5846,7 +5854,7 @@ function updateEssenceHotbar(now=Date.now()){
       slot.dataset.fusion=String(fusion);
       slot.title=gem.name+(fusion?' · Confluence Gem':' Essence');
       slot.setAttribute('aria-label',slot.title+(activeGems.includes(id)?' · source of an equipped power':''));
-      slot.disabled=player.inCombat;
+      slot.disabled=player.inCombat||!!vaultCoopState;
       return slot;
     });
     $('essenceHotbarGems').replaceChildren(...slots);
@@ -5857,14 +5865,14 @@ function updateEssenceHotbar(now=Date.now()){
     const noPoints=window.playerCloud?.initial?.actionPoints?.value===0;
     const button=$('essenceHotbarPower'+suffix);
     let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
-      :!(player.inCombat||window.millRaidClient?.active)?allEssences[power.gem].name+' · Cast in combat'
+      :!(player.inCombat||vaultCoopState||window.millRaidClient?.active)?allEssences[power.gem].name+' · Cast in combat'
       :lowMana?'Needs '+currentCombatBuild().mana+' mana':fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
     const automated=characterRules.combat.enabled&&characterRules.combat[slot];
     if(automated&&player.inCombat&&power&&!remaining&&!fullHealth&&!lowMana)status='Auto · Waiting for tactic';
     button.dataset.automatic=String(automated);
     button.dataset.ready=String(canCast);
     button.dataset.equipped=String(!!power);
-    button.disabled=player.inCombat&&!canCast;
+    button.disabled=(player.inCombat||!!vaultCoopState)&&!canCast;
     button.style.setProperty('--power-color',power?.color??'#b7a4ed');
     if(power)status='1 AP + '+currentCombatBuild().mana+' MP · '+(noPoints?'Answer questions to earn AP':status);
     button.title=power?powerDescription(power)+' · Costs 1 Action Point + '+currentCombatBuild().mana+' mana · Regenerates '+MANA_REGEN+'/sec'+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
@@ -6296,6 +6304,7 @@ $('depthsCampRibbon').onclick=()=>{
 $('depthsLeave').onclick=leaveMoonwellDepths;
 $('depthsRetreat').onclick=leaveMoonwellDepths;
 for(const slot of ['q','e'])$('essenceHotbarPower'+(slot==='q'?'':'E')).onclick=()=>{
+  if(vaultCoopState){window.towerVaultCoop?.power(slot);return;}
   if(player.inCombat)castEquippedEssence(slot);
   else openEssences(equippedEssenceStatus(Date.now(),slot).power?.gem,slot);
 };
@@ -7313,6 +7322,13 @@ window.towerMillRaidHooks={
  cue:cue=>{const peer=remotePeers.get(cue.player);if(peer){if(cue.hit)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}},
  approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),
  float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
+};
+function playerStepMs(){return STEP_MS*(vaultCoopState?(currentCombatBuild().move??1):1);}
+function faceVaultTarget(tile={x:6,y:5}){player.direction=(tile.x-player.cx)-(tile.y-player.cy)>=0?'right':'left';player.back=tile.x+tile.y<player.cx+player.cy;}
+window.towerVaultCoopHooks={
+ now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
+ apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
+ strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:tile=>{faceVaultTarget(tile);combatArt.castAt=performance.now();},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}}
 };
 
 async function visitMillCellar(action){

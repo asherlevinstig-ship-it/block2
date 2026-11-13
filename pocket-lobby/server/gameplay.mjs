@@ -337,6 +337,8 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  if(previous.vaultCoop)next.vaultCoop=previous.vaultCoop;else delete next.vaultCoop;
+  if(previous.vaultCoop){next.location=previous.location;next.wardrobe=previous.wardrobe;next.combatGear=previous.combatGear;next.magic=previous.magic;}
   next.mining=previous.mining;
   if(previous.miningCut&&next.location===previous.location&&next.position?.x===previous.position?.x&&next.position?.y===previous.position?.y)next.miningCut=previous.miningCut;
   else delete next.miningCut;

@@ -1,0 +1,48 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {normalizeState} from '../server/player-state.mjs';import {protectFishingState,applyGameplayAction} from '../server/gameplay.mjs';import {actVaultParty,advanceVaultParty,publicVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';import {testDatabase} from './db-helper.mjs';import {handlePlayerApi} from '../server/player-api.mjs';import {normalizeMagic} from '../public/essences.js';import {advanceServerCombat} from '../server/activities.mjs';import {boot} from './helpers/game-client.mjs';import {enemyRoleInfo} from '../public/enemy-roles.js';
+function player(name='A'){return normalizeState({avatar:{name,outfit:0,hair:0},location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2,routeChoice:'safe'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword','quickfang'],equippedWeapon:'ironSword'},magic:{picks:['fire','ice','storm'],unlocked:['fire:sword','ice:shield','fire:renewal','storm:sword'],slots:{q:'ice:shield',e:'fire:renewal'}}});}
+function party(){const r={id:'AAAABBBB',leader:'a',status:'waiting',expiresAt:2000000,hp:420,max:420,members:{},adds:[]},a=player(),b=player('B');b.position={x:9,y:6};actVaultParty(r,a,'a',{kind:'join'},1000);actVaultParty(r,b,'b',{kind:'join'},1000);return {r,a,b};}
+const act=(r,s,id,kind,at=2000,extra={})=>actVaultParty(r,s,id,{kind,...extra},at,()=>.5);
+test('a party shares one scaled Guardian, locks membership at start and preserves saved membership',()=>{
+ const {r,a,b}=party();assert.equal(normalizeState(a).vaultCoop.id,r.id);assert.throws(()=>act(r,b,'b','start'),/leader/);act(r,a,'a','start');assert.equal(r.max,693);assert.equal(publicVaultParty(r,'b').hp,693);assert.throws(()=>act(r,player('C'),'c','join'),/started/);
+ const forged=structuredClone(a);delete forged.vaultCoop;forged.location='home';forged.combatGear.equippedWeapon='quickfang';forged.position={x:5,y:5};const next=protectFishingState(a,forged);assert.equal(next.vaultCoop.id,r.id);assert.equal(next.location,'depthsVault');assert.equal(next.combatGear.equippedWeapon,'ironSword');
+});
+test('Taunt changes the next target without moving a committed warning; timed dodges avoid damage',()=>{
+ const {r,a,b}=party();act(r,a,'a','start',1000);const locked={...r.targetTile},lands=r.landsAt;act(r,b,'b','taunt',2000);assert.deepEqual(r.targetTile,locked);assert.equal(r.target,'a');act(r,a,'a','dodge',lands-100);const ap=a.actionPoints.value;act(r,a,'a','tick',lands+1);assert.equal(r.members.a.hp,100);assert(r.members.a.counterUntil>lands);assert.equal(a.actionPoints.value,ap);assert.equal(r.target,'b');assert.deepEqual(r.targetTile,b.position);
+});
+test('boss phases spawn a single finite add wave and all members see the same targets',()=>{
+ const {r,a}=party();act(r,a,'a','start',1000);r.hp=Math.floor(r.max*2/3)+1;act(r,a,'a','strike',2000);assert.equal(r.phase,2);assert.equal(r.adds.length,1);r.hp=Math.floor(r.max/3)+1;r.landsAt=20000;act(r,a,'a','strike',4000);assert.equal(r.phase,3);assert.equal(r.adds.length,3);assert.equal(publicVaultParty(r,'b').adds.length,3);act(r,a,'a','strike',6000);assert.equal(r.adds.length,3);
+});
+test('wards and Renewal help another player; shields expire and mana/AP costs are authoritative',()=>{
+ const {r,a,b}=party();act(r,a,'a','start',1000);r.members.b.hp=40;const ally=r.members.b.id;act(r,a,'a','power',2000,{slot:'e',ally});assert(r.members.b.hp>40);assert.equal(a.actionPoints.value,99);assert.equal(a.vitals.mana,90);act(r,a,'a','power',2100,{slot:'q',ally});assert(r.members.b.ward>0);assert.equal(r.members.b.wardUntil,7100);assert.equal(a.actionPoints.value,98);assert.throws(()=>act(r,a,'a','power',2200,{slot:'q'}),/ready/);assert.equal(a.actionPoints.value,98);
+});
+test('Storm and three quick weapon hits interrupt a charged volley rather than a detonation',()=>{
+ const {r,a}=party();a.combatGear.equippedWeapon='quickfang';r.members.a.weapon='quickfang';act(r,a,'a','start',1000);Object.assign(r,{hp:220,max:900,phase:3,move:'bossFan',warningAt:2000,landsAt:3500});act(r,a,'a','strike',2000);act(r,a,'a','strike',2550);act(r,a,'a','strike',3100);assert(r.landsAt>3500);assert(r.members.a.support>0);
+ a.magic=normalizeMagic({...a.magic,slots:{q:'storm:sword',e:'fire:renewal'}});r.warningAt=4000;r.landsAt=5500;r.move='bossFan';act(r,a,'a','power',4100,{slot:'q'});assert(r.landsAt>5500);assert.match(r.members.a.lastFeedback,/interrupted/);
+});
+test('boss damage and defeat persist while a browser is absent; the recap identifies the final blow',()=>{
+ const {r,a}=party();act(r,a,'a','start',1000);r.members.a.hp=1;const lands=r.landsAt;act(r,a,'a','tick',lands+100);assert.equal(a.health,0);assert.equal(a.location,'home');assert.equal(a.vaultCoop,undefined);assert.equal(a.depthsRun,null);assert.match(a.combatReports[0].defeat.attack,/Smash/);assert.match(a.combatReports[0].defeat.tip,/ring/);
+ const g=boot(a);g.run('renderCombatRecap(combatReports[0])');assert.match(g.nodes.get('combatRecapCause').textContent,/Final blow/);assert.deepEqual(g.errors,[]);
+});
+test('each participating survivor claims one standard Vault clear; idle onlookers cannot claim',()=>{
+ const {r,a,b}=party();act(r,a,'a','start',1000);r.hp=1;r.members.b.support=1;act(r,a,'a','strike',2000);assert.equal(r.status,'victory');act(r,a,'a','claim',2100);assert.equal(a.depthsRun.cleared,3);assert.equal(a.dungeonLoot.clears,1);assert.equal(a.credits,100);assert.equal(a.vaultCoop,undefined);assert.throws(()=>act(r,a,'a','claim',2200),/Join/);act(r,b,'b','claim',2300);assert.equal(b.depthsRun.shardEarned,true);assert.equal(b.dungeonLoot.clears,1);
+ const idle=party();act(idle.r,idle.a,'a','start',1000);idle.r.hp=1;act(idle.r,idle.a,'a','strike',2000);assert.throws(()=>act(idle.r,idle.b,'b','claim',2100),/Help defeat/);
+});
+test('weapon cooldowns, proximity, zero AP and retreat are enforced',()=>{
+ const {r,a,b}=party();act(r,a,'a','start',1000);assert.throws(()=>act(r,b,'b','strike',2000),/closer/);act(r,a,'a','strike',2000);assert.throws(()=>act(r,a,'a','strike',2001),/recover/);a.actionPoints.value=0;assert.throws(()=>act(r,a,'a','taunt',2200),/Action Point/);act(r,a,'a','leave',2300);assert.equal(a.location,'depthsGallery');assert.equal(a.vaultCoop,undefined);assert.equal(r.leader,'b');
+});
+test('two database writers contribute to the same health pool without losing a strike',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());for(const id of ['a','b']){const s=player(id);sql.prepare('INSERT INTO tower_players(player_id,state_json,revision,last_request,updated_at) VALUES(?,?,1,?,?)').run(id,JSON.stringify(s),'init',1000);}
+ const row=id=>sql.prepare('SELECT * FROM tower_players WHERE player_id=?').get(id);let result=await writeVaultParty(db,row('a'),{kind:'create',operation:'create'},1000);const code=result.raid.id;await writeVaultParty(db,row('b'),{kind:'join',id:code,operation:'join'},1000);await writeVaultParty(db,row('a'),{kind:'start',id:code,operation:'start'},1000);
+ const before=(await readVaultParty(db,code,'a')).raid.hp;await Promise.all(['a','b'].map(id=>writeVaultParty(db,row(id),{kind:'strike',id:code,operation:'hit-'+id},2000)));const r=(await readVaultParty(db,code,'a')).raid;assert.equal(before-r.hp,r.members.a.damage+r.members.b.damage);assert(r.members.a.damage>0&&r.members.b.damage>0);for(const id of ['a','b'])assert.equal(JSON.parse(row(id).state_json).actionPoints.value,99);
+});
+test('API retries do not duplicate party rewards or charges, and party mode blocks other paid activities',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());const base='https://tower.test',session=await handlePlayerApi(new Request(base+'/api/player/session',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:'{}'}),{TOWER_DB:db});let p=await session.json();const cookie=session.headers.get('set-cookie').split(';')[0];sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(player()),p.characterKey);
+ const send=async(path,body)=>handlePlayerApi(new Request(base+'/api/player/'+path,{method:'POST',headers:{Origin:base,'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({characterKey:p.characterKey,...body})}),{TOWER_DB:db});
+ const create={kind:'create',revision:p.revision,operation:'create-api'};let response=await send('vault-coop',create);assert.equal(response.status,200);p=await response.json();const id=p.raid.id;response=await send('vault-coop',create);assert.equal(response.status,200);assert.equal((await response.json()).state.vaultCoop.id,id);
+ response=await send('gameplay/fight',{revision:p.revision,operation:'solo'});assert.equal(response.status,400);response=await send('vault-coop',{id,kind:'leave',revision:p.revision,operation:'leave'});assert.equal(response.status,200);assert.equal((await response.json()).state.vaultCoop,undefined);
+});
+test('solo Guardian defeat guidance and the phase-specific on-screen weaknesses remain available',()=>{
+ const s=player();s.characterRules.combat.enabled=false;applyGameplayAction(s,'fight',{},1000);s.health=1;s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.nextBoarAt=2000;s.hunting.encounter.arenaLockedFor=2000;s.hunting.encounter.brainMove='bossIronSmash';s.hunting.encounter.brainOrigin={x:6,y:5};s.hunting.encounter.arenaPlayer={x:5,y:5};advanceServerCombat(s,2100,()=>.99);assert.equal(s.health,0);assert.match(s.combatReports[0].defeat.tip,/ring/);
+ for(const [health,text] of [[420,/IRONCLAD/],[250,/UNBOUND/],[100,/RUNIC HEART/]])assert.match(enemyRoleInfo({enemy:'depthsGuardian',health,brainMaxHealth:420},1000).status,text);
+});

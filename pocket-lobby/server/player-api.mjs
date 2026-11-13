@@ -5,6 +5,7 @@ import {autoHasNoPoints,requireActionPoint,spendActionPoint,stopForActionPoints}
 import {learningAction} from './learning.mjs';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
+import {readVaultParty,writeVaultParty} from './vault-coop.mjs';
 import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
 import {readOreDeposits,mineAction,writeOreStrike} from './mining.mjs';
 import {advanceMiningWork} from './mining-work.mjs';
@@ -185,6 +186,7 @@ export async function handlePlayerApi(request,env){
       const body=await bodyOf(request);
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
+      delete legacy.vaultCoop;
       delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
@@ -219,6 +221,11 @@ export async function handlePlayerApi(request,env){
       return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
+    if(path==='/api/player/vault-coop'&&request.method==='GET'){
+      const row=await read(env.TOWER_DB,id),state=row&&readPlayerState(row),code=new URL(request.url).searchParams.get('id')??state?.vaultCoop?.id;
+      if(state?.location!=='depthsVault'&&!state?.vaultCoop)return json({error:'Visit the Sunken Vault to view a co-op party.'},400);
+      return json({raid:(await readVaultParty(env.TOWER_DB,code,id)).public});
+    }
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
     if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/mining'&&request.method==='GET')return json({deposits:await readOreDeposits(env.TOWER_DB),serverTime:Date.now()});
@@ -230,6 +237,7 @@ export async function handlePlayerApi(request,env){
     }
     if(path==="/api/player/factions"){
       if(request.method==="GET")return json(await readFactions(env.TOWER_DB,id,new URL(request.url).searchParams.get('q')));
+      const current=await read(env.TOWER_DB,id);if(current&&JSON.parse(current.state_json).vaultCoop)return json({error:'Leave the co-op Vault party before changing your faction or visiting its hall.'},400);
       const body=await bodyOf(request);
       if(body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
       const result=await changeFaction(env.TOWER_DB,id,body);
@@ -256,6 +264,12 @@ export async function handlePlayerApi(request,env){
       return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
     }
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
+    if(path==='/api/player/vault-coop'){
+      const result=await writeVaultParty(env.TOWER_DB,row,body);if(!result)return json({error:'Your character changed. Refresh the Vault party.',...packet(await read(env.TOWER_DB,id))},409);
+      await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(result.updated.state_json),result.updated.revision,{fresh:true});
+      return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
+    }
+    if(JSON.parse(row.state_json).vaultCoop&&!['/api/player/save','/api/player/presence'].includes(path)&&!path.startsWith('/api/player/learning/'))return json({error:'Leave the co-op Vault party before starting another activity.'},400);
     if(path==='/api/player/mill-raid'){
       const result=await writeMillRaid(env.TOWER_DB,row,body);
       if(!result)return json({error:'Your character changed. Refresh the mill event.',...packet(await read(env.TOWER_DB,id))},409);
