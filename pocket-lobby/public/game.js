@@ -6597,12 +6597,13 @@ function openPinnedGoal(sale=null){
     option.value=id;option.textContent=item.name+' · '+item.price+' gold';select.append(option);
   }
   select.value=g?.target??'weapon:ironSword';
-  $('pinnedGoalStatus').textContent=(sale?.gold?'Sold '+sale.quantity+' fish for '+sale.gold+' gold. ':'')+(g?pinnedGoalSummary(currentGoalState()):'Choose the upgrade you want to work toward.');
+  $('pinnedGoalStatus').textContent=(sale?.gold?(sale.id==='boar'?'Sold Boar Meat':'Sold '+sale.quantity+' fish')+' for '+sale.gold+' gold. ':'')+(g?pinnedGoalSummary(currentGoalState()):'Choose the upgrade you want to work toward.');
   $('pinnedGoalSave').textContent=g?'Update pinned goal':'Pin goal';
   $('pinnedGoalClear').hidden=!g;
   $('pinnedGoalNext').hidden=!g;
   $('pinnedGoalAuto').hidden=!g||g.owned||g.ready;
   renderIronSwordFishTask();
+  renderIronSwordHuntTask();
   const trySword=g?.target==='weapon:ironSword'&&combatGear.equippedWeapon==='ironSword';
   $('pinnedGoalNext').textContent=trySword?'Try it against the Wild Boar':g?.owned?(g.item.kind==='weapon'?'Open equipment':'Open inventory'):g?.ready?'Go to shop':g?.requirements.some(r=>!r.met)?(g.item.kind==='weapon'?'Train with the Wild Boar':'Go fishing'):'Go to the Trading Post';
   if(!dialog.open)dialog.showModal();
@@ -6610,6 +6611,55 @@ function openPinnedGoal(sale=null){
 function goalTravelCost(destination){
   return currentRoom===destination?0:hudRoute(destination).length||null;
 }
+function currentIronSwordHuntTask(){
+  const ap=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
+  return ironSwordHuntTask({...currentGoalState(),huntingLoot},{
+    huntTravel:goalTravelCost('clearing'),
+    saleTravel:huntingLoot.boar>0?goalTravelCost('market'):hudRoute('market','clearing').length||null,
+    ap,build:currentCombatBuild()
+  });
+}
+function renderIronSwordHuntTask(){
+  const task=currentIronSwordHuntTask();
+  $('ironSwordHuntTask').hidden=!task;
+  if(!task)return;
+  $('ironSwordHuntTitle').textContent=task.meat?'Sell one Boar Meat':'Hunt a Wild Boar';
+  $('ironSwordHuntTravel').textContent=task.needsWeapon?'Equip a usable weapon first.':task.meat?'Trading Post · '+task.saleTravel+' AP · Selling is free':task.budget+' AP estimated · '+task.huntTravel+' to the clearing + '+task.attacks+' weapon hits + '+task.saleTravel+' to the Trading Post';
+  const [strength,agility,vitality]=task.xp;
+  const training=task.meat?'':' · Victory gives +'+strength+' Strength, +'+agility+' Agility and +'+vitality+' Vitality XP';
+  const skill=task.meat||!task.strengthGap?'':task.strengthGap<=strength?' · A win meets the sword’s Strength requirement':' · '+(task.strengthGap-strength)+' Strength XP still needed after a win';
+  $('ironSwordHuntReward').textContent=task.gold+' gold from the sale'+training+skill+(task.remaining?' · '+task.remaining+' gold to go after selling.':' · Covers the remaining gold requirement.');
+  $('ironSwordHuntAction').textContent=task.needsWeapon?'Open equipment':task.questions?'Answer '+task.questions+' more question'+(task.questions===1?'':'s'):task.meat?(task.saleTravel?'Route to Trading Post':'Sell one · '+task.gold+' gold'):task.huntTravel?'Route to the Wild Boar':'Approach the Wild Boar';
+}
+let sellingGoalMeat=false;
+$('ironSwordHuntAction').onclick=async()=>{
+  const task=currentIronSwordHuntTask();
+  if(!task||sellingGoalMeat||unavailable())return;
+  if(task.needsWeapon){$('pinnedGoalDialog').close();openInventory();return;}
+  if(task.questions){
+    $('pinnedGoalDialog').close();
+    window.towerLearning?.open({travelAP:task.budget,goalLabel:'Wild Boar and Trading Post trip',readyText:'You have enough AP for the estimated hunt and sale trip.',onContinue:()=>openPinnedGoal()});
+    return;
+  }
+  if(!task.meat||task.saleTravel){
+    $('pinnedGoalDialog').close();
+    const destination=task.meat?'market':'clearing';
+    if(currentRoom!==destination){setExplorationDestination(destination);navigateHud(destination);return;}
+    const boar=roomFurniture().find(item=>item.type==='wildboar');
+    if(boar)use(boar);
+    else note('The Wild Boar is respawning. Wait a moment and try again.');
+    return;
+  }
+  sellingGoalMeat=true;
+  const button=$('ironSwordHuntAction');
+  button.disabled=true;
+  try{
+    const {state}=await serverGameplay('sell',{id:'boar',quantity:1});
+    openPinnedGoal(state.tradeReceipt);
+    showTransaction('Boar Meat sold',[{icon:'✦',text:pinnedGoalSummary(currentGoalState())}],state.tradeReceipt.gold);
+  }catch(error){$('pinnedGoalStatus').textContent=error.message;}
+  finally{sellingGoalMeat=false;button.disabled=false;}
+};
 function goalFishingKey(){
   return 'iron-sword-fishing:'+ (window.playerCloud?.characterKey??'local');
 }

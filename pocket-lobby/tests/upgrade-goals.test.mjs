@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
-import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary,ironSwordFishTask,ironSwordCatchTask} from '../public/upgrade-goals.js';
+import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary,ironSwordFishTask,ironSwordCatchTask,ironSwordHuntTask} from '../public/upgrade-goals.js';
 import {autoRecapSnapshot,autoRecapView} from '../public/auto-recap.js';
 import {AWAY_GRACE_MS as G} from '../public/character-rules.js';
 import {protectFishingState} from '../server/gameplay.mjs';
@@ -105,4 +105,19 @@ test('goal purchases are atomic on retries and saving a new goal re-arms the que
  await act('rules/save',{rules});assert.equal(packet.state.upgradeGoal.status,'purchased');
  await act('rules/save',{rules:{...rules,goal:{target:'rod:silver',autoBuy:false}}});assert.equal(packet.state.upgradeGoal,undefined);
  now+=G;await act('presence',{active:false});assert.equal(packet.state.plan.kind,'queue');
+});
+
+test('the boar route budgets attacks and both journeys, then budgets only the trip to sell',()=>{
+ const state=normalizeState({credits:120,stats:{strengthXp:35},characterRules:{goal:{target:'weapon:ironSword',autoBuy:false}}});
+ const hunt=ironSwordHuntTask(state,{huntTravel:3,saleTravel:4,ap:2});
+ assert(hunt.attacks>0);
+ assert.equal(hunt.budget,7+hunt.attacks);
+ assert.equal(hunt.questions,hunt.budget-2);
+ assert.equal(hunt.strengthGap,15);
+ assert.equal(hunt.gold,30);
+ state.huntingLoot.boar=1;
+ const sale=ironSwordHuntTask(state,{huntTravel:null,saleTravel:0,ap:0});
+ assert.equal(sale.budget,0);
+ assert.equal(sale.meat,1);
+ assert.equal(sale.remaining,0);
 });

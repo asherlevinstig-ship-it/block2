@@ -1,5 +1,5 @@
 import {fishingCatalog,fishProducts} from './fishing.js';
-import {weaponCatalog} from './hunting.js';
+import {huntEnemies,weaponCatalog,canUseWeapon,huntingAttributes} from './hunting.js';
 import {skillLevel,skillXpForLevel} from './skill-curve.js';
 export const upgradeTargets=Object.fromEntries([
  ...Object.entries(weaponCatalog).filter(([,item])=>item.price).map(([id,item])=>['weapon:'+id,{...item,kind:'weapon',id,requirements:[['strengthXp','Strength',item.strength],['agilityXp','Agility',item.agility]]}]),
@@ -59,4 +59,20 @@ export function ironSwordCatchTask(state,travel,ap,active=false,saleTravel=0){
  if(state.fishingGear.bait<remaining)return {needsBait:true};
  const budget=travel+remaining+saleTravel;
  return {caught,remaining,travel,saleTravel,budget,questions:Math.max(0,budget-ap)};
+}
+
+export function ironSwordHuntTask(state,{huntTravel,saleTravel,ap,build}){
+ const goal=upgradeGoalProgress(state);
+ if(goal?.target!=='weapon:ironSword'||goal.owned||goal.ready||saleTravel===null)return null;
+ const boar=huntEnemies.boar;
+ const meat=state.huntingLoot?.boar??0;
+ if(!meat&&huntTravel===null)return null;
+ const gear=state.combatGear,weapon=gear?.equippedWeapon,stats=state.stats??{};
+ const needsWeapon=!meat&&(!weapon||!canUseWeapon(stats,weapon)||!gear.ownedWeapons?.includes(weapon));
+ const damage=needsWeapon||meat?0:huntingAttributes(stats,weapon,gear.activeSwordUpgrade,false,gear.weaponEnchantments,build).damage;
+ const attacks=damage?Math.ceil(boar.health/damage):0;
+ const budget=(meat?0:huntTravel)+attacks+saleTravel;
+ const strength=goal.requirements.find(requirement=>requirement.key==='strengthXp');
+ const strengthGap=Math.max(0,strength.requiredXp-strength.xp);
+ return {meat,needsWeapon,attacks,huntTravel,saleTravel,budget,questions:Math.max(0,budget-ap),gold:boar.sellPrice,remaining:Math.max(0,goal.item.price-goal.gold-boar.sellPrice),xp:boar.xp,strengthGap};
 }
