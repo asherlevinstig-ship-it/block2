@@ -1,3 +1,5 @@
+import {mealBuffs,playerMaxHealth,mealPatience} from '../public/food-buffs.js';
+import {consumeMeal} from '../public/cooking.js';
 import {cellarAction} from './mill-cellar.mjs';
 import {saveCombatLoadout,applyCombatLoadout,removeCombatLoadout} from '../public/dungeon-preparation.js';
 import {cellarFlags} from '../public/mill-cellar.js';
@@ -84,8 +86,8 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     available(state);
     if(state.fishingCast||state.timberCut||state.bedRest||state.gambling?.round?.status==='playing')throw new Error('Choose Ember Mend after finishing your current activity.');
     const power=readyOutfitPower(state,'emberMend',now);
-    if(state.health>=100)throw new Error('Your hearts are already full.');
-    state.health=Math.min(100,state.health+power.amount);
+    if(state.health>=playerMaxHealth(state,now))throw new Error('Your hearts are already full.');
+    state.health=Math.min(playerMaxHealth(state,now),state.health+power.amount);
     state.outfitMagic.readyAt.emberMend=now+power.cooldown;
     return;
   }
@@ -193,10 +195,10 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
       }
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');
-      if((state.health>=100||!recipe.healing)&&normalizeVitals(state.vitals).hunger>=100)throw new Error('Invalid meal use. Your health and hunger are already full.');
+      if((state.health>=playerMaxHealth(state,now)||!recipe.healing)&&normalizeVitals(state.vitals).hunger>=100&&!mealBuffs[body.id])throw new Error('Invalid meal use. Your health and hunger are already full.');
       if(count===1)delete meals[body.id];
       else meals[body.id]=count-1;
-      state.health=Math.min(100,state.health+recipe.healing);feedPlayer(state,foodFullness(recipe));
+      consumeMeal(state,body.id,now);
     }
     return;
   }
@@ -267,7 +269,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     const before=state.stats.patienceXp;
     const shoalReeled=cast.shoalId!==undefined&&cast.shoalReeled===true;
     const fish=state.location===moonfinPool.room&&cast.room===moonfinPool.room&&rollMoonfin(cast.bonus,random)
-      ?'moonfin':rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp,shoalReeled);
+      ?'moonfin':rollFishingCatch(skillLevel(before)+mealPatience(state,now),cast.rod,random,state.stats.luckXp,shoalReeled);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     const otterHelp=cast.otterHelp===true&&state.familiars?.equipped==='otter';
     const baitSaved=otterHelp&&familiarBond(state.familiars,'otter').rank>=3;
@@ -308,7 +310,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     return;
   }
   if(action==='riverRestStop'){if(state.location!=='millbrook'||state.plan||state.report||state.hunting.encounter||state.health<=0)throw new Error('Choose Get up at the Millbrook bench.');state.hunting.recoveryUntil=0;return;}
-  if(action==='riverRest'){available(state);if(state.fishingCast||state.timberCut||state.location!=='millbrook'||!state.position||![[3,7],[4,6],[5,6],[6,7],[4,8],[5,8]].some(([x,y])=>state.position.x===x&&state.position.y===y))throw new Error('Travel beside the Millbrook rest bench first.');if(state.health>=100)throw new Error('Your hearts are already full.');state.hunting.recoveryUntil=now+15000;return;}
+  if(action==='riverRest'){available(state);if(state.fishingCast||state.timberCut||state.location!=='millbrook'||!state.position||![[3,7],[4,6],[5,6],[6,7],[4,8],[5,8]].some(([x,y])=>state.position.x===x&&state.position.y===y))throw new Error('Travel beside the Millbrook rest bench first.');if(state.health>=playerMaxHealth(state,now))throw new Error('Your hearts are already full.');state.hunting.recoveryUntil=now+15000;return;}
   if(action==='sell'){
     location(state,['store','market','millbrook']);
     if(state.location==='millbrook'&&!besideRiverTrader(state))throw new Error('Travel beside the river trader to sell your fish.');

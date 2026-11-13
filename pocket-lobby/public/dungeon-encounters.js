@@ -1,3 +1,4 @@
+import {playerMaxHealth} from './food-buffs.js';
 import {manaAvailable,normalizeVitals,spendMana} from './player-vitals.js';
 export const dungeonEncounterSite={x:8,y:7};
 export const dungeonEncounters=Object.freeze({
@@ -31,12 +32,12 @@ export function resolveDungeonEncounter(state,id,now=Date.now(),random=Math.rand
  if(choice.wallet&&state.credits<choice.wallet)throw new Error('Choose this deal with '+choice.wallet+' wallet gold.');
  if(choice.bread&&(state.meals?.towerBread??0)+choice.bread>1000000)throw new Error('Make room for the bread before trading.');
  if(choice.mana&&manaAvailable(state.vitals,now)<choice.mana)throw new Error('Choose this rescue with at least '+choice.mana+' mana.');
- if(choice.heal&&state.health===100&&manaAvailable(state.vitals,now)===100)throw new Error('Your hearts are already full, and your mana is full. Return to the shrine if you need its blessing later.');
+ if(choice.heal&&state.health>=playerMaxHealth(state,now)&&manaAvailable(state.vitals,now)===100)throw new Error('Your hearts are already full, and your mana is full. Return to the shrine if you need its blessing later.');
  if(choice.mana)spendMana(state,now,choice.mana);
  if(choice.wallet)state.credits-=choice.wallet;
  if(choice.bread)state.meals.towerBread=(state.meals.towerBread??0)+choice.bread;
  if(choice.health)state.health-=choice.health;
- if(choice.heal)state.health=Math.min(100,state.health+choice.heal);
+ if(choice.heal)state.health=Math.min(playerMaxHealth(state,now),state.health+choice.heal);
  if(choice.restoreMana)state.vitals={...normalizeVitals(state.vitals),mana:Math.min(100,manaAvailable(state.vitals,now)+choice.restoreMana),manaAt:now};
  const gold=choice.roll?choice.roll[random()<.5?0:1]:choice.gold??0;
  Object.assign(event,{choice:id,gold});return event;

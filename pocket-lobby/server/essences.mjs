@@ -1,3 +1,4 @@
+import {playerMaxHealth} from '../public/food-buffs.js';
 import {roleDamage} from '../public/enemy-roles.js';
 import {combatBuild} from '../public/combat-builds.js';
 import {activeAdd,addEncounter,mergeAddEvent} from '../public/dungeon-adds.js';
@@ -72,7 +73,7 @@ function castSingleEssencePower(state,now,slot='q'){
   const build=combatBuild(state),power=essencePower(id,state.stats,magic,build);
   if(!power||!bondedEssences(magic.picks).includes(power.gem))return null;
   const {form,value}=power,masteryBonus=power.masteryLevel-1;
-  if(form==='renewal'&&state.health>=100)return null;
+  if(form==='renewal'&&state.health>=playerMaxHealth(state,now))return null;
   const target=!encounter?.addActor&&activeAdd(encounter);
   if(target&&now>=target.spawnAt&&form==='sword'){
     const proxy={...state,hunting:{...state.hunting,encounter:addEncounter(encounter,target)}};
@@ -106,7 +107,7 @@ function castSingleEssencePower(state,now,slot='q'){
     next.nextBoarAt+=value;
     event.effect='delayed the enemy strike';
   }else{
-    event.health=Math.min(100,state.health+value);
+    event.health=Math.min(playerMaxHealth(state,now),state.health+value);
     event.healed=event.health-state.health;
     event.effect='restored '+event.healed+' HP';
   }

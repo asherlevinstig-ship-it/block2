@@ -1,3 +1,4 @@
+import {playerMaxHealth,mealPatience,normalizeMealBuff} from '../public/food-buffs.js';
 import {normalizeRobbery} from '../public/robbery-rules.js';
 import {normalizeLoadouts} from '../public/dungeon-preparation.js';
 import {normalizeMining} from '../public/mining.js';
@@ -83,7 +84,7 @@ export function normalizeState(input={}){
   for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp","luckXp","leadershipXp","stealthXp"]){
     if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>MAX_SKILL_XP)throw new Error("Invalid attribute progress.");
   }
-  const maxHealth=100;
+  const maxHealth=normalizeMealBuff(input.vitals?.mealBuff)?.meal==='heartyStew'?120:100;
   const health=input.health??maxHealth;
   if(!Number.isSafeInteger(health)||health<0)throw new Error("Invalid health.");
   const gear=normalizeFishingGear(input.fishingGear),ownedRods=gear.ownedRods;
@@ -200,7 +201,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   if(plan.kind==='queue')return settleRoutineQueue(state,now,{stop,random});
   if(plan.kind==='rest'){
     if(now>=plan.endAt||stop){
-      if(now>=plan.endAt&&plan.restReason!=='out-of-food')state.health=100;
+      if(now>=plan.endAt&&plan.restReason!=='out-of-food')state.health=playerMaxHealth(state,plan.endAt);
       if(now>=plan.endAt&&spendAutoPoint(state,plan,plan.endAt))return true;
       state.report={...plan,endedAt:Math.min(now,plan.endAt),reason:now>=plan.endAt?(plan.restReason??'rest'):'returned'};
       delete state.plan;state.location='home';state.position={x:5,y:7};return true;
@@ -221,7 +222,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   }
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=skillLevel(state.stats.patienceXp);
-    const fish=rollFishingCatch(level,plan.rod,random,state.stats.luckXp);
+    const fish=rollFishingCatch(level+mealPatience(state,plan.nextCatchAt),plan.rod,random,state.stats.luckXp);
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
     state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");
@@ -252,7 +253,8 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
 export function settlePlan(state,now,options={}){
   if(state.plan&&!availableActionPoints(state.actionPoints)){stopForActionPoints(state,now);finishRoutineReport(state,now);return true;}
   if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);finishRoutineReport(state,now);return true;}
-  const changed=settleWorkPlan(state,now,options);
+  let changed=settleWorkPlan(state,now,options);
+  const health=Math.min(state.health,playerMaxHealth(state,now));if(health!==state.health){state.health=health;changed=true;}
   if(changed)finishRoutineReport(state,now);
   return changed;
 }

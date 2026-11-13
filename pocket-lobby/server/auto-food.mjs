@@ -1,3 +1,4 @@
+import {consumeMeal} from '../public/cooking.js';
 import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
 import {feedPlayer,isExhausted,LOW_HUNGER} from '../public/player-vitals.js';
 import {foodItems,foodFullness,foodStall,towerBread} from '../public/cooking.js';
@@ -61,7 +62,7 @@ export function applyAutoFood(state,plan,at){
  while(true){
   const id=chooseAutoMeal(state,rules);if(!id)break;
   const before=state.health;if(state.meals[id]===1)delete state.meals[id];else state.meals[id]--;
-  state.health=Math.min(100,before+foodItems[id].healing);feedPlayer(state,foodFullness(foodItems[id]));used++;
+  consumeMeal(state,id,at);used++;
   plan.foodUsed??={};plan.foodUsed[id]=(plan.foodUsed[id]??0)+1;plan.foodHealed=(plan.foodHealed??0)+state.health-before;
   plan.foodRecent=[...(plan.foodRecent??[]),{id,at,healed:state.health-before,health:state.health}].slice(-5);
  }

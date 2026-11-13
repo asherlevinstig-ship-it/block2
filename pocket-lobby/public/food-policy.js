@@ -16,6 +16,6 @@ export function chooseAutoMeal(state,policy){
  const meals=state.meals??{},total=Object.values(meals).reduce((sum,n)=>sum+n,0);
  if(total<=policy.keepMeals)return null;
  const eligible=Object.entries(foodItems).filter(([id,item])=>(hungerNeeded>0||item.healing>0)&&(meals[id]??0)>(state.bank?.vault?.rules?.['meal:'+id]??0)).sort((a,b)=>a[1].healing-b[1].healing||a[0].localeCompare(b[0]));
-  return (eligible.find(([,item])=>item.healing>=healthNeeded&&foodFullness(item)>=hungerNeeded)
+  return (eligible.find(([id])=>policy.stock?.enabled&&id===policy.stock.recipe)??eligible.find(([,item])=>item.healing>=healthNeeded&&foodFullness(item)>=hungerNeeded)
    ??(healthNeeded>0?eligible.findLast(([,item])=>item.healing>0):null)??eligible.at(-1))?.[0]??null;
 }

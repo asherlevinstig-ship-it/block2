@@ -1,3 +1,4 @@
+import {playerMaxHealth} from '../public/food-buffs.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {factionHallAccess} from './faction-projects.mjs';
 import {factionHall} from '../public/faction-hall.js';
@@ -206,7 +207,7 @@ export class SharedRoom{
     const leaving=state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules';
     recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});
     if(leaving){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
-    meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
+    meta.health=Math.max(0,Math.min(playerMaxHealth(state),state.health??100));meta.activity=sharedActivity(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
     // Connected avatars report bounded visual movement; activity rewards use the saved server position.
     if(meta.auto)meta.seat=null;
     ws.serializeAttachment(meta);this.snapshot();

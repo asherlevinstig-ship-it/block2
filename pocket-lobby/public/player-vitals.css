@@ -17,3 +17,5 @@
 #cloudGate[data-reason=action-points] #cloudRetry{width:auto;min-height:44px;padding:11px 20px;margin-top:12px}
 
 #hungerStatus:not([hidden]){grid-column:1/-1;color:#ffda87;font-size:10px;font-weight:800;letter-spacing:.04em}
+
+.meal-buff-hud{display:flex;align-items:center;gap:6px;margin:7px 5px 0;padding:7px 6px;border:1px solid #c8a45c66;border-radius:7px;background:#b9953720;color:#f6d792;font-size:10px}.meal-buff-hud[hidden]{display:none}.meal-buff-hud>span:first-child{font-size:17px}.meal-buff-hud>span:nth-child(2){flex:1;min-width:0}.meal-buff-hud b{display:block;font-size:10px}.meal-buff-hud small{display:block;margin-top:3px;font-size:8px;color:#c9d4df;line-height:1.3}.meal-buff-hud time{font-variant-numeric:tabular-nums;font-size:10px;white-space:nowrap}.hud-left:has(.meal-buff-hud:not([hidden])){padding-top:300px}@media(max-height:820px) and (min-width:901px){.hud-left:has(.meal-buff-hud:not([hidden])){padding-top:286px}}@media(max-width:900px){.hud-left:has(.meal-buff-hud:not([hidden])){padding-top:277px}}

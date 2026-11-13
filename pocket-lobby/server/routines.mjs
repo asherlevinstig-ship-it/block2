@@ -1,3 +1,4 @@
+import {playerMaxHealth} from '../public/food-buffs.js';
 import {simpleAutoRisks} from '../public/simple-auto.js';
 import {beginAutoPoints} from './action-points.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
@@ -58,7 +59,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
     const food=applyAutoFood(state,metadata,startedAt);
     if(food.returnHome&&!food.reason){
       state.location='home';state.position={x:5,y:7};
-      state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+homeRestDuration(state,boarRules.recovery),xp:0,restReason:'food-reserve',ruleSummary:summary};
+      state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+homeRestDuration(state,boarRules.recovery,startedAt),xp:0,restReason:'food-reserve',ruleSummary:summary};
       settlePlan(state,until,{stop:active,random});return;
     }
   }
@@ -83,6 +84,6 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
     }
   }
   state.location='home';state.position={x:5,y:7};
-  state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+(state.health<100?homeRestDuration(state,boarRules.recovery):0),xp:0,ruleSummary,restReason:reason};
+  state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+(state.health<playerMaxHealth(state,startedAt)?homeRestDuration(state,boarRules.recovery,startedAt):0),xp:0,ruleSummary,restReason:reason};
   autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});
 }

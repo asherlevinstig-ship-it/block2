@@ -1,3 +1,4 @@
+import {playerMaxHealth} from './food-buffs.js';
 import {manaAvailable,normalizeVitals} from './player-vitals.js';
 
 export const galleryLightSites={
@@ -46,8 +47,8 @@ export function useGalleryLight(state,id,now){
     }
     if(id==='lightShrine'){
       const mana=manaAvailable(state.vitals,now);
-      if(state.health>=100&&mana>=100)throw new Error('Your hearts and mana are already full.');
-      state.health=Math.min(100,state.health+galleryLightReward.health);
+      if(state.health>=playerMaxHealth(state,now)&&mana>=100)throw new Error('Your hearts and mana are already full.');
+      state.health=Math.min(playerMaxHealth(state,now),state.health+galleryLightReward.health);
       state.vitals={...normalizeVitals(state.vitals),mana:Math.min(100,mana+galleryLightReward.mana),manaAt:now};
     }
     light.claimed=id;

@@ -1,3 +1,4 @@
+import {playerMaxHealth} from '../public/food-buffs.js';
 import {besideTrailCamp,trailCamp} from '../public/trail-camp.js';
 import {normalizeVitals} from '../public/player-vitals.js';
 
@@ -47,7 +48,7 @@ export function startTrailCampRest(state,camp,now){
 
 export function settleTrailCampRest(state,now){
   if(!state.campRest||now<state.campRest.endsAt)return false;
-  state.health=100;state.vitals={...normalizeVitals(state.vitals),mana:100,manaAt:now};
+  state.health=playerMaxHealth(state,now);state.vitals={...normalizeVitals(state.vitals),mana:100,manaAt:now};
   stopTrailCampRest(state);
   return true;
 }

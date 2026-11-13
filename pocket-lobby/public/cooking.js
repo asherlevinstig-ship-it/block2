@@ -1,5 +1,7 @@
 import {fishProducts} from './fishing.js';
 import {skillLevel,MAX_SKILL_XP} from './skill-curve.js';
+import {mealBuffs,playerMaxHealth} from './food-buffs.js';
+import {normalizeVitals,manaAvailable,feedPlayer} from './player-vitals.js';
 
 export const mealRecipes={
   grilledSilverfin:{name:'Grilled Silverfin',healing:20,ingredient:'Silverfin',amount:1,timber:1,level:1,xp:10,description:'A silverfin cooked over the embers.'},
@@ -13,6 +15,13 @@ export const foodStall={room:'bakery',x:5,y:3};
 export const bakeryLayout=[['foodStall',foodStall.x,foodStall.y],['bakeryOven',7,1],['breadRack',3,1],['table',7,6],['stool',7,7],['plant',1,2]];
 export const foodItems={...mealRecipes,[towerBread.id]:towerBread};
 export const foodFullness=item=>item.hunger??item.healing;
+export function consumeMeal(state,id,now){
+ const item=foodItems[id],mana=manaAvailable(state.vitals,now);
+ state.vitals={...normalizeVitals(state.vitals),mana,manaAt:now};
+ if(mealBuffs[id])state.vitals.mealBuff={meal:id,startedAt:now,until:now+mealBuffs[id].duration};
+ state.health=Math.min(playerMaxHealth(state,now),state.health+item.healing);
+ feedPlayer(state,foodFullness(item));
+}
 export const cookingQueueRecipes={cookFish:'grilledSilverfin',cookStew:'boarStew',cookHeartyStew:'heartyStew',cookFeast:'silverfinFeast'};
 export const homeStove=state=>(state.ownedFurniture?.stove??0)>0?(state.homeFurniture??[]).find(item=>item.type==='stove')??null:null;
 const silverfinGrades=['silverfin','silverfin_fine','silverfin_rare'];
@@ -83,3 +92,5 @@ export function homeCookingBatch(state,id,quantity,{automatic=false}={}){
  }
  return {used,state:draft};
 }
+
+export {mealBuffs,activeMealBuff,playerMaxHealth,mealPatience,mealArmour,mealBuffText} from './food-buffs.js';

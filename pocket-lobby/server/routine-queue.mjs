@@ -1,3 +1,4 @@
+import {playerMaxHealth,mealPatience} from '../public/food-buffs.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {beginAutoCooking} from './auto-cooking.mjs';
 import {spendAutoPoint} from './action-points.mjs';
@@ -262,7 +263,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         }
         state.location=enemy.room;state.position={x:5,y:5};
       }else if(type==='explore'){const stop=explorationStops[(p.exploreIndex??0)%explorationStops.length];interval=EXPLORE_STOP_MS;state.location=stop.room;state.position={x:stop.x,y:stop.y};}
-      else if(type==='rest'){interval=state.health<100?homeRestDuration(state,QUEUE_ACTION_MS):p.simpleMode?60000:QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
+      else if(type==='rest'){interval=state.health<playerMaxHealth(state,p.cursorAt)?homeRestDuration(state,QUEUE_ACTION_MS,p.cursorAt):p.simpleMode?60000:QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
       else{state.location=type==='buyBread'?'bakery':type==='buyBait'?'store':'market';state.position=type==='buyBread'?{x:5,y:4}:{x:5,y:5};}
       p.nextAt=p.cursorAt+interval;changed=true;
     }
@@ -284,7 +285,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       p.currentLabel='Fighting '+enemy.name;changed=true;continue;
     }else if(type==='fishing'){
       if(state.fishingGear.bait<=p.keepBait){nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
-      const fish=rollFishingCatch(skillLevel(state.stats.patienceXp),state.fishingGear.equippedRod,random,state.stats.luckXp);
+      const fish=rollFishingCatch(skillLevel(state.stats.patienceXp)+mealPatience(state,at),state.fishingGear.equippedRod,random,state.stats.luckXp);
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
       state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);state.fishingGear.bait--;
       const xp=Math.min(10,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;
@@ -318,7 +319,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       state.credits-=cost;state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;autoStoreVault(state,p,at);
       nextStep(p,at,'Bought '+p.stepCount+' bait for '+cost+' gold');changed=true;continue;
     }else if(type==='explore'){const room=state.location;if(room!=='outside'&&!state.adventure.discovered.includes(room))state.adventure.discovered.push(room);p.exploreIndex=(p.exploreIndex??0)+1;p.explored=(p.explored??0)+1;nextStep(p,at,'Explored '+room);changed=true;if(spendAutoPoint(state,p,at))return true;continue;
-    }else if(type==='rest'){state.health=100;nextStep(p,at,'Rested at home');changed=true;if(spendAutoPoint(state,p,at))return true;continue;}
+    }else if(type==='rest'){state.health=playerMaxHealth(state,at);nextStep(p,at,'Rested at home');changed=true;if(spendAutoPoint(state,p,at))return true;continue;}
     p.cursorAt=at;p.nextAt=null;changed=true;
     if(['fishing','woodcutting'].includes(type)&&spendAutoPoint(state,p,at))return true;
     if(!Object.hasOwn(cookingQueueRecipes,type)&&p.stepCount>=step.amount)nextStep(p,at,'Gathered '+p.stepCount);

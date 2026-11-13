@@ -1,3 +1,4 @@
+import {mealPatience} from '../public/food-buffs.js';
 import {autoTilePath} from './auto-motion.mjs';
 import {spendAutoPoint} from './action-points.mjs';
 import {publicRoomNamespace} from './shared-trees.mjs';
@@ -58,7 +59,7 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    if(now<work.cast.landAt+900)return;
    if(motion?.room!==room||!sameTile(motion,work.spot)){delete work.cast;return;}
    const cast=work.cast;
-   const before=state.stats.patienceXp,fish=rollFishingCatch(skillLevel(before),rod,random,state.stats.luckXp);
+   const before=state.stats.patienceXp,fish=rollFishingCatch(skillLevel(before)+mealPatience(state,now),rod,random,state.stats.luckXp);
    if((state.fishStock[fish]??0)>=1000000){
      if(plan.kind==='queue')finishRoutineQueue(state,plan,'inventory-full',now);
      else finishPlan(state,'inventory-full',now);

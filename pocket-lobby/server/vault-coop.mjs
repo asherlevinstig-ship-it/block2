@@ -1,3 +1,4 @@
+import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
 import {validVaultMechanism,vaultMechanisms} from '../public/vault-mechanisms.js';
 import {dungeonFloor} from '../public/dungeon-arena.js';
 import {vaultCoopRules,coopPhase,coopMove,coopDanger,coopEncounter,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
@@ -16,7 +17,7 @@ const invalid=message=>Object.assign(new Error(message),{status:400});
 const living=r=>Object.entries(r.members).filter(([,m])=>m.hp>0&&!m.left);
 const uid=()=>crypto.randomUUID().slice(0,8).toUpperCase();
 function eligible(s){if(s.location!=='depthsVault'||s.depthsRun?.cleared!==2||s.hunting?.encounter||s.plan||s.report||s.controlMode==='auto'||s.health<=0)throw invalid('Travel to the Sunken Vault in Play mode, before starting the solo fight.');}
-function member(s,now){const build=combatBuild(s);return {id:uid(),name:s.avatar.name,hp:s.health,pos:{...s.position},lastAt:now,damage:0,support:0,threat:0,lastStrike:0,dodgeUntil:0,counterUntil:0,nextDodgeAt:0,ward:0,used:[],build,armour:huntingAttributes(s.stats).armor+(armourProfile(armourSelection(s.combatGear))?.absorption??0)+build.armor,weapon:s.combatGear.equippedWeapon,attackInterval:huntingAttributes(s.stats,s.combatGear.equippedWeapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build).attackInterval};}
+function member(s,now){const build=combatBuild(s);return {id:uid(),name:s.avatar.name,hp:s.health,pos:{...s.position},lastAt:now,mealBuff:s.vitals?.mealBuff,damage:0,support:0,threat:0,lastStrike:0,dodgeUntil:0,counterUntil:0,nextDodgeAt:0,ward:0,used:[],build,armour:huntingAttributes(s.stats).armor+(armourProfile(armourSelection(s.combatGear))?.absorption??0)+build.armor,weapon:s.combatGear.equippedWeapon,attackInterval:huntingAttributes(s.stats,s.combatGear.equippedWeapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build).attackInterval};}
 function plan(r,at,pause=0){
  const phase=coopPhase(r),detail=vaultPhaseDetails[phase-1],players=living(r);if(!players.length){r.status='defeat';return;}
  const forced=players.find(([id])=>id===r.taunt&&at<r.tauntUntil),target=forced??players.sort((a,b)=>b[1].threat-a[1].threat)[0];
@@ -24,7 +25,7 @@ function plan(r,at,pause=0){
  const move=coopMove(r);r.warningAt=at+pause+600;r.landsAt=r.warningAt+move.tell;r.phase=phase;r.castHits=0;
 }
 function hurt(r,m,amount,move,at){
- if(m.hp<=0||m.left)return;
+ m.hp=Math.min(m.hp,playerMaxHealth(m,at));if(m.hp<=0||m.left)return;
  let damage=amount;if(m.dodgeUntil>=at&&m.dodgeUntil-at<=350){damage=0;m.counterUntil=at+1800+(m.build.counterWindow??0);m.lastFeedback='Perfect dodge · Counter ready';}
  if(damage&&m.ward>0&&at<=(m.wardUntil??0)){const block=Math.min(damage,m.ward);damage-=block;m.ward-=block;}
  if(damage)m.lastFeedback=move+' hit you for '+damage+' HP.';
@@ -37,16 +38,17 @@ export function advanceVaultParty(r,now){
   const due=Math.min(r.landsAt,r.burn?.nextAt??Infinity,...(r.adds??[]).filter(a=>a.hp>0).map(a=>a.landsAt));if(due>end)break;
   if(due===r.burn?.nextAt){const burn=r.burn,damage=Math.min(r.hp,burn.damage);r.hp-=damage;const source=r.members[burn.source];if(source){source.damage+=damage;source.threat+=damage;}if(burn.nextAt+1000<=burn.until)burn.nextAt+=1000;else delete r.burn;phaseChange(r,due);continue;}
   if(due===r.landsAt){
-   const move=coopMove(r);for(const [,m] of living(r))if(coopDanger(r,m.pos))hurt(r,m,Math.max(5,Math.round((30+move.damage-m.armour)*(due<(r.weakenedUntil??0)?.75:1))),move.name,due);
+   const move=coopMove(r);for(const [,m] of living(r))if(coopDanger(r,m.pos))hurt(r,m,Math.max(5,Math.round((30+move.damage-m.armour-mealArmour(m,due))*(due<(r.weakenedUntil??0)?.75:1))),move.name,due);
    r.lastAttack={at:due,move:move.name,shape:move.shape,center:move.center,origin:{...r.origin},target:{...r.targetTile}};r.weakenedUntil=0;
    r.attacks=(r.attacks??0)+1;plan(r,due,move.recovery);
   }else{
-   for(const add of r.adds??[]){if(add.hp<=0||add.landsAt!==due)continue;for(const [,m] of living(r))if(Math.hypot(m.pos.x-add.target.x,m.pos.y-add.target.y)<=1.1)hurt(r,m,Math.max(4,add.kind==='wisp'?14-m.armour:10-m.armour),add.kind==='wisp'?'Wisp Bolt':'Hatchling Bite',due);
+   for(const add of r.adds??[]){if(add.hp<=0||add.landsAt!==due)continue;for(const [,m] of living(r))if(Math.hypot(m.pos.x-add.target.x,m.pos.y-add.target.y)<=1.1)hurt(r,m,Math.max(4,add.kind==='wisp'?14-m.armour-mealArmour(m,due):10-m.armour-mealArmour(m,due)),add.kind==='wisp'?'Wisp Bolt':'Hatchling Bite',due);
     const target=living(r).sort((a,b)=>a[1].hp-b[1].hp)[0];if(target)add.target={...target[1].pos};add.landsAt=due+3800;
    }
   }
   if(!living(r).length)r.status='defeat';
  }
+ for(const m of Object.values(r.members))m.hp=Math.min(m.hp,playerMaxHealth(m,now));
  if(r.status==='battle'&&now>=r.expiresAt)r.status='expired';
 }
 function phaseChange(r,now){
@@ -59,7 +61,7 @@ function phaseChange(r,now){
 function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  if(!m.defeatLogged){m.defeatLogged=true;s.combatReports=[...(s.combatReports??[]),{id:'coop:'+r.id+':'+m.id,enemy:'depthsGuardian',room:'depthsVault',outcome:'defeat',endedAt:now,endedHealth:0,summary:normalizeCombatSummary({startedAt:r.startedAt??now,partial:true}),rewards:{},lostSpoils:depthsSpoils(s.depthsRun),defeat:{attack:m.cause??'Vault Guardian',damage:m.lastHit?.damage??0,tip:m.tip??vaultDefeatTip(m.cause)}}].slice(-10);}
  s.health=0;s.location='home';s.position={x:5,y:7};s.depthsRun=null;s.hunting.recoveryUntil=now+boarRules.recovery;delete s.vaultCoop;
- }else s.health=m.hp;}
+ }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
  const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,observedAt:now,
   targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
@@ -127,7 +129,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
    const splash=bladeSplash(power);let count=0;if(splash)for(const add of r.adds??[]){if(add.hp<=0||add.id===target?.id||Math.hypot(add.x-position.x,add.y-position.y)>splash.radius)continue;const hit=Math.min(add.hp,splash.damage);add.hp-=hit;m.damage+=hit;m.threat+=hit;count++;}if(count)text+='Splash hit '+count+' nearby reinforcements. ';
   }
   else if(power.form==='shield'){ally.ward=power.value;ally.wardUntil=now+5000;m.support++;text='Ward raised for '+ally.name+'. ';}
-  else if(power.form==='renewal'){if(ally.hp>=100)throw invalid('Choose an injured ally to heal.');ally.hp=Math.min(100,ally.hp+power.value);m.support++;text='Healed '+ally.name+'. ';}
+  else if(power.form==='renewal'){if(ally.hp>=playerMaxHealth(ally,now))throw invalid('Choose an injured ally to heal.');ally.hp=Math.min(playerMaxHealth(ally,now),ally.hp+power.value);m.support++;text='Healed '+ally.name+'. ';}
   else if(power.form==='focus'){r.landsAt+=Math.min(1000,power.value);m.support++;text='Guardian delayed. ';}
   else{m.nextDodgeAt=now;m.dodgeUntil=now+350;text='Dodge readied. ';}
   if(power.gem==='storm'&&r.phase===3&&r.move==='bossFan'&&now>=r.warningAt){plan(r,now,1800);m.support++;text+='Storm interrupted the volley! ';}

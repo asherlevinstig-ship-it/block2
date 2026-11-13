@@ -38,7 +38,7 @@ test('catch consumes hunger once and meals can refill hunger at full health',()=
  applyGameplayAction(s,'catch',{castId:id},10000);assert.equal(s.vitals.hunger,99);
  s.vitals.hunger=30;s.meals={grilledSilverfin:2};
  applyGameplayAction(s,'eat',{id:'grilledSilverfin'},11000);assert.equal(s.health,100);assert.equal(s.vitals.hunger,50);assert.equal(s.meals.grilledSilverfin,1);
- s.vitals.hunger=100;assert.throws(()=>applyGameplayAction(s,'eat',{id:'grilledSilverfin'},12000),/already full/);
+ s.vitals.hunger=100;applyGameplayAction(s,'eat',{id:'grilledSilverfin'},12000);assert.equal(s.vitals.mealBuff.startedAt,12000);assert.equal(s.meals.grilledSilverfin,undefined);
 });
 test('Auto food restores hunger alongside health without using extra protected meals',()=>{
  const s=normalizeState({health:50,vitals:{hunger:30},meals:{boarStew:3}});

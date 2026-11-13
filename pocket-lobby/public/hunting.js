@@ -1,3 +1,4 @@
+import {mealArmour,normalizeMealBuff} from './food-buffs.js';
 import {roleDamage,physicalPlating} from './enemy-roles.js';
 export {enemyRoleInfo,channelerWardActive} from './enemy-roles.js';
 export {combatBuild} from './combat-builds.js';
@@ -250,6 +251,7 @@ export function normalizeHunting(input={}){
     const stamina=input.encounter.stamina??100;
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    if(normalizeMealBuff(input.encounter.mealBuff))result.encounter.mealBuff=normalizeMealBuff(input.encounter.mealBuff);
     if(input.encounter.buildId!==undefined){if(!['adventurer','vanguard','duelist','spellweaver'].includes(input.encounter.buildId))throw new Error('Invalid combat build.');result.encounter.buildId=input.encounter.buildId;}
     if(input.encounter.buildRelics!==undefined){const ids=input.encounter.buildRelics;if(!Array.isArray(ids)||ids.length>2||new Set(ids).size!==ids.length||ids.some(id=>!['guardianMantle','thornstepBoots','runeboundHood'].includes(id))||ids.includes('guardianMantle')&&ids.includes('runeboundHood'))throw new Error('Invalid combat relics.');result.encounter.buildRelics=[...ids];}
     if(input.encounter.exhausted===true)result.encounter.exhausted=true;
@@ -389,7 +391,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;
     }
-    result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor);
+    result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor-mealArmour(encounter,now));
     if(result.taken&&now<(encounter.weakenedUntil??0)){
       result.weakened=Math.floor(result.taken*(encounter.weakenPercent??essenceEffects.shadow.reduction*100)/100);
       result.taken-=result.weakened;

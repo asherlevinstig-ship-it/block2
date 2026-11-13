@@ -87,9 +87,9 @@ let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,stealthXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10;
 const patienceLevel=()=>skillLevel(playerStats.patienceXp);
-const maxHealth=()=>100;
-let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
 let playerVitals=normalizeVitals(savedPlayerState?.vitals);
+const maxHealth=()=>playerMaxHealth(playerVitals,combatNow());
+let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
 let homeBedRest=savedPlayerState?.bedRest??null,bedRestPolling=false,nextBedPoll=0;
 let campRest=savedPlayerState?.campRest??null,campState=null,campRead=null,campReadAt=-Infinity,campLastPhase=null;
 const fishingGear=normalizeFishingGear(savedPlayerState?.fishingGear);
@@ -545,7 +545,7 @@ function updateOutfitPowersHud(now=combatNow()){
   if(!worn)continue;
   const cooldown=Math.ceil((outfitMagic.readyAt[id]-now)/1000);
   const context=power.combat&&!player.inCombat?'In combat':!power.combat&&player.inCombat?'After combat':null;
-  const full=!power.combat&&health>=100;
+  const full=!power.combat&&health>=maxHealth();
   button.querySelector('.dock-label').textContent=cooldown>0?'Ready in '+cooldown+'s':context??power.name;
   button.disabled=outfitPowerBusy||serverActionBusy||routineControlled()||cooldown>0||!!context||full;
   button.title=power.name+' ('+power.key+') · '+(power.combat?'Restore dodge stamina in combat':'Restore health between fights');
@@ -1055,7 +1055,7 @@ async function chooseDungeonPassage(choice){
 let visitingDungeonSide=false;
 function openDungeonSideChoices(){
   if(unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2)return;
-  $('sideRoomHealth').textContent=health+' / 100 HP · At risk: '+formatDepthsSpoils(depthsSpoils(depthsRun));
+  $('sideRoomHealth').textContent=health+' / '+maxHealth()+' HP · At risk: '+formatDepthsSpoils(depthsSpoils(depthsRun));
   for(const [id,side] of Object.entries(depthsSideRooms)){
     const button=$('sideVisit'+id[0].toUpperCase()+id.slice(1)),done=id==='rest'?depthsRun.shrineUsed:depthsRun.sideWins?.includes(id);
     const status=done?(id==='rest'?'Blessing used this expedition':id==='trial'&&!depthsRun.finds?.includes('sideSeal')?'Won · Stone waiting to claim':'Cleared · No repeat rewards'):side.danger;
@@ -1331,7 +1331,7 @@ function updateDepthsPanel(){
   $('depthsSideOptions').hidden=unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2;
   $('depthsSideReturn').hidden=unavailable()||!side;
   $('depthsShrineUse').hidden=unavailable()||sideId!=='rest';
-  $('depthsShrineUse').disabled=health>=100||!!depthsRun?.shrineUsed||depthsSpoils(depthsRun).gold<depthsSideRooms.rest.cost;
+  $('depthsShrineUse').disabled=health>=maxHealth()||!!depthsRun?.shrineUsed||depthsSpoils(depthsRun).gold<depthsSideRooms.rest.cost;
   $('depthsShrineUse').textContent=depthsRun?.shrineUsed?'Blessing used this expedition':'Restore up to 30 HP · Spend 15 unbanked gold';
   $('depthsSideClaim').hidden=unavailable()||sideId!=='trial'||!depthsRun?.sideWins?.includes('trial')||!!depthsRun?.finds?.includes('sideSeal');
   $('depthsSideFieldReturn').hidden=!side||unavailable();
@@ -1558,7 +1558,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   updatePlayerStats();updateCombatPanel();savePlayerState();note(combatMessage);
 }
 function beginBedRest(item){
-  if(health>=100){note('Your hearts are already full. Come back after your next adventure.');return;}
+  if(health>=maxHealth()){note('Your hearts are already full. Come back after your next adventure.');return;}
   if(!window.playerCloud?.gameplay){note('Connect to the server to rest in your bed.');return;}
   player.seat=null;
   serverGameplay('bedRest',{id:item.id}).then(()=>{nextBedPoll=performance.now()+700;note('Resting in your '+bedProfiles[item.type].name+'. Get up whenever you’re ready.');}).catch(error=>note(error.message));
@@ -1571,7 +1571,7 @@ function updateRiverBenchRest(){
  $('riverBenchRestPanel').setAttribute('aria-label',camping?'Trail camp rest':'Millbrook bench rest');
  $('riverBenchRestPanel').dataset.seat=camping?'camp':'bench';
  $('riverBenchRestLabel').textContent=camping?'TRAIL CAMP':'RESTING BY THE MILL';
- $('riverBenchRestStatus').textContent=camping?(campRest?'Resting by the fire · '+seconds+'s':'Fully rested · Health and mana restored'):seconds?'Recovering · '+seconds+'s · '+health+' / 100 HP':'Fully rested · Enjoy the river';
+ $('riverBenchRestStatus').textContent=camping?(campRest?'Resting by the fire · '+seconds+'s':'Fully rested · Health and mana restored'):seconds?'Recovering · '+seconds+'s · '+health+' / '+maxHealth()+' HP':'Fully rested · Enjoy the river';
  $('riverBenchGetUp').disabled=serverActionBusy||activityBusy;
 }
 async function standFromRiverBench(){
@@ -1590,9 +1590,9 @@ function updateBedRestPanel(time){
   for(const id of ['bedGuide','tradeGuide','upgradeGuide','contextGuide'])$(id).hidden=true;
   const projected=bedRestHealth(homeBedRest,combatNow()),rate=bedProfiles[homeBedRest.type].rate;
   $('bedRestTitle').textContent='Resting in your '+bedProfiles[homeBedRest.type].name;
-  $('bedRestHealth').textContent=projected+' / 100 HP';$('bedRestProgress').value=projected;
-  $('bedRestTime').textContent=projected>=100?'Finishing your rest…':Math.ceil((100-projected)/rate)+'s to full health · '+rate+' HP / sec';
-  for(let i=0;i<5;i++)$('bedRestHeart'+i).style.setProperty('--heart-fill',Math.max(0,Math.min(100,(projected-i*20)*5))+'%');
+  $('bedRestHealth').textContent=projected+' / '+maxHealth()+' HP';$('bedRestProgress').max=maxHealth();$('bedRestProgress').value=projected;
+  $('bedRestTime').textContent=projected>=maxHealth()?'Finishing your rest…':Math.ceil((maxHealth()-projected)/rate)+'s to full health · '+rate+' HP / sec';
+  for(let i=0;i<5;i++)$('bedRestHeart'+i).style.setProperty('--heart-fill',Math.max(0,Math.min(100,(projected-i*maxHealth()/5)*500/maxHealth()))+'%');
   $('bedRestStop').disabled=serverActionBusy||bedRestPolling;
   if(window.playerCloud?.gameplay&&!bedRestPolling&&!serverActionBusy&&!activityBusy&&time>=nextBedPoll){
     nextBedPoll=time+1000;bedRestPolling=true;
@@ -1600,7 +1600,7 @@ function updateBedRestPanel(time){
   }
 }
 function restAtTower(){
-  if(!['hub','home'].includes(currentRoom)||unavailable()||health>=100)return;
+  if(!['hub','home'].includes(currentRoom)||unavailable()||health>=maxHealth())return;
   if(atHome()){const bed=bestHomeBed({homeFurniture,ownedFurniture});if(bed){use(bed);return;}}
   if(window.playerCloud?.gameplay){
     serverGameplay('rest').then(()=>{combatMessage='Resting at the Tower. Your hearts will be restored shortly.';updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));return;
@@ -1628,7 +1628,7 @@ function updateCombatPanel(){
   $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
   $('combatPanel').hidden=!enemy||chamberCleared;
   $('scene').classList.toggle('in-combat',player.inCombat);
-  $('restAtTower').hidden=!!homeBedRest||!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
+  $('restAtTower').hidden=!!homeBedRest||!['hub','home'].includes(currentRoom)||health>=maxHealth()&&!hunting.recoveryUntil;
   $('restAtTower').disabled=!!hunting.recoveryUntil;
   $('restAtTower').textContent=hunting.recoveryUntil?'Resting · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s':'Rest · restore hearts';
   const notice=$('combatNotice');
@@ -4105,7 +4105,7 @@ function upgradePlan(path=firstUpgrade.choice){
   const destination=needsBait?'store':missingXp?activity:missingGold?(loot?'market':activity):shop;
   const current=fishing?fishingCatalog.rods[fishingGear.equippedRod]:weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   let benefit;
-  if(fishing){const before=fishingChances(patienceLevel(),fishingGear.equippedRod,playerStats.luckXp),after=fishingChances(patienceLevel(),id,playerStats.luckXp);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
+  if(fishing){const before=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp),after=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
   else benefit=(current?.damage??0)+' → '+item.damage+' base damage · '+((current?.interval??0)/1000).toFixed(1)+'s → '+(item.interval/1000).toFixed(1)+'s per attack.';
   const needs=[missingXp?missingXp+' '+(fishing?'Patience':'Strength')+' XP to reach level '+required:'Stats ready',missingGold?missingGold+' more gold':'Gold ready'].join(' · ');
   return {path,fishing,id,item,owned,missingXp,missingGold,needsBait,activity,shop,destination,benefit,needs};
@@ -4746,7 +4746,7 @@ function finishInteraction(){
     $('openFactions').onclick?.();
   }else if(currentRoom===factionHall&&item.type==='bench'){
     const sit=()=>{player.seat=item;player.back=false;player.direction='left';note(health<100?'Resting · Hearts recover in 15 seconds.':'You sit down in the faction hall.');};
-    if(health>=100)sit();
+    if(health>=maxHealth())sit();
     else serverGameplay('factionRest').then(sit).catch(error=>note(error.message));
   }else if(currentRoom===factionHall&&item.type==='stove'){
     window.towerReadFactionProject?.().then(hall=>{if(currentRoom!==factionHall)return;if(hall?.kitchen)openCampfire();else note('Complete the field kitchen upgrade to use the stove.');}).catch(error=>note(error.message));
@@ -4789,8 +4789,8 @@ function finishInteraction(){
   }else if(item.type==='riverBench'){
     if(currentRoom!=='millbrook'){note('A quiet place to watch the river. Rest at Millbrook to recover your hearts.');return;}
     if([...remotePeers.values()].some(peer=>peer.seat?.type==='riverBench'&&peer.seat.x===item.x&&peer.seat.y===item.y)){note('Someone is already sitting here. Try the bench again when it is free.');return;}
-    const sit=()=>{player.seat=item;player.back=false;player.direction='right';updateRiverBenchRest();note(health>=100?'You sit by the waterwheel. Choose Get up or click a tile to stand.':'Resting on the bench · Your hearts recover in 15 seconds.');};
-    if(health>=100){sit();return;}
+    const sit=()=>{player.seat=item;player.back=false;player.direction='right';updateRiverBenchRest();note(health>=maxHealth()?'You sit by the waterwheel. Choose Get up or click a tile to stand.':'Resting on the bench · Your hearts recover in 15 seconds.');};
+    if(health>=maxHealth()){sit();return;}
     serverGameplay('riverRest').then(()=>{sit();updateCombatPanel();}).catch(error=>note(error.message));
   }else if(item.type==='fishingPost'){
     if(window.playerCloud?.gameplay){startServerCast();return;}
@@ -4876,8 +4876,10 @@ function updateVitalsHud(){
  if(bridgePinned())updateBridgeGuide();
  if(load(goalFishingKey()+':task',null)||goalTaskSale)updateGoalTaskGuide();
  updateDepthsDecisionVitals();
- const values={health:Math.ceil(homeBedRest?bedRestHealth(homeBedRest,combatNow()):health),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
+ const values={health:Math.ceil(Math.min(maxHealth(),homeBedRest?bedRestHealth(homeBedRest,combatNow()):health)),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
  values.actionPoints=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
+ const buff=activeMealBuff(playerVitals,combatNow()),chip=$('mealBuffHud');chip.hidden=!buff;
+ if(buff){const seconds=Math.max(0,Math.ceil((buff.until-combatNow())/1000));$('mealBuffIcon').textContent=buff.icon;$('mealBuffName').textContent=buff.name;$('mealBuffDetail').textContent=buff.description;$('mealBuffTime').textContent=Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');chip.title=buff.description+' · One food buff at a time.';}
  const hungerStatus=$('hungerStatus');
  const condition=values.hunger===0?'Exhausted':values.hunger<=LOW_HUNGER?'Hungry':'';
  if(hungerStatus.textContent!==condition){
@@ -4885,9 +4887,9 @@ function updateVitalsHud(){
   hungerStatus.textContent=condition;
  }
  for(const [id,value] of Object.entries(values)){
-  const meter=$('vital'+id),number=$('vital'+id+'Value');
-  meter.value=value;meter.setAttribute('aria-label',id[0].toUpperCase()+id.slice(1)+' '+value+' of 100');
-  number.textContent=value+' / 100';$('vital'+id+'Row').dataset.low=String(value<=20);
+  const meter=$('vital'+id),number=$('vital'+id+'Value'),maximum=id==='health'?maxHealth():100;meter.max=maximum;
+  meter.value=value;meter.setAttribute('aria-label',id[0].toUpperCase()+id.slice(1)+' '+value+' of '+maximum);
+  number.textContent=value+' / '+maximum;$('vital'+id+'Row').dataset.low=String(value<=20);
  }
 }
 function advanceAnimation(time){
@@ -5163,7 +5165,7 @@ function renderCampfire(){
     const art=document.createElement('div');art.className='campfire-meal-art';art.innerHTML=mealArt(id);
     const content=document.createElement('div'),title=document.createElement('h3'),cost=document.createElement('p'),supply=document.createElement('small');
     title.textContent=recipe.name;cost.textContent=recipe.amount+' '+recipe.ingredient+' + '+recipe.timber+' timber';
-    supply.textContent=cold?'Add timber at the trail camp to cook.':locked?'Unlock at Cooking '+recipe.level:plan.reason?plan.message:(meals[id]??0)+' in bag · +'+recipe.xp+' Cooking XP';content.append(title,cost,supply);
+    supply.textContent=cold?'Add timber at the trail camp to cook.':locked?'Unlock at Cooking '+recipe.level:plan.reason?plan.message:(meals[id]??0)+' in bag · +'+recipe.xp+' Cooking XP';const benefit=document.createElement('small');benefit.textContent=mealBuffText(id);content.append(title,cost,supply,benefit);
     const button=document.createElement('button');button.type='button';button.textContent=locked?'Cooking '+recipe.level:'Cook · '+recipe.healing+' HP';button.setAttribute('aria-label','Cook '+recipe.name+' to restore up to '+recipe.healing+' HP');button.disabled=cold||!!plan.reason||!window.playerCloud?.gameplay;button.onclick=()=>cookMeal(id,button);
     card.append(art,content,button);cards.append(card);
   }
@@ -5182,14 +5184,14 @@ async function cookMeal(id,button){
   finally{renderCampfire();}
 }
 async function eatMeal(id){
-  if(unavailable()||health>=100&&playerVitals.hunger>=100)return;
+  if(unavailable()||!mealBuffs[id]&&health>=maxHealth()&&playerVitals.hunger>=100)return;
   const status=$('bagMealStatus');
   const before=health,beforeHunger=playerVitals.hunger;
   status.hidden=false;
   try{
     await serverGameplay('eat',{id});
     updateDepthsPanel();
-    const message=foodItems[id].name+' restored '+(foodItems[id].healing?(health-before)+' HP and ':'')+(playerVitals.hunger-beforeHunger)+' hunger.';
+    const message=foodItems[id].name+' restored '+(foodItems[id].healing?Math.max(0,health-before)+' HP and ':'')+(playerVitals.hunger-beforeHunger)+' hunger.'+(mealBuffs[id]?' '+mealBuffText(id):'');
     status.textContent=message;
     note(message);
   }catch(error){status.textContent=error.message;}
@@ -5213,7 +5215,7 @@ function bagEntries(){
     entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack · '+weaponStagger(id,combatGear.activeSwordUpgrade)+' stagger/hit',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Requires Strength '+w.strength+' · Agility '+w.agility+(w.rarity?' · Rare dungeon relic':''),run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods.filter(id=>!vaultedItem('rod',id))){
-    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id,playerStats.luckXp);
+    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp);
     entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch · '+odds.fine.toFixed(1)+'% fine · '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
   }
   if(woodcutting.axeOwned)entries.push({key:'axe',name:'Basic Axe',category:'gear',art:windowItemArt('axe'),quantity:1,equipped:woodcutting.equipped,description:'Your trusty tool for felling trees.',stats:'Train Woodcutting with every log.',action:woodcutting.equipped?'Unequip axe':'Equip axe',disabled:unavailable(),run:()=>$('equipAxe').onclick()});
@@ -5248,9 +5250,9 @@ function bagEntries(){
     if(!quantity||!recipe)continue;
     const busy=unavailable()||!!woodSession||!!fishingSession;
     entries.push({key:'meal:'+id,name:recipe.name,category:'materials',quantity,art:mealArt(id),
-      description:recipe.description,stats:'Restores '+foodFullness(recipe)+' hunger'+(recipe.healing?' and up to '+recipe.healing+' HP':'')+' · Hunger '+playerVitals.hunger+' / 100',
-      note:busy?'Finish your current activity before eating.':'Eat between fights.',
-      action:(health>=100||!recipe.healing)&&playerVitals.hunger>=100?'Already full':id===towerBread.id?'Eat bread':'Eat meal',disabled:busy||(health>=100||!recipe.healing)&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
+      description:recipe.description+(mealBuffs[id]?' '+mealBuffText(id):''),stats:'Restores '+foodFullness(recipe)+' hunger'+(recipe.healing?' and up to '+recipe.healing+' HP':'')+' · Hunger '+playerVitals.hunger+' / 100',
+      note:busy?'Finish your current activity before eating.':mealBuffs[id]?'Eat before an activity. One food buff at a time.':'Eat between fights.',
+      action:!mealBuffs[id]&&(health>=maxHealth()||!recipe.healing)&&playerVitals.hunger>=100?'Already full':id===towerBread.id?'Eat bread':'Eat meal',disabled:busy||!mealBuffs[id]&&(health>=maxHealth()||!recipe.healing)&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
   for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id]&&!barProducts[id]&&!miningFinds[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
@@ -5512,14 +5514,14 @@ function updatePlayerStats(){
   health=Math.min(health,maxHealth());
   const totalHealth=maxHealth();
   const hearts=Array.from({length:5},(_,i)=>{
-    const fill=Math.max(0,Math.min(1,(health-i*20)/20));
+    const fill=Math.max(0,Math.min(1,(health-i*totalHealth/5)/(totalHealth/5)));
     return '<span class="health-heart" aria-hidden="true">&#9829;<i style="clip-path:inset(0 '+((1-fill)*100)+'% 0 0)">&#9829;</i></span>';
   }).join('');
   $('healthValue').textContent=health+' / '+totalHealth+' HP';
   for(const id of ['healthHud','healthHearts']){
     $(id).innerHTML=hearts;
-    $(id).setAttribute('aria-label','Health '+health+' of '+totalHealth+'. Five hearts, 20 HP each.');
-    $(id).title=health+' / '+totalHealth+' HP - 20 HP per heart';
+    $(id).setAttribute('aria-label','Health '+health+' of '+totalHealth+'. Five hearts, '+(totalHealth/5)+' HP each.');
+    $(id).title=health+' / '+totalHealth+' HP - '+(totalHealth/5)+' HP per heart';
   }
   for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['stealth','Stealth'],['luck','Luck'],['leadership','Leadership']]){
     const {level:rank,progress:towardNext,target}=skillProgress(playerStats[id+'Xp']);
@@ -5535,7 +5537,7 @@ function updatePlayerStats(){
   $('patienceProgress').max=target;$('patienceProgress').value=xp;
   $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of '+target+' XP toward the next level');
   $('patienceXp').textContent=xp+' / '+target+' XP to level '+(level+1);
-  const odds=fishingChances(level,fishingGear.equippedRod,playerStats.luckXp);
+  const odds=fishingChances(level+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp);
   const luck=fishingLuckBonus(playerStats.luckXp);
   const luckText='+'+luck.fine.toFixed(1)+' fine / +'+luck.rare.toFixed(1)+' rare percentage points';
   $('attribute-luck-fishing').textContent=(luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.')+' Also improves pickpocketing odds.';
@@ -5562,7 +5564,7 @@ function applyServerGameplay(state){
   if(campRest&&currentRoom===moonwood.trailCamp.room&&!player.seat)sitAtTrailCamp();
   health=state.health;playerVitals=normalizeVitals(state.vitals);updateVitalsHud();
   if(previousCampRest&&!campRest&&combatNow()>=previousCampRest.endsAt&&health===100)note('Rest complete · Health and mana restored.');
-  if(previousRest&&!homeBedRest&&health>=100){showTransaction('Rest complete',[{icon:'♥',text:'+'+(100-previousRest.startHealth)+' HP · All five hearts restored'}]);note('Fully rested. Ready for your next adventure.');}
+  if(previousRest&&!homeBedRest&&health>=maxHealth()){showTransaction('Rest complete',[{icon:'♥',text:'+'+(100-previousRest.startHealth)+' HP · All five hearts restored'}]);note('Fully rested. Ready for your next adventure.');}
   meals={...state.meals};
   const previousFamiliar=familiarState;
   familiarState=normalizeFamiliars(state.familiars);
@@ -5948,9 +5950,9 @@ function updateFishingShop(){
   }
   selector.value=fishingGear.equippedRod;
   const offers=$('rodOffers');offers.replaceChildren();
-  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel(),fishingGear.equippedRod,playerStats.luckXp);
+  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp);
   for(const [id,rod] of Object.entries(fishingCatalog.rods)){
-    const odds=fishingChances(patienceLevel(),id,playerStats.luckXp),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
+    const odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
     const skill=patienceLevel()>=rod.patience,afford=credits>=rod.price;
     const speed=(currentRod.duration-rod.duration)/1000,quality=odds.fine+odds.rare-currentOdds.fine-currentOdds.rare;
     const deltas=equipped?[{text:'Your equipped rod',tone:'neutral'}]:[
@@ -6830,7 +6832,7 @@ $('hudChatPrompt').onclick=()=>$('openRoomChat').onclick();
 $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
-$('bedRestStop').onclick=()=>{if(!homeBedRest||bedRestPolling||serverActionBusy)return;serverGameplay('bedRestStop').then(()=>{updateBedGuide();updateActivityPrompt();note('You got up with '+health+' / 100 HP.');}).catch(error=>note(error.message));};
+$('bedRestStop').onclick=()=>{if(!homeBedRest||bedRestPolling||serverActionBusy)return;serverGameplay('bedRestStop').then(()=>{updateBedGuide();updateActivityPrompt();note('You got up with '+health+' / '+maxHealth()+' HP.');}).catch(error=>note(error.message));};
 
 let savingRules=false,ruleQueueDraft=[];
 function currentGoalState(){return {...(window.playerCloud?.initial??savedPlayerState??{}),credits,stats:playerStats,combatGear,fishingGear,characterRules};}

@@ -1,3 +1,4 @@
+import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
 import {combatBuild,essenceManaCost} from '../public/combat-builds.js';
 import {millRaidClock,millRaidRules,raidWave,raidThreat,raidDanger,bridgeBarricade,bridgeDanger,besideBarricade} from '../public/mill-raid.js';
 import {weaponProfile,armourProfile,armourSelection} from '../public/hunting.js';
@@ -85,13 +86,13 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   const threat=raidThreat(clock.opens,clock.opens+beat*4000+3999,event.wave);
   const flanked=flanker&&threat.lands>flanker.at&&bridgeDanger(state.position);
   if((raidDanger(state.position,threat)||flanked)&&threat.lands>(member.safeUntil??0)){
-   const damage=Math.max(3,threat.damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0)-build.armor);
+   const damage=Math.max(3,threat.damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0)-build.armor-mealArmour(state,threat.lands));
    const blocked=Math.min(damage,member.shield??0);member.shield=Math.max(0,(member.shield??0)-blocked);suffered+=damage-blocked;
   }
  }
  member.lastBeat=currentBeat;
  const recovered=now-member.lastAt<15000?Math.max(0,(event.healSeq??0)-(member.heals??0))*12:0;member.heals=event.healSeq??0;
- state.health=Math.max(0,Math.min(100,state.health+recovered)-suffered);
+ state.health=Math.max(0,Math.min(playerMaxHealth(state,now),state.health+recovered)-suffered);
  member.lastAt=now;member.health=state.health;
  if(state.health<=0){state.health=1;member.health=1;member.defeated=true;return {text:'The raiders overwhelmed you. Withdraw and rest by the mill.',damage:suffered,defeated:true};}
  let text=suffered?'-'+suffered+' HP':'',damage=0,repaired=0;
@@ -105,7 +106,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   if(mana<15||now-(member.lastHeal??0)<8000)throw invalid('Healing pulse needs 15 mana and an 8 second recovery.');
   state.vitals={...normalizeVitals(state.vitals),mana:mana-15,manaAt:now};member.lastHeal=now;
   member.support+=Object.entries(event.members).filter(([id,m])=>id!==playerId&&!m.defeated&&now-m.lastAt<15000&&m.health<100).length;
-  event.healSeq=(event.healSeq??0)+1;member.heals=event.healSeq;state.health=Math.min(100,state.health+12);member.health=state.health;text='Healing pulse · +12 HP to active defenders';
+  event.healSeq=(event.healSeq??0)+1;member.heals=event.healSeq;state.health=Math.min(playerMaxHealth(state,now),state.health+12);member.health=state.health;text='Healing pulse · +12 HP to active defenders';
  }
  if(action==='power'){
   const magic=normalizeMagic(state.magic),id=magic.slots[body.slot],power=essencePower(id,state.stats,magic,build),mana=manaAvailable(state.vitals,now);
@@ -118,7 +119,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   else if(power.form==='speed'){member.lastStrike=0;member.safeUntil=now+1000;}
   else{
    member.support+=Object.entries(event.members).filter(([id,m])=>id!==playerId&&!m.defeated&&now-m.lastAt<15000&&m.health<100).length;
-   event.healSeq=(event.healSeq??0)+1;member.heals=event.healSeq;state.health=Math.min(100,state.health+power.value);member.health=state.health;
+   event.healSeq=(event.healSeq??0)+1;member.heals=event.healSeq;state.health=Math.min(playerMaxHealth(state,now),state.health+power.value);member.health=state.health;
   }
   magic.cooldowns[id]=now+power.cooldown;state.magic=magic;state.vitals={...normalizeVitals(state.vitals),mana:mana-essenceManaCost(state),manaAt:now};text=power.name+'!';
  }

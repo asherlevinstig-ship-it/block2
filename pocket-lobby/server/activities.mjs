@@ -1,3 +1,4 @@
+import {playerMaxHealth} from '../public/food-buffs.js';
 import {chooseVaultMechanism} from '../public/vault-mechanisms.js';
 import {useGalleryLight} from '../public/gallery-light.js';
 import {detectCombatBuild} from '../public/combat-builds.js';
@@ -41,6 +42,7 @@ export function startCombatEncounter(state,enemy,now){
   if(state.outfitMagic)state.outfitMagic.veilUntil=0;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
+  if(state.vitals?.mealBuff)state.hunting.encounter.mealBuff=state.vitals.mealBuff;
   state.hunting.encounter.buildId=detectCombatBuild(state).id;
   const relics=detectCombatBuild(state).relics;if(relics?.length)state.hunting.encounter.buildRelics=relics;
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
@@ -148,6 +150,7 @@ export function advanceServerCombat(state,now,random=Math.random){
     state.hunting.encounter=encounter;
     if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
     if(due>now)break;
+    state.health=Math.min(state.health,playerMaxHealth(state,due));
     let event;
     if(automatic){
       if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery,combatStamina(encounter,state.stats,due,state.combatGear.moonwellCharmEquipped));
@@ -165,6 +168,7 @@ export function advanceServerCombat(state,now,random=Math.random){
     events.push(result(state,event,due,random));
     if(!availableActionPoints(state.actionPoints)&&combatCostsPoint(event))break;
   }
+  state.health=Math.min(state.health,playerMaxHealth(state,now));
   if(events.length)state.combatReceipt={id:crypto.randomUUID(),events};
   if(autoHasNoPoints(state,now)&&!state.plan?.activeHunt)stopForActionPoints(state,events.at(-1)?.at??now);
   return events;
@@ -173,7 +177,8 @@ export function settleActivities(state,now,random=Math.random){
   let changed=settleBedRest(state,now);
   if(settleTrailCampRest(state,now))changed=true;
   if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0;
-  if(state.hunting?.recoveryUntil&&now>=state.hunting.recoveryUntil){state.hunting.recoveryUntil=0;state.health=100;changed=true;}
+  if(state.hunting?.recoveryUntil&&now>=state.hunting.recoveryUntil){state.hunting.recoveryUntil=0;state.health=playerMaxHealth(state,now);changed=true;}
+  const capped=Math.min(state.health,playerMaxHealth(state,now));if(capped!==state.health){state.health=capped;changed=true;}
   return changed;
 }
 
@@ -286,13 +291,13 @@ export function activityAction(state,action,body,now,random){
     if(action==='rest'){
       idle(state);
       if(!['home','hub'].includes(state.location))throw new Error('Travel to the Tower to rest.');
-      if(state.health<100)state.hunting.recoveryUntil=now+boarRules.recovery;
+      if(state.health<playerMaxHealth(state,now))state.hunting.recoveryUntil=now+boarRules.recovery;
     }else settleActivities(state,now,random);
     return true;
   }
   if(action==='depthsEncounter'){idle(state);resolveDungeonEncounter(state,body.choice,now,random);return true;}
   if(action==='depthsSide'){idle(state);delete state.timberCut;visitDepthsSide(state,body.id);return true;}
-  if(action==='depthsShrine'){idle(state);useDepthsRest(state);return true;}
+  if(action==='depthsShrine'){idle(state);useDepthsRest(state,now);return true;}
   if(action==='depthsInspect'){
     idle(state);
     const item=moonwood.layouts[state.location]?.scenery.find(prop=>prop.type===body.id);
@@ -312,7 +317,7 @@ export function activityAction(state,action,body,now,random){
     inspectDepthsFind(state,item,now,body.choice);return true;
   }
   if(action==='depthsPassage'){
-    idle(state);delete state.timberCut;chooseDepthsPassage(state,body.choice);return true;
+    idle(state);delete state.timberCut;chooseDepthsPassage(state,body.choice,now);return true;
   }
   if(action==='depthsCacheEnter'||action==='depthsCacheLeave'){
     idle(state);delete state.timberCut;

@@ -1,3 +1,4 @@
+import {playerMaxHealth} from './food-buffs.js';
 import {validVaultMechanism} from './vault-mechanisms.js';
 export {vaultMechanisms,vaultSpillwayTiles,vaultScreen,chooseVaultMechanism} from './vault-mechanisms.js';
 import {normalizeGalleryLight,galleryLightReward} from './gallery-light.js';
@@ -27,13 +28,13 @@ export function visitDepthsSide(state,id){
  if(!canEnterDepthsSide(state.depthsRun,state.location,id))throw new Error('Clear Shell Gallery before entering an optional room.');
  state.location=depthsSideRooms[id].room;state.position={x:4,y:5};
 }
-export function useDepthsRest(state){
+export function useDepthsRest(state,now=Date.now()){
  const run=state.depthsRun,shrine=depthsSideRooms.rest;
  if(state.location!==shrine.room||run?.cleared!==2)throw new Error('Travel to the Quiet Shrine to rest.');
  if(run.shrineUsed)throw new Error('This shrine has already been used during this expedition.');
- if(state.health>=100)throw new Error('Your hearts are already full.');
+ if(state.health>=playerMaxHealth(state,now))throw new Error('Your hearts are already full.');
  if(depthsSpoils(run).gold<shrine.cost)throw new Error('Choose this blessing only with 15 unbanked gold.');
- const healed=Math.min(shrine.healing,100-state.health);state.health+=healed;run.shrineUsed=true;return healed;
+ const healed=Math.min(shrine.healing,playerMaxHealth(state,now)-state.health);state.health+=healed;run.shrineUsed=true;return healed;
 }
 
 export const moonwellShard={id:'moonwellShard',name:'Moonwell Shard',price:100};
@@ -97,21 +98,21 @@ export function inspectDepthsFind(state,item,now=Date.now(),choice){
     depthsRun.cacheStone=stone;
   }
   if(find.healing){
-    if(state.health>=100)throw new Error('Your hearts are already full. The flask is here if you need it later.');
-    state.health=Math.min(100,state.health+find.healing);
+    if(state.health>=playerMaxHealth(state,now))throw new Error('Your hearts are already full. The flask is here if you need it later.');
+    state.health=Math.min(playerMaxHealth(state,now),state.health+find.healing);
   }
   depthsRun.finds=[...found,item.type];
 }
 
 export const floodgateOpen=run=>run?.finds?.includes('sluiceLever')===true;
 
-export function chooseDepthsPassage(state,choice){
+export function chooseDepthsPassage(state,choice,now=Date.now()){
   const run=state.depthsRun;
   if(state.location!=='depthsGate'||run?.cleared!==1||run.routeChoice!=='pending'||!['safe','dangerous'].includes(choice))throw new Error('Choose an available passage after clearing Flooded Gate.');
   if(!floodgateOpen(run))throw new Error('Choose a passage after opening the sluice lever.');
  if(choice==='safe'){
     if(state.credits+depthsSafePassage.gold>100000000)throw new Error('Make room in your wallet before taking the safe passage.');
-    state.health=Math.min(100,state.health+depthsSafePassage.healing);
+    state.health=Math.min(playerMaxHealth(state,now),state.health+depthsSafePassage.healing);
     state.credits+=depthsSafePassage.gold;
     state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+depthsSafePassage.gold);
   }
