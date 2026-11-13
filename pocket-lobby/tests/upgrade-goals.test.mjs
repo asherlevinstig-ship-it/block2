@@ -2,11 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
-import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary} from '../public/upgrade-goals.js';
+import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary,ironSwordFishTask} from '../public/upgrade-goals.js';
 import {autoRecapSnapshot,autoRecapView} from '../public/auto-recap.js';
 import {AWAY_GRACE_MS as G} from '../public/character-rules.js';
 import {protectFishingState} from '../server/gameplay.mjs';
 import {boot} from './helpers/game-client.mjs';
+test('a short fish sale uses the current bag value and asks only for missing travel points',()=>{
+ const state=normalizeState({credits:112,fishStock:{perch:4},characterRules:{goal:{target:'weapon:ironSword',autoBuy:false}}});
+ assert.deepEqual(ironSwordFishTask(state,2,0),{quantity:4,gold:24,travel:2,questions:2,remaining:14});
+ assert.equal(ironSwordFishTask(state,2,1).questions,1);
+ assert.equal(ironSwordFishTask(state,0,0).questions,0);
+ assert.equal(ironSwordFishTask(state,null,0),null);
+});
 const start=(autoBuy=false,extra={},queue={})=>({...normalizeState({credits:55,stats:{patienceXp:40},location:'hub',adventure:{discovered:['pond']},characterRules:{enabled:true,keepBait:0,queue:{enabled:true,steps:[{type:'fishing',amount:1},{type:'sellFish',amount:0},{type:'rest'}],budget:60,reserveGold:0,...queue},goal:{target:'rod:oak',autoBuy}},...extra}),routineLastSeen:0});
 test('a pinned sword goal reports wallet progress since departure and ignores a different goal baseline',()=>{
  const state=start(false,{credits:112,stats:{strengthXp:1000,agilityXp:1000},characterRules:{goal:{target:'weapon:ironSword',autoBuy:false}}});

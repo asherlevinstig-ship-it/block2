@@ -6578,7 +6578,7 @@ function updateUpgradeGoalHud(){
   button.textContent=pinnedGoalSummary(currentGoalState());
   button.title=g.item.name+' · '+g.gold+' / '+g.item.price+' gold · '+g.requirements.map(r=>r.label+' '+r.current+'/'+r.level).join(' · ');
 }
-function openPinnedGoal(){
+function openPinnedGoal(sale=null){
   const g=upgradeGoalProgress(currentGoalState());
   const dialog=$('pinnedGoalDialog');
   const select=$('pinnedGoalTarget');
@@ -6588,15 +6588,56 @@ function openPinnedGoal(){
     option.value=id;option.textContent=item.name+' · '+item.price+' gold';select.append(option);
   }
   select.value=g?.target??'weapon:ironSword';
-  $('pinnedGoalStatus').textContent=g?pinnedGoalSummary(currentGoalState()):'Choose the upgrade you want to work toward.';
+  $('pinnedGoalStatus').textContent=(sale?.gold?'Sold '+sale.quantity+' fish for '+sale.gold+' gold. ':'')+(g?pinnedGoalSummary(currentGoalState()):'Choose the upgrade you want to work toward.');
   $('pinnedGoalSave').textContent=g?'Update pinned goal':'Pin goal';
   $('pinnedGoalClear').hidden=!g;
   $('pinnedGoalNext').hidden=!g;
   $('pinnedGoalAuto').hidden=!g||g.owned||g.ready;
+  renderIronSwordFishTask();
   const trySword=g?.target==='weapon:ironSword'&&combatGear.equippedWeapon==='ironSword';
   $('pinnedGoalNext').textContent=trySword?'Try it against the Wild Boar':g?.owned?(g.item.kind==='weapon'?'Open equipment':'Open inventory'):g?.ready?'Go to shop':g?.requirements.some(r=>!r.met)?(g.item.kind==='weapon'?'Train with the Wild Boar':'Go fishing'):'Go to the Trading Post';
   if(!dialog.open)dialog.showModal();
 }
+function currentIronSwordFishTask(){
+  const route=hudRoute('market');
+  const travel=currentRoom==='market'?0:route.length||null;
+  const ap=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
+  return ironSwordFishTask({...currentGoalState(),fishStock},travel,ap);
+}
+function renderIronSwordFishTask(){
+  const task=currentIronSwordFishTask();
+  $('ironSwordFishTask').hidden=!task;
+  if(!task)return;
+  $('ironSwordFishValue').textContent='Sell '+task.quantity+' fish for '+task.gold+' gold';
+  $('ironSwordFishTravel').textContent=task.travel?'Trading Post · '+task.travel+' AP to get there'+(task.questions?' · Answer '+task.questions+' more question'+(task.questions===1?'':'s'):' · You have enough AP'):'You’re at the Trading Post · Selling costs 0 AP';
+  $('ironSwordFishResult').textContent=task.remaining?'After selling: '+task.remaining+' gold to go.':'After selling: the gold requirement will be met.';
+  $('ironSwordFishAction').textContent=task.questions?'Answer questions':task.travel?'Follow route to Trading Post':'Sell all fish · '+task.gold+' gold';
+}
+let sellingGoalFish=false;
+$('ironSwordFishAction').onclick=async()=>{
+  const task=currentIronSwordFishTask();
+  if(!task||sellingGoalFish)return;
+  if(task.questions){
+    $('pinnedGoalDialog').close();
+    window.towerLearning?.open({travelAP:task.travel,onContinue:()=>openPinnedGoal()});
+    return;
+  }
+  if(task.travel){
+    $('pinnedGoalDialog').close();
+    setExplorationDestination('market');navigateHud('market');
+    return;
+  }
+  sellingGoalFish=true;
+  const button=$('ironSwordFishAction');
+  button.disabled=true;
+  try{
+    const {state}=await serverGameplay('sell',{id:'allFish'});
+    const receipt=state.tradeReceipt;
+    openPinnedGoal(receipt);
+    showTransaction('Fish sold',[{icon:'✦',text:pinnedGoalSummary(currentGoalState())}],receipt.gold);
+  }catch(error){$('pinnedGoalStatus').textContent=error.message;}
+  finally{sellingGoalFish=false;button.disabled=false;}
+};
 async function savePinnedGoal(target){
   const save=$('pinnedGoalSave'),clear=$('pinnedGoalClear');
   if(save.disabled)return;

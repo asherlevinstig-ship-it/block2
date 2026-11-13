@@ -1,4 +1,4 @@
-import {fishingCatalog} from './fishing.js';
+import {fishingCatalog,fishProducts} from './fishing.js';
 import {weaponCatalog} from './hunting.js';
 import {skillLevel,skillXpForLevel} from './skill-curve.js';
 export const upgradeTargets=Object.fromEntries([
@@ -33,4 +33,17 @@ export function pinnedGoalSummary(state){
  if(goal.owned)return goal.item.name+' · In Inventory';
  if(goal.ready)return goal.item.name+' · Ready to buy';
  return [goal.item.name,...(remaining?[remaining+' gold to go']:[]),...missing].join(' · ');
+}
+
+export function ironSwordFishTask(state,travel,ap){
+ const goal=upgradeGoalProgress(state);
+ if(goal?.target!=='weapon:ironSword'||goal.owned||goal.gold>=goal.item.price||travel===null)return null;
+ let quantity=0,gold=0;
+ for(const [id,fish] of Object.entries(fishProducts)){
+  const count=state.fishStock?.[id]??0;
+  quantity+=count;
+  gold+=count*fish.price;
+ }
+ if(!quantity)return null;
+ return {quantity,gold,travel,questions:Math.max(0,travel-ap),remaining:Math.max(0,goal.item.price-goal.gold-gold)};
 }

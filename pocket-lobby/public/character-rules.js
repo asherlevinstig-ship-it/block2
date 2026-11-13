@@ -7,7 +7,7 @@ export {simpleAutoModes,simpleAutoRules,simpleAutoRisks,simpleAutoRiskDetail,nor
 import {armourSelection,armourProfile} from './hunting.js';
 import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
-export {upgradeTargets,upgradeGoalProgress,pinnedGoalSummary} from './upgrade-goals.js';
+export {upgradeTargets,upgradeGoalProgress,pinnedGoalSummary,ironSwordFishTask} from './upgrade-goals.js';
 import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile,playerMeleeReach} from './hunting.js';
 import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor,ARENA_STEP_COST} from './dungeon-arena.js';
 import {manaReadyAt} from './player-vitals.js';
