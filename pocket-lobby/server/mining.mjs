@@ -1,3 +1,4 @@
+import {prospectorBonus} from '../public/rare-loot.js';
 import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit,miningFind} from '../public/mining.js';
 import {quarryForge,barProducts,forgeCraftReason,pickaxeIngredients} from '../public/forge.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
@@ -10,7 +11,7 @@ import {startCombatEncounter} from './activities.mjs';
 const invalid=message=>Object.assign(new Error(message),{status:400});
 export function awardOreStrike(state,node,cut,now,broken=false){
  const ore=oreProducts[node.ore],before=state.mining.xp;
- const base=node.yield??1,bonus=Math.min(miningBonusOre(state.mining,cut.id),Math.max(0,1000000-(state.huntingLoot[node.ore]??0)-base)),amount=base+bonus;
+ const base=node.yield??1,bonus=Math.min(miningBonusOre(state.mining,cut.id)+prospectorBonus(state,cut.id),Math.max(0,1000000-(state.huntingLoot[node.ore]??0)-base)),amount=base+bonus;
  state.huntingLoot[node.ore]=(state.huntingLoot[node.ore]??0)+amount;
  state.mining.xp=Math.min(MAX_SKILL_XP,before+ore.xp*base);useHunger(state);
  const find=broken?miningFind(cut.id,state.stats?.luckXp??0):null;

@@ -1,3 +1,4 @@
+import {rareBootsPenalty} from '../public/rare-loot.js';
 import {combatBuild} from '../public/combat-builds.js';
 import {armourSelection} from '../public/hunting.js';
 import {fishingCatalog} from '../public/fishing.js';
@@ -8,7 +9,7 @@ import {huntEnemies,canUseWeapon,createHunt,advanceHunt,beetleHuntUnlocked} from
 export function safeHuntPreview(state,id,minimum,remainingHealth=Math.max(40,(state.characterRules.combat.fleeBelow??20)+10)){
  const enemy=huntEnemies[id],gear=state.combatGear;
  if(state.health<minimum||!gear.equippedWeapon||!canUseWeapon(state.stats,gear.equippedWeapon))return null;
- let encounter={...createHunt(0,undefined,id),buildId:combatBuild(state).id},health=state.health,at=0;
+ let encounter={...createHunt(0,undefined,id),buildId:combatBuild(state).id,...(rareBootsPenalty(state)?{fortuneBoots:true}:{})},health=state.health,at=0;
  for(let n=0;n<300&&encounter;n++){
   at=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt);
   const result=advanceHunt(encounter,health,state.stats,at,encounter.nextPlayerAt<=encounter.nextBoarAt?()=>0:()=>.999,gear.equippedWeapon,gear.activeSwordUpgrade,armourSelection(gear),gear.moonwellCharmEquipped,gear.weaponEnchantments);

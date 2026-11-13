@@ -1,3 +1,4 @@
+import {anglerQualityBonus} from '../public/rare-loot.js';
 import {playerMaxHealth,mealPatience,normalizeMealBuff} from '../public/food-buffs.js';
 import {normalizeRobbery} from '../public/robbery-rules.js';
 import {normalizeLoadouts} from '../public/dungeon-preparation.js';
@@ -99,7 +100,7 @@ export function normalizeState(input={}){
   adventure.millCellarCleared=adventure.millCellarFound&&adventure.millCellarCleared;
   adventure.millCellarClaimed=adventure.millCellarCleared&&adventure.millCellarClaimed;
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
-  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>15||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>16||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
   const combatGear=normalizeCombatGear(input.combatGear);
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
@@ -222,7 +223,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   }
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=skillLevel(state.stats.patienceXp);
-    const fish=rollFishingCatch(level+mealPatience(state,plan.nextCatchAt),plan.rod,random,state.stats.luckXp);
+    const fish=rollFishingCatch(level+mealPatience(state,plan.nextCatchAt),plan.rod,random,state.stats.luckXp,false,anglerQualityBonus(state));
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
     state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");

@@ -1,3 +1,5 @@
+import {rareHunts,normalizeRareHunts,ownsRareItem} from '../public/rare-loot.js';
+import {anglerQualityBonus} from '../public/rare-loot.js';
 import {mealBuffs,playerMaxHealth,mealPatience} from '../public/food-buffs.js';
 import {consumeMeal} from '../public/cooking.js';
 import {cellarAction} from './mill-cellar.mjs';
@@ -104,6 +106,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(!canUseArmour(state.stats,id))throw new Error('Choose armour within your Vitality level. Requires Vitality '+item.vitality+'.');
     const owned=state.combatGear.ownedArmour??[];
     if(!owned.includes(id)){
+      if(item.loot)throw new Error('Defeat the Shardback Guardian to find these gloves.');
       location(state,['armory']);if(state.credits<item.price)throw new Error('Choose armour within your gold balance.');
       state.credits-=item.price;owned.push(id);
     }
@@ -145,6 +148,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     else{if(typeof body.autoDeposit!=='boolean'||!Number.isSafeInteger(body.keepWallet)||body.keepWallet<0||body.keepWallet>100000000)throw new Error('Choose a valid wallet amount and Auto deposit option.');state.bank={...normalizeBank(state.bank),autoDeposit:body.autoDeposit,keepWallet:body.keepWallet};}return;
   }
   if(action==='vaultVictoryAck'){available(state);if(state.depthsRun?.cleared!==3)throw new Error('Defeat the Vault Guardian first.');state.depthsRun.victorySeen=true;return;}
+  if(action==='rareHuntTarget'){available(state);if(body.id!==null&&(!Object.hasOwn(rareHunts,body.id)||ownsRareItem(state,body.id)))throw new Error('Choose unowned rare equipment to hunt.');const r=state.dungeonLoot.rares=normalizeRareHunts(state.dungeonLoot.rares)??{target:null,progress:{}};r.target=body.id;return;}
   if(action==='dungeonLootTarget'||action==='dungeonLootAck'){
     available(state);const loot=state.dungeonLoot=normalizeDungeonLoot(state.dungeonLoot);
     if(action==='dungeonLootTarget'){
@@ -269,7 +273,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     const before=state.stats.patienceXp;
     const shoalReeled=cast.shoalId!==undefined&&cast.shoalReeled===true;
     const fish=state.location===moonfinPool.room&&cast.room===moonfinPool.room&&rollMoonfin(cast.bonus,random)
-      ?'moonfin':rollFishingCatch(skillLevel(before)+mealPatience(state,now),cast.rod,random,state.stats.luckXp,shoalReeled);
+      ?'moonfin':rollFishingCatch(skillLevel(before)+mealPatience(state,now),cast.rod,random,state.stats.luckXp,shoalReeled,anglerQualityBonus(state));
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     const otterHelp=cast.otterHelp===true&&state.familiars?.equipped==='otter';
     const baitSaved=otterHelp&&familiarBond(state.familiars,'otter').rank>=3;

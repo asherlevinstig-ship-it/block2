@@ -863,7 +863,26 @@ function updateDungeonLootUi(){
   const key=JSON.stringify([p,combatGear,playerStats,selectedDungeonRelic,activeDungeonDrop?.id,dungeonLootBusy]);
   if($('dungeonLootDialog').open&&key!==lastDungeonLootUi){lastDungeonLootUi=key;renderDungeonLoot();}
 }
+function renderRareHunts(){
+ const list=$('rareHuntCards');list.replaceChildren();
+ for(const [id,item] of Object.entries(rareHunts)){
+  const p=rareHuntProgress(dungeonLootView(),id),pinned=dungeonLootState.rares?.target===id;
+  const card=document.createElement('article'),art=document.createElement('div'),copy=document.createElement('div');card.dataset.rare=id;
+  art.className='guardian-relic-art';art.innerHTML=item.kind==='clothing'?clothingArt(id):shopItemArt(id);
+  const title=document.createElement('b'),source=document.createElement('small'),perk=document.createElement('p'),cost=document.createElement('p'),status=document.createElement('strong'),pin=document.createElement('button'),route=document.createElement('button');
+  title.textContent=item.name;source.textContent=item.source;perk.textContent=item.perk;cost.textContent=item.cost;cost.className='guardian-relic-cost';
+  status.textContent=p.owned?'Collected · Equip from Inventory':Math.round(p.chance*100)+'% per victory · Guaranteed within '+p.remaining+' more victories';
+  pin.type=route.type='button';pin.textContent=pinned?'Unpin hunt':p.owned?'Collected':'Pin this hunt';pin.disabled=dungeonLootBusy||p.owned&&!pinned;
+  pin.onclick=async()=>{dungeonLootBusy=true;try{await serverGameplay('rareHuntTarget',{id:pinned?null:id});updateUpgradeGoalHud();}catch(e){$('dungeonLootError').textContent=e.message;}finally{dungeonLootBusy=false;renderDungeonLoot();}};
+  route.textContent='Track source';route.onclick=()=>{if(currentRoom!==item.room&&!hudRoute(item.room).length){$('dungeonLootError').textContent='Discover the route to '+item.source+' first.';return;}$('dungeonLootDialog').close();setExplorationDestination(item.room);note(item.source+(id==='anglersCloak'?' · Take the dangerous passage after Flooded Gate.':id==='luckyBoots'?' · Enter the Guarded Treasury after Shell Gallery.':''));};
+  copy.append(title,source,perk,cost,status,pin,route);card.append(art,copy);list.append(card);
+ }
+}
+function openRareHunts(){openDungeonLoot();if(!$('dungeonLootDialog').open)return;$('rareHuntCollection').hidden=false;$('guardianCollection').hidden=true;$('dungeonWeaponsSection').hidden=true;renderDungeonLoot();}
 function renderDungeonLoot(){
+  renderRareHunts();
+  const rareView=!$('rareHuntCollection').hidden;$('dungeonShowRare').setAttribute('aria-pressed',String(rareView));
+  if(rareView){$('dungeonLootTitle').textContent='Rare equipment hunts';$('dungeonShowWeapons').setAttribute('aria-pressed','false');$('dungeonShowClothing').setAttribute('aria-pressed','false');return;}
   const collection=$('guardianRelicCollection');collection.replaceChildren();
   for(const [item,relic] of Object.entries(guardianRelics)){
     const progress=guardianRelicProgress(dungeonLootView(),item),card=document.createElement('article'),art=document.createElement('div'),copy=document.createElement('div'),title=document.createElement('b'),source=document.createElement('small'),bonus=document.createElement('p'),cost=document.createElement('p'),status=document.createElement('strong');
@@ -894,7 +913,7 @@ function renderDungeonLoot(){
 }
 function openDungeonLoot(id=null,notice=null,clothing=false){
   if(unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
-  window.towerPauseForAccount();selectedDungeonRelic=id;activeDungeonDrop=notice;$('dungeonLootError').textContent='';$('guardianCollection').hidden=!clothing;$('dungeonWeaponsSection').hidden=clothing;renderDungeonLoot();$('dungeonLootDialog').showModal();$('dungeonLootDialog').scrollTop=0;
+  window.towerPauseForAccount();$('rareHuntCollection').hidden=true;selectedDungeonRelic=id;activeDungeonDrop=notice;$('dungeonLootError').textContent='';$('guardianCollection').hidden=!clothing;$('dungeonWeaponsSection').hidden=clothing;renderDungeonLoot();$('dungeonLootDialog').showModal();$('dungeonLootDialog').scrollTop=0;
 }
 async function changeDungeonTarget(){
   if(dungeonLootBusy||!selectedDungeonRelic)return;dungeonLootBusy=true;
@@ -975,6 +994,7 @@ function renderCombatRecap(report){
   if(rewards.cacheUnlocked)row('Essence Cache unlocked · '+essenceCacheGold+' gold + an Awakening Stone to collect');
   if(report.lostSpoils&&(report.lostSpoils.gold||Object.keys(report.lostSpoils.loot).length))row('Unbanked spoils lost · '+formatDepthsSpoils(report.lostSpoils));
   if(rewards.weapon)row(weaponCatalog[rewards.weapon].name+' · Rare weapon added to Inventory');
+  if(rewards.rareEquipment)row(rareHunts[rewards.rareEquipment].name+' · Rare equipment added to Inventory');
   if(rewards.clothing)row(clothingCatalog[rewards.clothing].name+' · Rare clothing added to Inventory');
   if(!list.children.length)row('Rewards · 0');
   $('combatRecapSpells').textContent=Object.entries(summary.spells).map(([id,count])=>essencePower(id).name+' ×'+count).join(' · ')||'Recorded spell casts · 0';
@@ -1513,7 +1533,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=depthsSideForRoom(currentRoom)?(currentRoom==='depthsTrial'?'Challenge won! Claim the Awakening Seal.':'Treasury secured. Your extra loot is unbanked.'):currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction(result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
+      showTransaction(result.rareDrop?rareHunts[result.rareDrop].name+' found!':result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.rareDrop?[{icon:'◆',text:rareHunts[result.rareDrop].name+' · Added to Inventory · Equip when ready'}]:[]),...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -1530,6 +1550,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
         combatMessage='Iron Sword trial complete! Sell the Shell Fragment for '+enemy.sellPrice+' gold or save it for a Stoneback Vest.';
         receipt.push({icon:'⬡',text:'Or keep it for a Stoneback Vest · add '+stonebackVest.timber+' timber at the Timber Hollow workbench'});
       }
+      if(result.rareDrop)receipt.unshift({icon:'◆',text:rareHunts[result.rareDrop].name+' · Rare equipment · Added to Inventory'});
       if(result.clothingDrop)receipt.unshift({icon:'✦',text:clothingCatalog[result.clothingDrop].name+' · Rare drop · Added to Inventory'});
       showTransaction(ironTrial?'Iron Sword trial complete!':enemy.name+' defeated',receipt);
     }
@@ -4105,7 +4126,7 @@ function upgradePlan(path=firstUpgrade.choice){
   const destination=needsBait?'store':missingXp?activity:missingGold?(loot?'market':activity):shop;
   const current=fishing?fishingCatalog.rods[fishingGear.equippedRod]:weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   let benefit;
-  if(fishing){const before=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp),after=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
+  if(fishing){const before=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp,anglerQualityBonus({wardrobe})),after=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp,anglerQualityBonus({wardrobe}));benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
   else benefit=(current?.damage??0)+' → '+item.damage+' base damage · '+((current?.interval??0)/1000).toFixed(1)+'s → '+(item.interval/1000).toFixed(1)+'s per attack.';
   const needs=[missingXp?missingXp+' '+(fishing?'Patience':'Strength')+' XP to reach level '+required:'Stats ready',missingGold?missingGold+' more gold':'Gold ready'].join(' · ');
   return {path,fishing,id,item,owned,missingXp,missingGold,needsBait,activity,shop,destination,benefit,needs};
@@ -5044,7 +5065,7 @@ function updateMining(time){
     const receipt=packet.state.miningReceipt;
     if(receipt?.id!==cut.id){miningTarget=null;miningBusy=false;note('The Shardback Guardian noticed you. Move out of its attack warnings!');return;}
     const ore=oreProducts[receipt.ore];
-    note((receipt.bonus?'Runic surge! ':'')+'+'+(receipt.amount??1)+' '+ore.name+' · +'+receipt.xp+' Mining XP');
+    note((receipt.bonus?'Ore bonus! ':'')+'+'+(receipt.amount??1)+' '+ore.name+' · +'+receipt.xp+' Mining XP');
     const depleted=oreState[target.id]?.readyAt>combatNow();
     if(depleted){miningTarget=null;note(receipt.find?'Discovered '+miningFinds[receipt.find].name+'! Kept in your bag.':'Deposit broken · Choose another rock while it recovers.');}
     miningBusy=false;
@@ -5215,7 +5236,7 @@ function bagEntries(){
     entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack · '+weaponStagger(id,combatGear.activeSwordUpgrade)+' stagger/hit',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Requires Strength '+w.strength+' · Agility '+w.agility+(w.rarity?' · Rare dungeon relic':''),run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods.filter(id=>!vaultedItem('rod',id))){
-    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp);
+    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp,anglerQualityBonus({wardrobe}));
     entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch · '+odds.fine.toFixed(1)+'% fine · '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
   }
   if(woodcutting.axeOwned)entries.push({key:'axe',name:'Basic Axe',category:'gear',art:windowItemArt('axe'),quantity:1,equipped:woodcutting.equipped,description:'Your trusty tool for felling trees.',stats:'Train Woodcutting with every log.',action:woodcutting.equipped?'Unequip axe':'Equip axe',disabled:unavailable(),run:()=>$('equipAxe').onclick()});
@@ -5537,7 +5558,7 @@ function updatePlayerStats(){
   $('patienceProgress').max=target;$('patienceProgress').value=xp;
   $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of '+target+' XP toward the next level');
   $('patienceXp').textContent=xp+' / '+target+' XP to level '+(level+1);
-  const odds=fishingChances(level+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp);
+  const odds=fishingChances(level+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp,anglerQualityBonus({wardrobe}));
   const luck=fishingLuckBonus(playerStats.luckXp);
   const luckText='+'+luck.fine.toFixed(1)+' fine / +'+luck.rare.toFixed(1)+' rare percentage points';
   $('attribute-luck-fishing').textContent=(luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.')+' Also improves pickpocketing odds.';
@@ -5853,7 +5874,7 @@ function updateArmoryShop(){
     ];
     offers.append(renderShopCard({document,id,name:weapon.name,category:id==='huntingSpear'?'HEAVY':id==='quickDagger'?'QUICK':'BALANCED',price:weapon.price,owned,equipped:active,stats:[['DAMAGE',damage+'–'+(damage+4)],['PER ATTACK',(weapon.interval/1000).toFixed(1)+'s']],deltas,requirements:'STR '+weapon.strength+'  ·  AGI '+weapon.agility,reason,action:vaultedItem('weapon',id)?'In vault':active?'Equipped':!skill?'Stats required':owned?'Equip weapon':credits<weapon.price?'Not enough gold':'Buy & equip',disabled:vaultedItem('weapon',id)||active||!skill||(!owned&&credits<weapon.price),onBuy:()=>buyArmoryWeapon(id)}));
   }
-  for(const [id,item] of Object.entries(armourCatalog)){
+  for(const [id,item] of Object.entries(armourCatalog).filter(([,item])=>!item.loot)){
     const owned=combatGear.ownedArmour?.includes(id),active=combatGear.equippedArmour===id,eligible=canUseArmour(playerStats,id);
     offers.append(renderShopCard({document,id,name:item.name,category:'ARMOUR',price:item.price,owned,equipped:active,stats:[['ABSORBS',item.absorption+' / hit'],['DODGE',item.dodgeCost+' stamina']],deltas:[{text:item.description,tone:'neutral'}],requirements:'VITALITY '+item.vitality,reason:!eligible?'Train Vitality to '+item.vitality:!owned&&credits<item.price?'Need '+(item.price-credits)+' more gold':'One armour piece at a time · Replaces your vest',action:active?'Equipped':!eligible?'Stats required':owned?'Equip armour':'Buy & equip',disabled:active||!eligible||(!owned&&credits<item.price)||serverActionBusy,onBuy:()=>equipArmour(id)}));
   }
@@ -5950,9 +5971,9 @@ function updateFishingShop(){
   }
   selector.value=fishingGear.equippedRod;
   const offers=$('rodOffers');offers.replaceChildren();
-  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp);
+  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp,anglerQualityBonus({wardrobe}));
   for(const [id,rod] of Object.entries(fishingCatalog.rods)){
-    const odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
+    const odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp,anglerQualityBonus({wardrobe})),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
     const skill=patienceLevel()>=rod.patience,afford=credits>=rod.price;
     const speed=(currentRod.duration-rod.duration)/1000,quality=odds.fine+odds.rare-currentOdds.fine-currentOdds.rare;
     const deltas=equipped?[{text:'Your equipped rod',tone:'neutral'}]:[
@@ -6676,8 +6697,9 @@ $('dungeonRelicCamp').onclick=$('dungeonRelicEntrance').onclick=()=>openDungeonL
 $('bagRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot();};
 $('bagGuardianRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot(null,null,true);};
 $('bagLoadouts').onclick=()=>{$('inventoryDialog').close();window.towerPreparation?.open();};
-$('dungeonShowWeapons').onclick=()=>{$('guardianCollection').hidden=true;$('dungeonWeaponsSection').hidden=false;renderDungeonLoot();};
-$('dungeonShowClothing').onclick=()=>{$('guardianCollection').hidden=false;$('dungeonWeaponsSection').hidden=true;renderDungeonLoot();};
+$('dungeonShowRare').onclick=()=>{$('rareHuntCollection').hidden=false;$('guardianCollection').hidden=true;$('dungeonWeaponsSection').hidden=true;renderDungeonLoot();};
+$('dungeonShowWeapons').onclick=()=>{$('rareHuntCollection').hidden=true;$('guardianCollection').hidden=true;$('dungeonWeaponsSection').hidden=false;renderDungeonLoot();};
+$('dungeonShowClothing').onclick=()=>{$('rareHuntCollection').hidden=true;$('guardianCollection').hidden=false;$('dungeonWeaponsSection').hidden=true;renderDungeonLoot();};
 $('guardianCollectionClose').onclick=async()=>{await closeDungeonLoot();if(!$('dungeonLootDialog').open)openInventory();};
 $('dungeonLootTarget').onclick=changeDungeonTarget;$('dungeonLootEquip').onclick=()=>closeDungeonLoot(true);$('dungeonLootKeep').onclick=$('dungeonLootClose').onclick=()=>closeDungeonLoot();
 $('dungeonLootDialog').oncancel=event=>{event.preventDefault();closeDungeonLoot();};
@@ -6838,6 +6860,7 @@ let savingRules=false,ruleQueueDraft=[];
 function currentGoalState(){return {...(window.playerCloud?.initial??savedPlayerState??{}),credits,stats:playerStats,combatGear,fishingGear,characterRules};}
 function updateUpgradeGoalHud(){
   const g=upgradeGoalProgress(currentGoalState()),button=$('upgradeGoalHud');button.hidden=!g;
+  const rare=dungeonLootState.rares?.target;if(rare&&rareHunts[rare]){$('goalSellCatch').hidden=true;updateGoalTaskGuide(null);const p=rareHuntProgress(dungeonLootView(),rare);button.hidden=false;button.textContent=rareHunts[rare].name+(p.owned?' · Found!':' · '+p.remaining+' wins or fewer');button.title=rareHunts[rare].source+' · '+rareHunts[rare].perk;return;}
   $('goalSellCatch').hidden=!(catchingGoalFish&&g?.target==='weapon:ironSword'&&!g.owned&&g.gold<g.item.price&&caughtFishCount()>=2&&!unavailable()&&!depthsRun);
   updateGoalTaskGuide(g);
   if(!g){
@@ -7329,7 +7352,7 @@ $('simpleAutoForm').onsubmit=event=>{event.preventDefault();saveSimpleAuto(true)
 $('simpleAutoSave').onclick=()=>saveSimpleAuto(false);
 $('simpleAutoAdvanced').onclick=()=>{$('simpleAutoDialog').close();openAdvancedCharacterRules();};
 $('simpleAutoDialog').oncancel=event=>{if(simpleAutoBusy)event.preventDefault();};
-$('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openPinnedGoal;
+$('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=()=>{if(dungeonLootState.rares?.target)openRareHunts();else openPinnedGoal();};
 $('clearAutoUpgradeGoal').onclick=()=>{$('rulesGoalTarget').value='';$('rulesGoalAutoBuy').checked=false;updateCharacterRulesPreview();$('rulesStatus').textContent='Completed goal cleared. Save Auto Mode to use your routine again.';};
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
 for(const id of ['rulesFoodEnabled','rulesFoodBelow','rulesFoodKeep','rulesBreadBudget','gambleAutoGame','gambleAutoColor','gambleAutoBet','gambleAutoLoss','gambleAutoReserve','gambleAutoProfit','gambleAutoRounds','rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;

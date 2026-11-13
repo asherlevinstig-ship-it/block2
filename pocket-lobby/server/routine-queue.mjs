@@ -1,3 +1,4 @@
+import {anglerQualityBonus} from '../public/rare-loot.js';
 import {playerMaxHealth,mealPatience} from '../public/food-buffs.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {beginAutoCooking} from './auto-cooking.mjs';
@@ -285,7 +286,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       p.currentLabel='Fighting '+enemy.name;changed=true;continue;
     }else if(type==='fishing'){
       if(state.fishingGear.bait<=p.keepBait){nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
-      const fish=rollFishingCatch(skillLevel(state.stats.patienceXp)+mealPatience(state,at),state.fishingGear.equippedRod,random,state.stats.luckXp);
+      const fish=rollFishingCatch(skillLevel(state.stats.patienceXp)+mealPatience(state,at),state.fishingGear.equippedRod,random,state.stats.luckXp,false,anglerQualityBonus(state));
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
       state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);state.fishingGear.bait--;
       const xp=Math.min(10,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;

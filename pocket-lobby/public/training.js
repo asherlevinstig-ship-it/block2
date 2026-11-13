@@ -1,3 +1,4 @@
+import {rareBootsPenalty} from './rare-loot.js';
 import {combatBuild,buildProfile} from './combat-builds.js';
 import {armourSelection} from './hunting.js';
 import {createHunt,advanceHunt,huntingTurn,enemyAttack,combatStamina,combatDodgeCost,weaponCatalog,weaponProfile,weaponStagger,canUseWeapon,staggerProfile,huntEnemies} from './hunting.js';
@@ -7,7 +8,7 @@ const lessonSteps=['dodge','counter','stagger','weak'];
 export function createTrainingSession(source,weapon=source.combatGear?.equippedWeapon??'trainingSword'){
  if(!Object.hasOwn(weaponCatalog,weapon))throw new Error('Choose a practice weapon.');
  const gear=structuredClone(source.combatGear??{}),stats=structuredClone(source.stats??{});
- const encounter=createHunt(0,1000);encounter.nextBoarAt=2500;const build=combatBuild({...source,hunting:{encounter:null},combatGear:{...gear,equippedWeapon:weapon}});encounter.buildId=build.id;if(build.relics?.length)encounter.buildRelics=build.relics;
+ const encounter=createHunt(0,1000);encounter.nextBoarAt=2500;const build=combatBuild({...source,hunting:{encounter:null},combatGear:{...gear,equippedWeapon:weapon}});encounter.buildId=build.id;if(rareBootsPenalty(source))encounter.fortuneBoots=true;if(build.relics?.length)encounter.buildRelics=build.relics;
  return {now:0,weapon,gear,stats,appearance:structuredClone(source.avatar??{}),encounter,events:{bursts:[]},completed:{},damage:0,perfects:0,counters:0,staggers:0,weakHits:0,misses:0,lastDodgeAt:null,lastTiming:null,feedback:'Watch the amber attack warning. Press Space just before impact.',log:[]};
 }
 function accept(session,event){

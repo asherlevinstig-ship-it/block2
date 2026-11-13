@@ -1,3 +1,5 @@
+import {normalizeRareHunts} from './rare-loot.js';
+export * from './rare-loot.js';
 import {weaponCatalog,weaponProfile,weaponStagger,huntingAttributes,canUseWeapon} from './hunting.js';
 import {normalizeGuardianProgress} from './guardian-relics.js';
 export {guardianRelics,guardianRelicProgress,awardGuardianRelic} from './guardian-relics.js';
@@ -8,7 +10,7 @@ export function normalizeDungeonLoot(input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid dungeon loot progress.');
  const {clears=0,streak=0,target='breakerSpear',notices=[]}=input;
  if(!Number.isSafeInteger(clears)||clears<0||clears>100000000||!Number.isInteger(streak)||streak<0||streak>=5||streak>clears||!dungeonRelics.includes(target)||!Array.isArray(notices)||notices.length>3)throw new Error('Invalid dungeon loot progress.');
- return {clears,streak,target,...(input.guardians!==undefined?{guardians:normalizeGuardianProgress(input.guardians)}:{}),notices:notices.map(n=>{if(!n||typeof n.id!=='string'||n.id.length>80||!dungeonRelics.includes(n.weapon)||!Number.isSafeInteger(n.at)||n.at<0||typeof n.guaranteed!=='boolean'||n.previousWeapon!==null&&!Object.hasOwn(weaponCatalog,n.previousWeapon))throw new Error('Invalid dungeon weapon reward.');return {id:n.id,weapon:n.weapon,at:n.at,guaranteed:n.guaranteed,previousWeapon:n.previousWeapon};})};
+ return {clears,streak,target,...(input.rares!==undefined?{rares:normalizeRareHunts(input.rares)}:{}),...(input.guardians!==undefined?{guardians:normalizeGuardianProgress(input.guardians)}:{}),notices:notices.map(n=>{if(!n||typeof n.id!=='string'||n.id.length>80||!dungeonRelics.includes(n.weapon)||!Number.isSafeInteger(n.at)||n.at<0||typeof n.guaranteed!=='boolean'||n.previousWeapon!==null&&!Object.hasOwn(weaponCatalog,n.previousWeapon))throw new Error('Invalid dungeon weapon reward.');return {id:n.id,weapon:n.weapon,at:n.at,guaranteed:n.guaranteed,previousWeapon:n.previousWeapon};})};
 }
 export function dungeonLootProgress(state){
  const loot=normalizeDungeonLoot(state.dungeonLoot),missing=dungeonRelics.filter(id=>!state.combatGear?.ownedWeapons?.includes(id));

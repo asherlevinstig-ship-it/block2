@@ -1,3 +1,4 @@
+import {rareHunts,ownsRareItem} from './rare-loot.js';
 import {mealRecipes} from './cooking.js';
 import {fishProducts} from './fishing.js';
 import {oreProducts,miningFinds} from './mining.js';
@@ -24,6 +25,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
   if(r?.status==='complete'&&(r.id!==old?.id||old?.status!=='complete')){const net=r.payout-r.bet;add('gamble:'+r.id,net<0?'loss':net>0?'gold':'push',(net<0?'−'+Math.abs(net):net>0?'+'+net:'±0')+' gold',net,now,'lounge');}
  }
  if(same&&(p.lastCookAt??0)>(b.lastCookAt??0)){const id=Object.keys(p.cookedMeals??{}).find(id=>(p.cookedMeals[id]??0)>(b.cookedMeals?.[id]??0));if(id)add('cook:'+p.startedAt+':'+p.lastCookAt,'catch','+1 '+mealRecipes[id].name,1,p.lastCookAt,'home');}
+ for(const [id,item] of Object.entries(rareHunts))if(ownsRareItem(after,id)&&!ownsRareItem(before,id))add('rare:'+id,'catch',item.name+' found!',1);
  const receipt=after.fishingReceipt;
  const timber=after.timberReceipt;
  if(timber?.id&&timber.id!==before.timberReceipt?.id)add('timber:'+timber.id,'timber','+'+timber.amount+' timber',timber.amount,timber.at??now,timber.room??room);

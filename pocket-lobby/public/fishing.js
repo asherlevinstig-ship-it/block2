@@ -34,12 +34,12 @@ function fishingLuckBonus(luckXp=0){
   const levels=Math.min(5,Math.max(0,skillLevel(luckXp)-1));
   return {fine:levels*.4,rare:levels*.2};
 }
-function fishingChances(level,rodId,luckXp=0){
+function fishingChances(level,rodId,luckXp=0,equipment={}){
   const practice=Math.min(10,Math.max(0,level-1));
   const bonus=fishingCatalog.rods[rodId].qualityBonus;
   const luck=fishingLuckBonus(luckXp);
-  const fine=20+Math.min(15,practice+bonus)+luck.fine;
-  const rare=3+Math.min(5,practice*.25+bonus*.35)+luck.rare;
+  const fine=20+Math.min(15,practice+bonus)+luck.fine+(equipment.fine??0);
+  const rare=3+Math.min(5,practice*.25+bonus*.35)+luck.rare+(equipment.rare??0);
   return {common:100-fine-rare,fine,rare};
 }
 export const shoalFineBonus=12;
@@ -55,10 +55,10 @@ export function pondShoalAt(now){
   return {id,name:bank.name,spots:bank.tiles.map(y=>({x:5,y})),water:{x:7.4,y:bank.y+.45},until:(id+1)*shoalStayMs};
 }
 
-function rollFishingCatch(level,rodId,random=Math.random,luckXp=0,shoalReeled=false){
+function rollFishingCatch(level,rodId,random=Math.random,luckXp=0,shoalReeled=false,equipment={}){
   const speciesRoll=random()*100,qualityRoll=random()*100;
   const species=speciesRoll<65?'silverfin':speciesRoll<95?'perch':'trout';
-  const chances=fishingChances(level,rodId,luckXp);
+  const chances=fishingChances(level,rodId,luckXp,equipment);
   const fine=chances.fine+(shoalReeled?shoalFineBonus:0);
   const quality=qualityRoll<chances.rare?'rare':qualityRoll<chances.rare+fine?'fine':'common';
   return quality==='common'?species:species+'_'+quality;

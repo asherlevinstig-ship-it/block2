@@ -1,3 +1,4 @@
+import {rareBootsPenalty,awardRareHunt} from '../public/rare-loot.js';
 import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
 import {validVaultMechanism,vaultMechanisms} from '../public/vault-mechanisms.js';
 import {dungeonFloor} from '../public/dungeon-arena.js';
@@ -17,7 +18,7 @@ const invalid=message=>Object.assign(new Error(message),{status:400});
 const living=r=>Object.entries(r.members).filter(([,m])=>m.hp>0&&!m.left);
 const uid=()=>crypto.randomUUID().slice(0,8).toUpperCase();
 function eligible(s){if(s.location!=='depthsVault'||s.depthsRun?.cleared!==2||s.hunting?.encounter||s.plan||s.report||s.controlMode==='auto'||s.health<=0)throw invalid('Travel to the Sunken Vault in Play mode, before starting the solo fight.');}
-function member(s,now){const build=combatBuild(s);return {id:uid(),name:s.avatar.name,hp:s.health,pos:{...s.position},lastAt:now,mealBuff:s.vitals?.mealBuff,damage:0,support:0,threat:0,lastStrike:0,dodgeUntil:0,counterUntil:0,nextDodgeAt:0,ward:0,used:[],build,armour:huntingAttributes(s.stats).armor+(armourProfile(armourSelection(s.combatGear))?.absorption??0)+build.armor,weapon:s.combatGear.equippedWeapon,attackInterval:huntingAttributes(s.stats,s.combatGear.equippedWeapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build).attackInterval};}
+function member(s,now){const build=combatBuild(s);return {id:uid(),name:s.avatar.name,hp:s.health,pos:{...s.position},lastAt:now,mealBuff:s.vitals?.mealBuff,damage:0,support:0,threat:0,lastStrike:0,dodgeUntil:0,counterUntil:0,nextDodgeAt:0,ward:0,used:[],build,armour:huntingAttributes(s.stats).armor+(armourProfile(armourSelection(s.combatGear))?.absorption??0)+build.armor-rareBootsPenalty(s),weapon:s.combatGear.equippedWeapon,attackInterval:huntingAttributes(s.stats,s.combatGear.equippedWeapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build).attackInterval};}
 function plan(r,at,pause=0){
  const phase=coopPhase(r),detail=vaultPhaseDetails[phase-1],players=living(r);if(!players.length){r.status='defeat';return;}
  const forced=players.find(([id])=>id===r.taunt&&at<r.tauntUntil),target=forced??players.sort((a,b)=>b[1].threat-a[1].threat)[0];
@@ -91,7 +92,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   if(r.vaultMechanism)s.depthsRun.vaultMechanism=r.vaultMechanism;
   delete s.vaultCoop;
   for(const [key,xp] of Object.entries({strengthXp:75,agilityXp:55,vitalityXp:75}))s.stats[key]=Math.min(MAX_SKILL_XP,s.stats[key]+xp);
-  awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
+  awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);awardRareHunt(s,'depthsGuardian',random);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
  }
  if(kind==='mechanism'){
   if(r.leader!==id||r.status!=='waiting'||r.vaultMechanism||s.depthsRun.vaultMechanism)throw invalid('Only the waiting party leader can choose one Vault mechanism.');
@@ -140,7 +141,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='taunt'){if(now<(m.tauntReadyAt??0))throw invalid('Wait for Taunt to recover.');r.taunt=id;r.tauntUntil=now+6000;m.tauntReadyAt=now+8000;m.support++;text='Taunted! The next attack will focus you; the current warning stays locked.';}
  if(kind==='dodge'){if(now<m.nextDodgeAt)throw invalid('Wait for Dodge to recover.');m.dodgeUntil=now+350;m.nextDodgeAt=now+1300;text='Dodge started. Time it just before impact.';}
- if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(target)target.hp-=hit;else r.hp-=hit;m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
+ if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(target)target.hp-=hit;else r.hp-=hit;if(m.weapon==='vampiricSword'&&(target?target.hp:r.hp)===0)m.hp=Math.min(playerMaxHealth(m,now),m.hp+4);m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
  m.lastFeedback=text;if(kind!=='dodge')spendActionPoint(s,now);syncPlayer(s,r,id,now);return {text,hit:damage};
 }
 export async function readVaultParty(db,id,playerId,now=Date.now()){

@@ -1,4 +1,7 @@
 export function shopItemArt(id){
+ if(id==='prospectorsGloves')return '<svg viewBox="0 0 64 64" shape-rendering="crispEdges" aria-hidden="true"><path d="M9 16h17v22l6 7-5 11H7V36zM38 16h17v20l4 9-5 11H34l-3-11 7-7z" fill="#785c43" stroke="#242b3c" stroke-width="2"/><path d="M10 17h15v8H10zM39 17h15v8H39z" fill="#d2ac70"/><path d="m16 30 6 7-6 8-6-8zm29 0 6 7-6 8-6-8z" fill="#8be3d7"/></svg>';
+ if(id==='vampiricSword')return '<svg viewBox="0 0 64 64" shape-rendering="crispEdges" aria-hidden="true"><path d="m32 3 6 9-2 25h-8l-2-25z" fill="#d3c6dc"/><path d="M31 8h3v28h-3z" fill="#a84e7c"/><path d="m18 34 14 4 14-4-4 10-10-3-10 3z" fill="#79548f"/><path d="M29 42h6v12h-6zM26 54h12v5H26z" fill="#dbb476"/><path d="m32 24 4 6-4 5-4-5z" fill="#e272a3"/></svg>';
+
   const relic=['breakerSpear','duelistBlade','quickfang'].includes(id);id={breakerSpear:'huntingSpear',duelistBlade:'ironSword',quickfang:'quickDagger'}[id]??id;
   const rod=['reed','oak','silver','moon'].includes(id);
   const metal=id==='wardenSword'?'#d9e5bd':'#d6e4df';

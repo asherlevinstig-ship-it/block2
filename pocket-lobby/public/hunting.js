@@ -24,7 +24,7 @@ export const counterRules={duration:1800,bonus:.5};
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
 export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
-export const armourCatalog={scoutLeather:{name:'Scout Leather',price:180,vitality:1,absorption:2,dodgeCost:35,description:'Layered leather, cross-body straps and light shoulder guards. Less protection, easier dodging.'},towerPlate:{name:'Tower Sentinel Plate',price:650,vitality:3,absorption:7,dodgeCost:65,description:'Steel breastplate, broad pauldrons and a Tower crest. Strong protection, expensive dodges.'}};
+export const armourCatalog={prospectorsGloves:{name:"Prospector’s Gloves",loot:true,vitality:1,absorption:0,dodgeCost:40,description:"Rare Shardback Guardian loot. 10% chance for +1 ore per swing. Occupies your armour slot; no absorption."},scoutLeather:{name:'Scout Leather',price:180,vitality:1,absorption:2,dodgeCost:35,description:'Layered leather, cross-body straps and light shoulder guards. Less protection, easier dodging.'},towerPlate:{name:'Tower Sentinel Plate',price:650,vitality:3,absorption:7,dodgeCost:65,description:'Steel breastplate, broad pauldrons and a Tower crest. Strong protection, expensive dodges.'}};
 export const armourSelection=gear=>gear?.equippedArmour??(gear?.stonebackVestEquipped?'stonebackVest':null);
 export const armourProfile=id=>id===true||id==='stonebackVest'?stonebackVest:armourCatalog[id]??null;
 export const combatDodgeCost=(equipped,build)=>Math.max(10,(armourProfile(equipped)?.dodgeCost??boarRules.dodgeCost)+(build?.dodge??0));
@@ -131,6 +131,7 @@ function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
   return response;
 }
 export const weaponCatalog={
+  vampiricSword:{name:"Vampiric Sword",rarity:"Rare",damage:18,interval:1300,strength:3,agility:2,description:"Vault Guardian rare loot. Restore 4 HP per kill while wielded. Slower than a Duelist’s Blade."},
   breakerSpear:{name:'Breaker Spear',rarity:'Rare',damage:28,interval:1750,strength:4,agility:2,staggerBonus:16,description:'Dungeon relic. +16 stagger per hit, with slower thrusts and less damage per hit than the Hunting Spear.'},
   duelistBlade:{name:'Duelist’s Blade',rarity:'Rare',damage:19,interval:1150,strength:3,agility:4,counterMultiplier:.75,description:'Dungeon relic. Perfect-dodge counters gain +75% damage instead of +50%.'},
   quickfang:{name:'Quickfang Dagger',rarity:'Rare',damage:11,interval:550,strength:2,agility:4,description:'Dungeon relic. Very fast strikes, but low damage per hit struggles against intact shells.'},
@@ -251,6 +252,7 @@ export function normalizeHunting(input={}){
     const stamina=input.encounter.stamina??100;
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    if(input.encounter.fortuneBoots===true)result.encounter.fortuneBoots=true;
     if(normalizeMealBuff(input.encounter.mealBuff))result.encounter.mealBuff=normalizeMealBuff(input.encounter.mealBuff);
     if(input.encounter.buildId!==undefined){if(!['adventurer','vanguard','duelist','spellweaver'].includes(input.encounter.buildId))throw new Error('Invalid combat build.');result.encounter.buildId=input.encounter.buildId;}
     if(input.encounter.buildRelics!==undefined){const ids=input.encounter.buildRelics;if(!Array.isArray(ids)||ids.length>2||new Set(ids).size!==ids.length||ids.some(id=>!['guardianMantle','thornstepBoots','runeboundHood'].includes(id))||ids.includes('guardianMantle')&&ids.includes('runeboundHood'))throw new Error('Invalid combat relics.');result.encounter.buildRelics=[...ids];}
@@ -391,7 +393,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;
     }
-    result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor-mealArmour(encounter,now));
+    result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor-mealArmour(encounter,now)+(encounter.fortuneBoots?2:0));
     if(result.taken&&now<(encounter.weakenedUntil??0)){
       result.weakened=Math.floor(result.taken*(encounter.weakenPercent??essenceEffects.shadow.reduction*100)/100);
       result.taken-=result.weakened;

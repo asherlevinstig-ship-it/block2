@@ -1,3 +1,4 @@
+import {rareBootsPenalty} from '../public/rare-loot.js';
 import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
 import {combatBuild,essenceManaCost} from '../public/combat-builds.js';
 import {millRaidClock,millRaidRules,raidWave,raidThreat,raidDanger,bridgeBarricade,bridgeDanger,besideBarricade} from '../public/mill-raid.js';
@@ -86,7 +87,7 @@ export function advanceMillRaid(raid,state,playerId,body,now){
   const threat=raidThreat(clock.opens,clock.opens+beat*4000+3999,event.wave);
   const flanked=flanker&&threat.lands>flanker.at&&bridgeDanger(state.position);
   if((raidDanger(state.position,threat)||flanked)&&threat.lands>(member.safeUntil??0)){
-   const damage=Math.max(3,threat.damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0)-build.armor-mealArmour(state,threat.lands));
+   const damage=Math.max(3,threat.damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0)-build.armor-mealArmour(state,threat.lands)+rareBootsPenalty(state));
    const blocked=Math.min(damage,member.shield??0);member.shield=Math.max(0,(member.shield??0)-blocked);suffered+=damage-blocked;
   }
  }
