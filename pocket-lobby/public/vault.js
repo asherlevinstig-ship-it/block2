@@ -10,17 +10,17 @@ export const vaultCatalog=Object.fromEntries([
  ...Object.entries(weaponCatalog).filter(([id])=>id!=='trainingSword').map(([id,item])=>['weapon:'+id,{name:item.name,kind:'weapon',id,stackable:false}]),
  ...Object.entries(fishingCatalog.rods).filter(([id])=>id!=='reed').map(([id,item])=>['rod:'+id,{name:item.name,kind:'rod',id,stackable:false}])
 ]);
-export function normalizeVault(input={}){
+export function normalizeVault(input={},catalog=vaultCatalog){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid item vault.');
  const validate=(values,rules)=>{
-  if(!values||typeof values!=='object'||Array.isArray(values)||Object.keys(values).length>Object.keys(vaultCatalog).length)throw new Error('Invalid item vault.');
-  const result={};for(const [id,count] of Object.entries(values)){const item=vaultCatalog[id];if(!Object.hasOwn(vaultCatalog,id)||!Number.isSafeInteger(count)||count<0||count>(item.stackable?VAULT_CAP:1)||rules&&!item.stackable)throw new Error('Invalid vault item or keep quantity.');if(count||rules)result[id]=count;}return result;
+  if(!values||typeof values!=='object'||Array.isArray(values)||Object.keys(values).length>Object.keys(catalog).length)throw new Error('Invalid item vault.');
+  const result={};for(const [id,count] of Object.entries(values)){const item=catalog[id];if(!Object.hasOwn(catalog,id)||!Number.isSafeInteger(count)||count<0||count>(item.stackable?VAULT_CAP:1)||rules&&!item.stackable)throw new Error('Invalid vault item or keep quantity.');if(count||rules)result[id]=count;}return result;
  };
  return {items:validate(input.items??{},false),rules:validate(input.rules??{},true)};
 }
 export const vaultedGear=(state,kind,id)=>!!state.bank?.vault?.items?.[kind+':'+id];
-export function vaultBagCount(state,key){
- const item=vaultCatalog[key];if(!item)return 0;
+export function vaultBagCount(state,key,catalog=vaultCatalog){
+ const item=catalog[key];if(!item)return 0;
  if(item.kind==='weapon')return state.combatGear?.ownedWeapons?.includes(item.id)&&!vaultedGear(state,'weapon',item.id)?1:0;
  if(item.kind==='rod')return state.fishingGear?.ownedRods?.includes(item.id)&&!vaultedGear(state,'rod',item.id)?1:0;
  return item.kind==='timber'?state.woodcutting?.timber??0:item.kind==='bait'?state.fishingGear?.bait??0:(item.kind==='fish'?state.fishStock:item.kind==='meal'?state.meals:state.huntingLoot)?.[item.id]??0;

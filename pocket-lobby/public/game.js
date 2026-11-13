@@ -3146,6 +3146,11 @@ function object(item,highlight=false,time=0) {
     for(const u of [.24,.63])for(const v of [.24,.63]){part(u-.1,v-.1,.23,.23,27,.5,'gold');part(u-.06,v-.06,.15,.15,27.6,.4,'black');}
     part(.27,.27,.38,.38,28,6,'trim');part(.24,.25,.45,.07,33,1,'gold');part(.30,.31,.30,.30,34,.5,'clay');
     const [sx,sy]=point(x+.48,y+.48,38);ctx.save();ctx.globalAlpha=.38;ctx.fillStyle='#d8dfcc';const drift=reducedMotion.matches?0:(time%1800)/1800;ctx.fillRect(sx-2,sy-drift*10,2,3);ctx.fillRect(sx+3,sy-4-drift*13,2,3);ctx.restore();
+  } else if(type==='chest'){
+    part(.07,.12,.86,.76,0,12,'wood');
+    part(.05,.10,.90,.80,12,6,['#bc8a58','#624135','#936043']);
+    for(const i of [.16,.73])part(i,.10,.10,.80,18,1,'gold');
+    part(.42,.89,.16,.05,9,5,'gold');
   } else if(type==='safe'){
     for(const i of [.17,.72])for(const j of [.17,.72])part(i,j,.10,.10,0,3,'black');
     part(.08,.08,.84,.84,3,22,['#71849b','#29374e','#425570']);
@@ -3485,6 +3490,7 @@ function updateWorldLabels(){
   if(currentRoom==='home'&&!homeBedRest&&!editing){const stove=homeFurniture.find(i=>i.type==='stove');if(stove)add('Cook',...point(stove.x+.5,stove.y+.5,36),'npc',()=>use(stove),'Home kitchen');}
   if(currentRoom==='home'&&!homeBedRest&&!editing){const item=bestHomeBed({homeFurniture,ownedFurniture});if(item)add('Rest',...point(item.x+.5,item.y+.5,29),'npc',()=>use(item),bedProfiles[item.type].rate+' HP / sec');}
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
+  if(currentRoom==='home'&&!editing)for(const item of homeFurniture.filter(item=>item.type==='chest'))add('Wooden chest',...point(item.x+.5,item.y+.5,25),'npc',()=>use(item));
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom===factionHall){
     for(const [type,label,height] of [['hallBoard','Project board',37],['bench','Rest',27],['stove','Field kitchen',35]]){
@@ -4709,6 +4715,8 @@ function finishInteraction(){
     openWatchLandmark(item);
   }else if(isRestBed(item.type)&&atHome()){
     beginBedRest(item);
+  }else if(item.type==='chest'&&atHome()){
+    openHomeChest();
   }else if(item.type==='safe'&&atHome()){
     window.towerOpenSafe?.();
   }else if(item.type==='trainingDummy'){
@@ -5349,6 +5357,53 @@ function updateInventory(){
   $('huntingInventory').hidden=spoils.length===0;
   $('huntingInventory').textContent=spoils.map(([id,count])=>tradeCatalog[id].name+' ×'+count).join(' · ');
 }
+let chestBusy=false;
+function openHomeChest(){
+  if(unavailable()||!window.playerCloud?.gameplay)return;
+  $('homeChestMessage').textContent='';
+  $('homeChestDirection').value='deposit';
+  renderHomeChest();
+  if(!$('homeChestDialog').open)$('homeChestDialog').showModal();
+}
+function renderHomeChest(){
+  const state=window.playerCloud.initial,stored=state.chestItems??{};
+  const deposit=$('homeChestDirection').value==='deposit';
+  const select=$('homeChestItem'),selected=select.value;
+  select.replaceChildren();
+  for(const [id,item] of Object.entries(chestCatalog)){
+    const count=deposit?vaultBagCount(state,id,chestCatalog):stored[id]??0;
+    if(!count)continue;
+    const option=document.createElement('option');
+    option.value=id;
+    option.textContent=item.name+' ×'+count;
+    option.dataset.count=count;
+    select.append(option);
+  }
+  if([...select.options].some(option=>option.value===selected))select.value=selected;
+  const count=Number(select.selectedOptions[0]?.dataset.count??0);
+  $('homeChestAmount').max=Math.max(1,count);
+  $('homeChestAmount').value=1;
+  $('homeChestEmpty').textContent=count?'':deposit?'No supplies or materials to store.':'The chest is empty.';
+  $('homeChestSubmit').textContent=deposit?'Store in chest':'Take to inventory';
+  for(const id of ['homeChestItem','homeChestAmount','homeChestSubmit'])$(id).disabled=chestBusy||!count;
+  $('homeChestDirection').disabled=chestBusy;
+}
+$('homeChestClose').onclick=()=>$('homeChestDialog').close();
+$('homeChestDirection').onchange=renderHomeChest;
+$('homeChestItem').onchange=renderHomeChest;
+$('homeChestForm').onsubmit=async event=>{
+  event.preventDefault();
+  if(chestBusy)return;
+  const item=$('homeChestItem').value,amount=$('homeChestAmount').valueAsNumber,kind=$('homeChestDirection').value;
+  if(!Object.hasOwn(chestCatalog,item)||!Number.isSafeInteger(amount)||amount<1)return;
+  chestBusy=true;
+  renderHomeChest();
+  try{
+    await serverGameplay('chestTransfer',{item,amount,kind});
+    $('homeChestMessage').textContent=amount+' × '+chestCatalog[item].name+(kind==='deposit'?' stored.':' returned to inventory.');
+  }catch(error){$('homeChestMessage').textContent=error.message;}
+  finally{chestBusy=false;renderHomeChest();}
+};
 function renderProgress(){
   renderTownContributions($('progressTownRecord'),window.playerCloud?.initial?.publicRequests??savedPlayerState?.publicRequests??[]);
   $('progressGold').textContent=new Intl.NumberFormat().format(credits);

@@ -8,20 +8,24 @@ function changeBag(state,item,amount){
  else{const stock=item.kind==='fish'?state.fishStock:item.kind==='meal'?state.meals:state.huntingLoot;stock[item.id]=(stock[item.id]??0)+amount;}
 }
 export function vaultTransfer(state,kind,key,amount){
- if(!Object.hasOwn(vaultCatalog,key)||!['deposit','withdraw'].includes(kind)||!Number.isSafeInteger(amount)||amount<1)throw new Error('Choose a vault item and a positive whole quantity.');
- const item=vaultCatalog[key];if(amount>(item.stackable?VAULT_CAP:1))throw new Error('Choose a valid vault quantity.');
- const bank=normalizeBank(state.bank),vault=normalizeVault(bank.vault),stored=vault.items[key]??0,bag=vaultBagCount(state,key);
+ const bank=normalizeBank(state.bank),vault=normalizeVault(bank.vault);
+ transferStorageItem(state,vault.items,vaultCatalog,kind,key,amount);
+ state.bank={...bank,vault};
+}
+export function transferStorageItem(state,items,catalog,kind,key,amount){
+ if(!Object.hasOwn(catalog,key)||!['deposit','withdraw'].includes(kind)||!Number.isSafeInteger(amount)||amount<1)throw new Error('Choose an item and a positive whole quantity.');
+ const item=catalog[key];if(amount>(item.stackable?VAULT_CAP:1))throw new Error('Choose a valid storage quantity.');
+ const stored=items[key]??0,bag=vaultBagCount(state,key,catalog);
  if(kind==='deposit'){
   if(bag<amount)throw new Error('Choose a quantity available in your bag.');
   if(item.kind==='weapon'&&state.combatGear.equippedWeapon===item.id||item.kind==='rod'&&state.fishingGear.equippedRod===item.id)throw new Error('Choose spare gear. Unequip this item before storing it.');
   if(stored+amount>(item.stackable?VAULT_CAP:1))throw new Error('Choose a quantity that fits in your vault.');
-  changeBag(state,item,-amount);vault.items[key]=stored+amount;
+  changeBag(state,item,-amount);items[key]=stored+amount;
  }else{
   if(stored<amount)throw new Error('Choose a quantity available in your vault.');
   if(item.stackable&&bag+amount>VAULT_CAP)throw new Error('Choose a quantity that fits in your bag.');
-  changeBag(state,item,amount);if(stored===amount)delete vault.items[key];else vault.items[key]=stored-amount;
+  changeBag(state,item,amount);if(stored===amount)delete items[key];else items[key]=stored-amount;
  }
- state.bank={...bank,vault};
 }
 export function autoStoreVault(state,plan,at){
  if(!ownsHomeSafe(state)||plan?.source!=='rules'||!state.bank?.vault)return 0;

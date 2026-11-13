@@ -17,7 +17,8 @@ import {activateVeil,awardVeilCloak,awardChallengeClothing,readyOutfitPower,norm
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {besideHomeSafe} from '../public/home-safe.js';
-import {vaultTransfer} from './vault.mjs';
+import {vaultTransfer,transferStorageItem} from './vault.mjs';
+import {besideHomeChest,chestCatalog,normalizeChest} from '../public/home-chest.js';
 import {normalizeVault} from '../public/vault.js';
 import {bankTransfer} from './banking.mjs';
 import {normalizeBank} from '../public/bank.js';
@@ -116,6 +117,14 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
   }
   if(action==='buyFurniture'){purchaseFurniture(state,body.id,body.quantity);return;}
   if(action==='buySafe'){purchaseFurniture(state,'safe',1);return;}
+  if(action==='chestTransfer'){
+    available(state);
+    if(!besideHomeChest(state)||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Travel beside your placed Wooden chest after finishing your activity.');
+    const items=normalizeChest(state.chestItems);
+    transferStorageItem(state,items,chestCatalog,body.kind,body.item,body.amount);
+    state.chestItems=items;
+    return;
+  }
   if(['goldBankTransfer','goldBankPolicy','vaultTransfer','vaultPolicy'].includes(action)){
     available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose banking after finishing your current activity.');
     if(!besideHomeSafe(state))throw new Error('Travel home, place your safe and walk beside it to open storage.');
@@ -349,6 +358,7 @@ export function protectFishingState(previous,next){
   else delete next.miningCut;
   if(previous.miningReceipt)next.miningReceipt=previous.miningReceipt;
   next.bank=previous.bank;
+  if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
   next.familiars=previous.familiars;
   next.adventure={...next.adventure};for(const key of [...watchFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');

@@ -15,6 +15,7 @@ import {settleExplorationPlan} from './exploration-plan.mjs';
 import {normalizeBedRest} from './bed-rest.mjs';
 import {ownsHomeSafe,migrateHomeSafe} from '../public/home-safe.js';
 import {validateVaultGear} from '../public/vault.js';
+import {normalizeChest} from '../public/home-chest.js';
 import {autoStoreVault} from './vault.mjs';
 import {normalizeBank} from '../public/bank.js';
 import {settleAutoGambling} from './auto-gambling.mjs';
@@ -125,6 +126,12 @@ export function normalizeState(input={}){
   if(input.learning)state.learning=input.learning;
   if(input.autoDisconnected?.reason==='action-points'&&Number.isSafeInteger(input.autoDisconnected.at)&&input.autoDisconnected.at>=0)state.autoDisconnected={reason:'action-points',at:input.autoDisconnected.at};
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
+  const placedChests=(state.homeFurniture??[]).filter(item=>item.type==='chest');
+  if((state.ownedFurniture.chest??0)>1||placedChests.length>(state.ownedFurniture.chest??0)||placedChests.some(item=>!Number.isInteger(item.x)||!Number.isInteger(item.y)))throw new Error('Invalid Wooden chest placement or ownership.');
+  if(input.chestItems!==undefined){
+    if(state.ownedFurniture.chest!==1)throw new Error('Invalid Wooden chest ownership.');
+    state.chestItems=normalizeChest(input.chestItems);
+  }
   state.safeVersion=input.safeVersion;migrateHomeSafe(state);
   if((state.ownedFurniture.safe??0)>1)throw new Error('Invalid home safe count.');
   if((state.homeFurniture??[]).filter(item=>item.type==='safe').length>1||(state.homeFurniture??[]).some(item=>item.type==='safe'&&(!ownsHomeSafe(state)||!Number.isInteger(item.x)||!Number.isInteger(item.y))))throw new Error('Invalid home safe placement.');

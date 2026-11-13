@@ -5,7 +5,7 @@ import {socialRooms,roomBoxes,reachableMove} from '../public/shared-world.js';
 import {handlePlayerApi} from '../server/player-api.mjs';import {testDatabase} from './db-helper.mjs';import {boot} from './helpers/game-client.mjs';
 test('all furniture purchases charge the catalogue price and preserve existing placed and free items',()=>{
  for(const [id,item] of Object.entries(furnitureCatalog)){
-  const s=normalizeState({credits:10000,location:'furnishings'}),before=s.ownedFurniture[id]??0,q=id==='safe'?1:2;
+  const s=normalizeState({credits:10000,location:'furnishings'}),before=s.ownedFurniture[id]??0,q=item.limit??2;
   applyGameplayAction(s,'buyFurniture',{id,quantity:q,price:0},1000);assert.equal(s.credits,10000-item.price*q);assert.equal(s.ownedFurniture[id],before+q);assert.equal(s.ownedFurniture.bed,id==='bed'?3:1);assert.deepEqual(s.homeFurniture,[]);assert.equal(s.goldEarned,0);
   assert.deepEqual(normalizeState(s).ownedFurniture,s.ownedFurniture);
   const placed={id:1,type:id,x:4,y:4,rot:1};
@@ -14,6 +14,27 @@ test('all furniture purchases charge the catalogue price and preserve existing p
   const [w,d]=item.size;
   assert.deepEqual(roomBoxes('home',home.homeFurniture),[{x:4,y:4,w:d,d:w}]);
  }
+});
+test('chest contents survive pickup, saves and replacement without changing the safe',()=>{
+ let s=normalizeState({location:'furnishings',fishStock:{perch:4},huntingLoot:{ironOre:3}});
+ applyGameplayAction(s,'buyFurniture',{id:'chest',quantity:1},1000);
+ assert.equal(s.credits,25);
+ const chest={id:1,type:'chest',x:4,y:4,rot:0};
+ s=normalizeState(protectFishingState(s,{...structuredClone(s),location:'home',position:{x:4,y:5},homeFurniture:[chest]}));
+ const ap=s.actionPoints.value;
+ const move=(kind,item,amount)=>applyGameplayAction(s,'chestTransfer',{kind,item,amount},1000);
+ move('deposit','fish:perch',3);move('deposit','loot:ironOre',2);
+ assert.equal(s.fishStock.perch,1);assert.equal(s.huntingLoot.ironOre,1);
+ assert.equal(s.actionPoints.value,ap);
+ assert.equal(s.bank.vault,undefined);
+ s=normalizeState(protectFishingState(s,{...structuredClone(s),homeFurniture:[],chestItems:{'fish:perch':99}}));
+ assert.throws(()=>move('withdraw','fish:perch',1),/placed Wooden chest/);
+ assert.equal(s.chestItems['fish:perch'],3);
+ s=normalizeState(protectFishingState(s,{...structuredClone(s),homeFurniture:[chest]}));
+ assert.throws(()=>move('withdraw','fish:perch',4),/quantity/);
+ move('withdraw','fish:perch',3);move('withdraw','loot:ironOre',2);
+ assert.equal(s.fishStock.perch,4);assert.equal(s.huntingLoot.ironOre,3);
+ assert.deepEqual(s.chestItems,{});
 });
 test('invalid orders, low wallet balances, bank-only wealth and activity locks leave the character unchanged',()=>{
  for(const body of [{id:'moonbloom',quantity:1},{id:'__proto__',quantity:1},{id:'sofa',quantity:0},{id:'sofa',quantity:-1},{id:'sofa',quantity:1.5},{id:'sofa',quantity:100},{id:'safe',quantity:2}]){

@@ -21,7 +21,8 @@ export const furnitureCatalog={
  silkScreen:{name:'Moonwood Screen',category:'showpieces',price:140,size:[2,1],description:'A folding screen painted with the peaks of Moonwood.'},
  bookcase:{name:'Bookshelf',category:'storage',price:95,size:[2,1],description:'A tall shelf for stories and keepsakes. Decorative only; also craftable with timber.'},
  stove:{name:'Cooking stove',category:'storage',price:200,size:[1,1],description:'Cook fish and hunted meat into healing meals at home. Uses timber as fuel. Unlock stronger recipes with Cooking XP; Auto can stock meals while you’re away.'},
- safe:{name:'Home safe',category:'storage',price:HOME_SAFE_PRICE,size:[1,1],limit:1,description:'Protect gold, supplies and spare gear. Place it at home and click to open. Auto can save into it while you’re away.'}
+ safe:{name:'Home safe',category:'storage',price:HOME_SAFE_PRICE,size:[1,1],limit:1,description:'Protect gold, supplies and spare gear. Place it at home and click to open. Auto can save into it while you’re away.'},
+ chest:{name:'Wooden chest',category:'storage',price:75,size:[1,1],limit:1,description:'Place at home to store fish, timber, bait, meals and materials. Pick it up and place it again to access the same contents.'}
 };
 export function catalogFurnitureSize({type,rot=0}){
  const size=Object.hasOwn(furnitureCatalog,type)?furnitureCatalog[type].size:null;
@@ -32,7 +33,7 @@ export function purchaseFurniture(state,id,quantity=1){
  if(state.location!=='furnishings')throw new Error('Travel to the physical Tower Furnishings shop to buy furniture.');
  if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing')throw new Error('Invalid activity. Take control and finish your activity before shopping.');
  const item=furnitureCatalog[id],owned=state.ownedFurniture?.[id]??0,cost=item.price*quantity;
- if(!Number.isSafeInteger(owned)||owned<0||owned+quantity>(item.limit??1000000))throw new Error(item.limit?'You already own a home safe. Find it in Furniture.':'Invalid furniture quantity. Your inventory is full.');
+ if(!Number.isSafeInteger(owned)||owned<0||owned+quantity>(item.limit??1000000))throw new Error(item.limit?'You already own this storage furniture. Find it in Furniture.':'Invalid furniture quantity. Your inventory is full.');
  if(!Number.isSafeInteger(state.credits)||state.credits<cost)throw new Error('Invalid balance. You need '+cost+' wallet gold for this order.');
  state.credits-=cost;state.ownedFurniture??={};state.ownedFurniture[id]=owned+quantity;
  if(id==='safe')state.safeVersion=1;
