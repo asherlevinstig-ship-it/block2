@@ -513,7 +513,7 @@
       const multiplayer=await import('./multiplayer.js');
       const training=await import('./training.js');
       const dungeonLoot=await import('./dungeon-loot.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
+      Object.assign(window,{towerCharacterArt,autoStatus},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
       const combatBuilds=await import('./combat-builds.js');window.towerCombatBuild=combatBuilds.combatBuild;
       const robberyRules=await import('./robbery-rules.js');window.towerEquipmentStats=robberyRules.equipmentStats;window.towerItemStatText=robberyRules.itemStatText;
       window.towerInitialState=packet.state;

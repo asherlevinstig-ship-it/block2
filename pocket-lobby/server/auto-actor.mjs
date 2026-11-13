@@ -46,7 +46,7 @@ export class AutoActor{
   if(peer){
    peer.mining=motion.moving?null:miningPose(state);
    peer.walk=this.actor.walk??null;
-   peer.fishingSpot=!!state.plan?.fishingWork?.spot&&!state.plan?.foodTrip;
+   peer.fishingSpot=!!state.plan?.fishingWork?.spot&&!state.plan?.foodTrip&&!state.plan?.mealStockTrip;
    peer.fishingBatch=state.plan?.fishingWork?.batchUntil??null;
    peer.fishing=motion.moving?null:sharedFishingPose(state);
    peer.workBatch=quietWorkDeadline(state,motion,this.actor.audience,Date.now(),this.actor.quietUntil);

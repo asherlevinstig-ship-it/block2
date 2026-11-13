@@ -27,6 +27,7 @@ import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.
 import {normalizeMagic} from '../public/essences.js';
 import {furnitureCatalog} from '../public/furniture-catalog.js';
 import {foodItems} from '../public/cooking.js';
+import {beginAutoCooking,stopAutoCooking} from './auto-cooking.mjs';
 import {normalizeOutfitMagic} from '../public/outfit-magic.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
@@ -191,6 +192,8 @@ export function finishAutoFoodWork(state,reason,at){
 function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   const plan=state.plan;
   if(!plan)return false;
+  if(plan.mealStockTrip)return (stop||now>=plan.endAt)&&stopAutoCooking(state,plan,stop?'returned':'away-cap',Math.min(now,plan.endAt),stop?'Returned to manual play.':'Auto session complete.');
+  if(!stop&&now<plan.endAt&&plan.nextAt==null&&beginAutoCooking(state,plan,now))return true;
   if(plan.foodTrip)return (stop||now>=plan.endAt)&&finishAutoFoodWork(state,stop?'returned':'away-cap',Math.min(now,plan.endAt));
   if(plan.kind==='exploring')return settleExplorationPlan(state,now,{stop});
   if(plan.kind==='gambling')return settleAutoGambling(state,now,{stop,random});

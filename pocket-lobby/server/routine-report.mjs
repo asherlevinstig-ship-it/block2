@@ -11,7 +11,7 @@ export function finishRoutineReport(state,now){
   releaseAutoPoints(state,report.endedAt);
   autoBankGold(state,report,report.endedAt);
   state.controlMode='play';
-  const foodStop=['action-points','out-of-food','food-reserve'].includes(report.reason);
+  const foodStop=['action-points','out-of-food','food-reserve','stove-required','stove-unreachable','cooking-supplies','cooking-level','inventory-full'].includes(report.reason);
   if(!foodStop&&report.kind==='woodcutting'&&state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=report.timberTarget)report.reason='target-reached';
   else if(!foodStop&&report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.kind!=='rest'&&report.kind!=='woodcutting'&&state.fishingGear.bait<=report.keepBait)report.reason='bait-reserve';
   else if(!foodStop&&report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.endedAt>=report.routineCapAt)report.reason='away-cap';

@@ -1,4 +1,5 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
+import {beginAutoCooking} from './auto-cooking.mjs';
 import {spendAutoPoint} from './action-points.mjs';
 import {stopForActionPoints} from './action-points.mjs';
 import {availableActionPoints} from '../public/action-points.js';
@@ -142,6 +143,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,report.endedAt,'Won '+p.stepCount+' fights');
       continue;
     }
+    if(!stop&&p.nextAt===null&&p.cursorAt<=until&&p.cursorAt<p.endAt&&beginAutoCooking(state,p,p.cursorAt))return true;
     if(!stop&&p.simpleMode==='random'&&p.nextAt===null&&p.cursorAt<=until&&p.cursorAt<p.endAt){
       const need=randomNeed(state,p,p.cursorAt);
       if(need?.stop){p.plannerReason=need.reason;return finish(state,p,need.stop,p.cursorAt);}

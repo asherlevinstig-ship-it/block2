@@ -1,4 +1,5 @@
 import {finishRoutineReport} from './routine-report.mjs';
+import {beginAutoCooking} from './auto-cooking.mjs';
 import {spendAutoPoint} from './action-points.mjs';
 import {isSmartlyDressed} from '../public/wardrobe.js';
 import {autoBankGold} from './banking.mjs';
@@ -17,6 +18,7 @@ export function settleAutoGambling(state,now,{stop=false,random=Math.random}={})
  const initial=limit();if(initial)return finish(state,p,initial,Math.min(now,p.nextRoundAt));
  while(p.nextRoundAt<=until){
   const at=p.nextRoundAt,before=state.stats.luckXp??0;
+  if(!stop&&beginAutoCooking(state,p,at))return true;
   // Work from a shallow state view so only this server-owned runner may use the real table engine during a plan.
   const table={...state,plan:undefined,report:undefined};
   gamblingAction(table,'gamble',{game:c.game,bet:c.bet,color:c.color},at-2400,random===Math.random?undefined:random);

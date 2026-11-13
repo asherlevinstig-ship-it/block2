@@ -4,7 +4,9 @@ export function normalizeFoodPolicy(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Choose valid Auto food rules.');
  const {enabled=false,eatBelow=50,keepMeals=2,breadBudget=0}=input;
  if(typeof enabled!=='boolean'||!Number.isSafeInteger(eatBelow)||eatBelow<1||eatBelow>100||!Number.isSafeInteger(keepMeals)||keepMeals<0||keepMeals>1000||!Number.isInteger(breadBudget)||breadBudget<0||breadBudget>300)throw new Error('Choose a food threshold from 1 to 100 HP and 0 to 1,000 meals to keep, and a bread budget of 0 to 300 gold.');
- return {enabled,eatBelow,keepMeals,...(breadBudget?{breadBudget}:{})};
+ const stock=input.stock;
+ if(stock!==undefined&&(!stock||typeof stock!=='object'||Array.isArray(stock)||typeof stock.enabled!=='boolean'||!Object.hasOwn(foodItems,stock.recipe)||stock.recipe==='towerBread'||!Number.isInteger(stock.amount)||stock.amount<1||stock.amount>20))throw new Error('Choose a cooking recipe and 1–20 meals to keep stocked.');
+ return {enabled,eatBelow,keepMeals,...(breadBudget?{breadBudget}:{}),...(stock?{stock:{enabled:stock.enabled,recipe:stock.recipe,amount:stock.amount}}:{})};
 }
 export function chooseAutoMeal(state,policy){
  if(!policy||state.health<=0)return null;

@@ -10,6 +10,7 @@ export function quietHuntEligible(state){
 }
 
 export function autoWorkDue(plan){
+ if(plan?.mealStockTrip)return plan.mealStockTrip.nextCookAt;
  const fish=plan?.fishingWork;
  return fish?.cast?fish.cast.landAt+900:fish?.readyAt??plan?.fishingLandingUntil??plan?.miningWork?.cut?.endsAt??plan?.miningWork?.readyAt??plan?.treeWork?.cut?.endsAt??plan?.treeWork?.readyAt??plan?.nextAt??plan?.nextRoundAt??plan?.nextCutAt??plan?.nextCatchAt??(plan?.kind==='rest'?plan.endAt:undefined);
 }
@@ -18,7 +19,7 @@ export function autoWorkDue(plan){
 // settlement engines apply every due round and enforce all limits in order.
 export function quietWorkDeadline(state,motion,audience,now,previous=0){
  const p=state?.plan;
- if(audience!=='empty'||motion?.moving||motion?.blocked||motion?.room!==state.location||motion?.x!==state.position?.x||motion?.y!==state.position?.y||p?.source!=='rules'||p.foodTrip)return null;
+ if(audience!=='empty'||motion?.moving||motion?.blocked||motion?.room!==state.location||motion?.x!==state.position?.x||motion?.y!==state.position?.y||p?.source!=='rules'||p.foodTrip||p.mealStockTrip)return null;
  if(quietHuntEligible(state)){
   if(p.endAt<=now)return null;
   return Math.min(p.endAt,previous>0?previous:now+QUIET_HUNT_MS);

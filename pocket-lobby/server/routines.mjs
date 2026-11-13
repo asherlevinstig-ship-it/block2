@@ -54,7 +54,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   const wantsRest=rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='rest';
   const soloWork=rules.strategy==='routine'&&!rules.queue?.enabled&&['fishing','woodcutting'].includes(rules.activity);
   if(!wantsRest)autoBankGold(state,metadata,startedAt);
-  if(!wantsRest&&!soloWork){
+  if(!wantsRest&&!soloWork&&!rules.food?.stock?.enabled){
     const food=applyAutoFood(state,metadata,startedAt);
     if(food.returnHome&&!food.reason){
       state.location='home';state.position={x:5,y:7};

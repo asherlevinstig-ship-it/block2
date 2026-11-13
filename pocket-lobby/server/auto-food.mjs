@@ -1,6 +1,7 @@
 import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
 import {feedPlayer,isExhausted,LOW_HUNGER} from '../public/player-vitals.js';
 import {foodItems,foodFullness,foodStall,towerBread} from '../public/cooking.js';
+import {beginAutoCooking} from './auto-cooking.mjs';
 
 function breadOrder(state,plan){
  const policy=normalizeFoodPolicy(plan.foodPolicy??state.characterRules?.food);
@@ -19,6 +20,9 @@ function breadOrder(state,plan){
 
 export function checkAutoWorkFood(state,plan,at,{stopping=false}={}){
  const {used,returnHome,reason}=applyAutoFood(state,plan,at);
+ if(!stopping&&(plan.foodPolicy??state.characterRules?.food)?.stock?.enabled&&((state.vitals?.hunger??100)<=LOW_HUNGER||returnHome)){
+  if(beginAutoCooking(state,plan,at)||plan.fishingLandingUntil>at||plan.fishingWork?.cast||plan.treeWork?.cut||plan.miningWork?.cut)return {used,paused:true};
+ }
  if(returnHome&&!reason)return {used,reason:'food-reserve'};
  if((state.vitals?.hunger??100)>LOW_HUNGER)return {used};
  if(stopping)return {used,reason:'out-of-food'};

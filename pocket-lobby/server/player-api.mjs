@@ -1,4 +1,5 @@
 import {readPublicRequests,deliverPublicRequest} from './public-requests.mjs';
+import {advanceAutoCooking} from './auto-cooking.mjs';
 import {robberyAction} from './robbery.mjs';
 import {cellarFlags} from '../public/mill-cellar.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
@@ -120,17 +121,21 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
       const purchase=buyAutoWorkBread(state,state.plan,now,motion);
       if(purchase?.reason){finishAutoFoodWork(state,purchase.reason,now);finishRoutineReport(state,now);}
     }
+    if(idle&&state.plan?.mealStockTrip){
+      advanceAutoCooking(state,now,motion);
+      if(!state.plan)finishRoutineReport(state,now);
+    }
     settlePlan(state,now);if(state.autoSwitch)touchPresence(state,now,{active:false},env);
     if(idle)touchPresence(state,now,{active:false},env);
     enablePhysicalWork(state,env);
-    const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
-    const oreMutation=idle?await advanceMiningWork(db,state,now,motion):null;
+    const treeMutation=idle&&!state.plan?.mealStockTrip?await advanceTreeWork(env,state,now,motion):null;
+    const oreMutation=idle&&!state.plan?.mealStockTrip?await advanceMiningWork(db,state,now,motion):null;
     if(state.autoDisconnected&&state.report?.reason==='action-points')finishRoutineReport(state,now);
     if(idle&&state.plan?.oreSaleTrip&&motion?.room==='market'&&motion.x===timberMarketCounter.x&&motion.y===timberMarketCounter.y){
       completeOreSale(state,now);
       if(!state.plan)finishRoutineReport(state,now);
     }
-    if(idle&&state.plan?.physicalFishing){
+    if(idle&&state.plan?.physicalFishing&&!state.plan.mealStockTrip){
       await advanceFishingWork(env,id,state,now,motion,Math.random,usage);
       if(!state.plan)finishRoutineReport(state,now);
     }

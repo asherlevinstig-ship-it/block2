@@ -1,3 +1,4 @@
+import {mealRecipes} from './cooking.js';
 import {fishProducts} from './fishing.js';
 import {oreProducts,miningFinds} from './mining.js';
 const plan=s=>s?.plan?.source==='rules'?s.plan:s?.report?.source==='rules'?s.report:null;
@@ -22,6 +23,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
   const r=after.gambling?.round,old=before.gambling?.round;
   if(r?.status==='complete'&&(r.id!==old?.id||old?.status!=='complete')){const net=r.payout-r.bet;add('gamble:'+r.id,net<0?'loss':net>0?'gold':'push',(net<0?'−'+Math.abs(net):net>0?'+'+net:'±0')+' gold',net,now,'lounge');}
  }
+ if(same&&(p.lastCookAt??0)>(b.lastCookAt??0)){const id=Object.keys(p.cookedMeals??{}).find(id=>(p.cookedMeals[id]??0)>(b.cookedMeals?.[id]??0));if(id)add('cook:'+p.startedAt+':'+p.lastCookAt,'catch','+1 '+mealRecipes[id].name,1,p.lastCookAt,'home');}
  const receipt=after.fishingReceipt;
  const timber=after.timberReceipt;
  if(timber?.id&&timber.id!==before.timberReceipt?.id)add('timber:'+timber.id,'timber','+'+timber.amount+' timber',timber.amount,timber.at??now,timber.room??room);
@@ -43,4 +45,4 @@ export function worldActivityEvents(before,after,now=Date.now()){
  return events.slice(-16);
 }
 export function createWorldActivityTracker(initial){let previous=initial?structuredClone(initial):null;return {update(state,now){const events=worldActivityEvents(previous,state,now);previous=structuredClone(state);return events;}};}
-export function sharedActivity(state){return state.hunting?.encounter?'combat':state.miningCut?'mining':state.timberCut?'woodcutting':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.treeWork?.phase==='waiting'?'regrowth':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}
+export function sharedActivity(state){return state.plan?.mealStockTrip?(state.plan.mealStockTrip.phase==='returning'?'walking':'cooking'):state.hunting?.encounter?'combat':state.miningCut?'mining':state.timberCut?'woodcutting':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.treeWork?.phase==='waiting'?'regrowth':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}

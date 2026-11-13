@@ -1,4 +1,5 @@
 import {ownsHomeSafe} from '../public/home-safe.js';
+import {mealStockTarget} from './auto-cooking.mjs';
 import {normalizeBank} from '../public/bank.js';
 import {vaultCatalog,normalizeVault,vaultBagCount,VAULT_CAP} from '../public/vault.js';
 function changeBag(state,item,amount){
@@ -29,7 +30,9 @@ export function transferStorageItem(state,items,catalog,kind,key,amount){
 }
 export function autoStoreVault(state,plan,at){
  if(!ownsHomeSafe(state)||plan?.source!=='rules'||!state.bank?.vault)return 0;
- let count=0;for(const [key,keep] of Object.entries(state.bank.vault.rules??{})){
+ const stock=mealStockTarget(state,plan);
+ let count=0;for(const [key,savedKeep] of Object.entries(state.bank.vault.rules??{})){
+  const keep=stock&&key==='meal:'+stock.recipe?Math.max(savedKeep,stock.target):savedKeep;
   const amount=Math.min(Math.max(0,vaultBagCount(state,key)-keep),VAULT_CAP-(state.bank.vault.items[key]??0));
   if(amount){vaultTransfer(state,'deposit',key,amount);plan.storedItems??={};plan.storedItems[key]=(plan.storedItems[key]??0)+amount;count+=amount;}
  }return count;

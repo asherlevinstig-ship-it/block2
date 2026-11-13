@@ -44,12 +44,17 @@ export function prepareMeal(state,id,options){
 }
 
 // Plan a whole batch on copies so an incomplete batch never consumes ingredients.
-export function homeCookingBatch(state,id,quantity){
+export function homeCookingBatch(state,id,quantity,{automatic=false}={}){
  if(!Number.isInteger(quantity)||quantity<1||quantity>20)return {reason:'quantity',message:'Choose between 1 and 20 meals.'};
  const draft={...state,stats:{...state.stats},fishStock:{...state.fishStock},huntingLoot:{...state.huntingLoot},woodcutting:{...state.woodcutting},meals:{...state.meals},chestItems:{...state.chestItems},chestPurposes:{...state.chestPurposes}};
  const used={bag:{},chest:{}};
  for(let i=0;i<quantity;i++){
   const combined={...draft,fishStock:{...draft.fishStock},huntingLoot:{...draft.huntingLoot},woodcutting:{...draft.woodcutting}};
+  if(automatic){
+   const keep=draft.bank?.vault?.rules??{};
+   combined.woodcutting.timber=Math.max(0,combined.woodcutting.timber-(keep.timber??0));
+   for(const [stock,prefix] of [['fishStock','fish:'],['huntingLoot','loot:']])for(const key of Object.keys(combined[stock]))combined[stock][key]=Math.max(0,combined[stock][key]-(keep[prefix+key]??0));
+  }
   for(const [key,purpose] of Object.entries(draft.chestPurposes)){
    if(purpose!=='cooking')continue;
    const count=draft.chestItems[key]??0;
