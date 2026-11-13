@@ -4,6 +4,7 @@ import {testDatabase} from './db-helper.mjs';
 import {normalizeState} from '../server/player-state.mjs';
 import {deliverPublicRequest,readPublicRequests} from '../server/public-requests.mjs';
 import {moonwood} from '../public/moonwood.js';
+import {townContributionRecord} from '../public/public-requests.js';
 
 test('the final bridge delivery pays only one player and opens both shortcut entrances',async t=>{
   const {db,sql}=testDatabase();
@@ -19,6 +20,9 @@ test('the final bridge delivery pays only one player and opens both shortcut ent
   assert.deepEqual(saved.map(s=>s.woodcutting.timber).sort((a,b)=>a-b),[0,10]);
   assert.deepEqual(saved.map(s=>s.credits).sort((a,b)=>a-b),[100,148]);
   assert.deepEqual(await readPublicRequests(db),{delivered:120,target:120,open:true});
+  const records=saved.map(state=>townContributionRecord(normalizeState(state).publicRequests));
+  assert.equal(records.filter(record=>record.length===0).length,1);
+  assert.deepEqual(records.find(record=>record.length),[{id:'bridge',title:'Silverfin Bridge',quantity:10,material:'timber'}]);
   for(const [from,to] of [['trail','pond'],['pond','trail']]){
     const door=moonwood.doors[from].find(door=>door.to===to);
     assert.equal(moonwood.open(door,{}),false);

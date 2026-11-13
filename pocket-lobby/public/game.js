@@ -3474,8 +3474,9 @@ function updateWorldLabels(){
     if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
     else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
-    const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.side==='wild'?explorationName(door.to):door.label;
-    const sign=add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
+    const bridge=door.gate==='publicPondBridge';
+    const label=bridge?'Silverfin Bridge':currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.side==='wild'?explorationName(door.to):door.label;
+    const sign=add(label,...anchor,'door',()=>travelDoor(door),bridge?explorationName(door.to):'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
     sign.dataset.apCost='1';sign.title=label+' · Travel · 1 AP';sign.setAttribute('aria-label','Go to '+label+' · Travel · 1 AP');
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
@@ -3976,13 +3977,15 @@ function renderPublicRequests(){
   const list=$('publicRequestList');
   list.replaceChildren();
   const completed=window.playerCloud?.initial?.publicRequests??[];
+  renderTownContributions($('publicRequestRecord'),completed);
   for(const [id,request] of Object.entries(publicRequests)){
     const count=id==='kitchen'?caughtFishCount():id==='bridge'?woodcutting.timber:huntingLoot.ironOre??0;
     const button=document.createElement('button'),title=document.createElement('strong'),detail=document.createElement('span');
     const done=completed.includes(id)||id==='bridge'&&board?.open;
     const item={kitchen:'fish',bridge:'timber',forge:'iron ore'}[id];
     title.textContent=request.title;
-    detail.textContent=request.description+' '+request.quantity+' '+item+' for '+request.gold+' gold. '+(done?'Complete.':count+' in your bag.');
+    const status=completed.includes(id)?'You delivered '+request.quantity+' '+item+'.':done?'The community completed this project.':count+' in your bag.';
+    detail.textContent=request.description+' '+request.quantity+' '+item+' for '+request.gold+' gold. '+status;
     button.type='button';button.disabled=publicBoardBusy||done||count<request.quantity||!board;
     button.append(title,detail);
     button.onclick=async()=>{
@@ -4003,6 +4006,23 @@ function renderPublicRequests(){
     };
     list.append(button);
   }
+}
+function renderTownContributions(container,completed){
+  const entries=typeof townContributionRecord==='function'?townContributionRecord(completed):[];
+  container.replaceChildren();
+  if(!entries.length){
+    const empty=document.createElement('p');
+    empty.textContent='Deliver supplies at the Trading Post to start your record.';
+    container.append(empty);
+    return;
+  }
+  const list=document.createElement('ul');
+  for(const entry of entries){
+    const row=document.createElement('li');
+    row.textContent=entry.title+' · '+entry.quantity+' '+entry.material+' delivered';
+    list.append(row);
+  }
+  container.append(list);
 }
 $('publicRequestOpen').onclick=async()=>{
   if(currentRoom!=='market'||!window.playerCloud?.readPublicRequests)return;
@@ -5330,6 +5350,7 @@ function updateInventory(){
   $('huntingInventory').textContent=spoils.map(([id,count])=>tradeCatalog[id].name+' ×'+count).join(' · ');
 }
 function renderProgress(){
+  renderTownContributions($('progressTownRecord'),window.playerCloud?.initial?.publicRequests??savedPlayerState?.publicRequests??[]);
   $('progressGold').textContent=new Intl.NumberFormat().format(credits);
   $('progressEarned').textContent=new Intl.NumberFormat().format(goldEarned);
   const power=playerPower(playerStats,combatGear);
