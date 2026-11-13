@@ -1030,7 +1030,7 @@ function enterMoonwellDepths(prepared=false){
   if(currentRoom!=='ruins'||!depthsDiscovered||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
   if(prepared!==true&&window.towerPreparation){window.towerPreparation.open();return;}
   if(window.playerCloud?.gameplay){serverTravel('depthsEnter');return;}
-  depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter()};
+  depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter(),floodCrossing:Math.random()<.5?4:6};
   enterRoom(depthsStages[0].room);
   note('Moonwell Depths. Your current health carries through all three chambers.');
 }
@@ -1151,9 +1151,19 @@ function reviewDepthsEntrance(){
   $('depthsEntryTitle').scrollIntoView({block:'nearest'});
   $('depthsEntryTitle').focus({preventScroll:true});
 }
+let floodDrainAt=0;
+let floodCacheBusy=false;
 async function examineDepths(item,confirmed=false){
   if(unavailable()||!depthsRun)return;
   const find=depthsFinds[item.type],already=depthsRun.finds?.includes(item.type);
+  if(item.type==='submergedCache'){
+    if(already){note('This expedition’s lockbox is empty.');return;}
+    if(!floodgateOpen(depthsRun)||depthsRun.cleared<1){note('Clear the chamber and drain the channel first.');return;}
+    $('floodCacheError').textContent='';
+    $('floodCacheResources').textContent=health+' HP · '+manaAvailable(playerVitals,combatNow())+' mana';
+    $('floodCacheDialog').showModal();
+    return;
+  }
   if(item.type==='runeCoffer'&&!already&&!confirmed){
     $('runeCofferBalance').textContent='Your mana · '+manaAvailable(playerVitals,combatNow())+' / 100';
     $('runeCofferError').textContent='';$('runeCofferDialog').showModal();return;
@@ -1169,7 +1179,10 @@ async function examineDepths(item,confirmed=false){
       }
       savePlayerState();
     }
-    if(item.type==='sluiceLever'&&depthsRun.cleared===1&&depthsRun.routeChoice==='pending')depthsExploring=false;
+    if(item.type==='sluiceLever'&&!already){
+      floodDrainAt=performance.now();
+      depthsExploring=true;
+    }
     updateDepthsPanel();
     if(item.type==='runeCoffer'){
       $('runeCofferDialog').close();updatePlayerStats();
@@ -1194,6 +1207,23 @@ async function examineDepths(item,confirmed=false){
     }
     if(!already&&find.gold)showTransaction('Hidden cache discovered',[{icon:'✦',text:find.gold+' gold added to unbanked spoils'}]);
   }catch(error){if(item.type==='runeCoffer'&&$('runeCofferDialog').open)$('runeCofferError').textContent=error.message;else note(error.message,6500);}
+}
+async function openFloodCache(choice){
+  if(floodCacheBusy||unavailable())return;
+  const option=floodedCacheChoices[choice];
+  floodCacheBusy=true;
+  const buttons=['floodCacheCareful','floodCacheForce'].map($);
+  buttons.forEach(button=>button.disabled=true);
+  try{
+    await serverGameplay('depthsFloodCache',{choice});
+    $('floodCacheDialog').close();
+    updateDepthsPanel();
+    showTransaction('Drowned lockbox opened',[
+      {icon:'◈',text:'+'+option.gold+' gold · Unbanked until you extract'},
+      {icon:option.mana?'✦':'♥',text:option.mana?'−'+option.mana+' mana':'−'+option.health+' HP'}
+    ]);
+  }catch(error){$('floodCacheError').textContent=error.message;}
+  finally{floodCacheBusy=false;buttons.forEach(button=>button.disabled=false);}
 }
 function openGalleryEncounter(){
   const event=depthsRun?.encounter,discovery=dungeonEncounters[event?.kind];
@@ -1267,7 +1297,7 @@ function updateDepthsPanel(){
   $('depthsFork').hidden=!choosingPassage;
   $('depthsGateLever').hidden=!needsSluice;
   $('depthsMainOptions').hidden=choosingPassage;
-  $('depthsExplore').hidden=choosingPassage;
+  $('depthsExplore').hidden=choosingPassage&&currentRoom!=='depthsGate';
   $('depthsSafeReward').textContent='+'+Math.min(depthsSafePassage.healing,maxHealth()-health)+' HP · +'+depthsSafePassage.gold+' gold';
   $('depthsDangerReward').textContent=essenceCacheGold+' gold + Awakening Stone';
   $('depthsDangerEnemy').textContent='Rune Channeler · '+dungeonEnemyPreview(huntEnemies.cacheGuardian).health+' HP · Elite';
@@ -1280,11 +1310,18 @@ function updateDepthsPanel(){
   const atCamp=cleared&&!unavailable();
   const canDecide=atCamp&&!depthsExploring;
   const galleryExploring=atCamp&&depthsExploring&&currentRoom==='depthsGallery';
+  const gateExploring=atCamp&&depthsExploring&&currentRoom==='depthsGate';
+  $('floodExplore').hidden=!gateExploring;
+  const lockboxOpened=depthsRun?.finds?.includes('submergedCache');
+  $('floodExploreTitle').textContent=lockboxOpened?'Lockbox collected':floodgateOpen(depthsRun)?'The crossing is open':'Treasure across the water';
+  $('floodExploreHint').textContent=lockboxOpened?'The gold is in your expedition haul. Bank it to keep it.':floodgateOpen(depthsRun)?'Follow the exposed stones to the optional lockbox.':'Pull the sluice lever to reveal the crossing.';
+  $('floodExploreTarget').hidden=!!lockboxOpened;
+  $('floodExploreTarget').textContent=floodgateOpen(depthsRun)?'Walk to lockbox':'Pull sluice lever';
   const encounter=depthsRun?.encounter,discovery=dungeonEncounters[encounter?.kind];
   $('galleryEncounterVisit').hidden=!galleryExploring||!discovery;
   if(discovery)$('galleryEncounterVisit').textContent=encounter.choice?'Review '+discovery.name:'Visit '+discovery.name+' · Optional';
   $('galleryExplore').hidden=!galleryExploring;
-  $('depthsCampRibbon').hidden=!atCamp||!depthsExploring||galleryExploring;
+  $('depthsCampRibbon').hidden=!atCamp||!depthsExploring||galleryExploring||gateExploring;
   if(galleryExploring){
     const crack=depthsRun.finds?.includes('galleryCrack'),opened=depthsRun.finds?.includes('runeCoffer');
     $('galleryExploreTitle').textContent=opened?'45 gold added to your haul':crack?'A coffer behind the wall':'A cold draught stirs the roots';
@@ -3183,7 +3220,7 @@ function moonfinPoolOpen(){
   return currentRoom===moonfinPool.room&&window.millRaidClient?.phase==='victory';
 }
 function drawMoonwoodDetails(time){
-  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,progress:adventure});
+  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,drainAt:floodDrainAt,progress:adventure});
   const clue=moonbackClue();
   if(clue){
     const {tile,inside}=clue.door,dx=inside.x-tile.x,dy=inside.y-tile.y;
@@ -4186,6 +4223,7 @@ function drawHudMiniMap(){
   ink.strokeStyle='#72583b';ink.stroke();
 }
 function use(item){
+  if(item.type==='submergedCache'&&!floodgateOpen(depthsRun)){note('Pull the sluice lever to reach the lockbox.');return;}
   if(vaultCoopState){if(item.coopAdd||item.type==='depthsColossus')window.towerVaultCoop?.target(item.coopAdd?.id??'boss');else note('Retreat from the co-op party before using another activity.');return;}
   if(miningCut){stopMining().then(ok=>{if(ok)use(item);});return;}
   if(item.type==='wildAnimal'){selectWildAnimal(item.animalId);return;}
@@ -6289,10 +6327,19 @@ $('depthsGateLever').onclick=()=>{
   if(lever){depthsExploring=true;updateDepthsPanel();use(lever);}
 };
 $('depthsNext').onclick=advanceMoonwellDepths;
+$('floodCacheCancel').onclick=()=>$('floodCacheDialog').close();
+$('floodCacheCareful').onclick=()=>openFloodCache('careful');
+$('floodCacheForce').onclick=()=>openFloodCache('force');
+$('floodExploreRoutes').onclick=()=>{depthsExploring=false;updateDepthsPanel();};
+$('floodExploreTarget').onclick=()=>{
+  const type=floodgateOpen(depthsRun)?'submergedCache':'sluiceLever';
+  const item=roomFurniture().find(prop=>prop.type===type);
+  if(item)use(item);
+};
 $('depthsExplore').onclick=()=>{
   depthsExploring=true;
   updateDepthsPanel();
-  (currentRoom==='depthsGallery'?$('galleryRoutes'):$('depthsCampRibbon')).focus({preventScroll:true});
+  (currentRoom==='depthsGallery'?$('galleryRoutes'):currentRoom==='depthsGate'?$('floodExploreRoutes'):$('depthsCampRibbon')).focus({preventScroll:true});
 };
 $('galleryRoutes').onclick=()=>{depthsExploring=false;updateDepthsPanel();};
 $('galleryEncounterVisit').onclick=()=>{const item=roomFurniture().find(p=>p.type==='galleryEncounter');if(item)use(item);};
@@ -6997,7 +7044,8 @@ function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   updateRoomLabel();
   document.title='Tower of Beginnings • '+name;
   // Older saves can be standing beyond the new flooded channel.
-  if(next==='depthsGate'&&arrival?.x>=8&&!depthsRun.finds?.includes('sluiceLever'))arrival={x:7,y:4};
+  if(next==='depthsGate'&&arrival?.x>=8&&!floodgateOpen(depthsRun))arrival={x:7,y:4};
+  if(next==='depthsGate'&&arrival?.x===8&&!floodCrossingOpen(depthsRun,arrival.x,arrival.y))arrival={x:7,y:floodCrossingRow(depthsRun)};
   movePlayerToSpawn(arrival);
   setZoom(defaultRoomZoom(next));
   if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){

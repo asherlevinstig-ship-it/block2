@@ -1,5 +1,6 @@
 import {cellarFloor} from './mill-cellar.js';
 import {moonbackSite} from './moonback.js';
+import {floodCrossingOpen} from './flooded-chamber.js';
 
 // Shared geometry and attack footprints. Rendering and server damage use the same cells.
 export const dungeonRooms=['depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'];
@@ -70,7 +71,7 @@ export function arenaBehindCover(e,move,tile=arenaPlayer(e)){
 export function arenaMoveEvent(state,tile,now,scenery=[],stamina=state.hunting?.encounter?.stamina??100){
  const e=state.hunting?.encounter,from=e&&arenaPlayer(e);
  if(e?.arenaVersion!==1||!tile||now<(e.arenaStepAt??0)||Math.abs(tile.x-from.x)+Math.abs(tile.y-from.y)!==1||!dungeonWalkable(state.location,tile,scenery))return null;
- if(state.location==='depthsGate'&&tile.x===8&&!(tile.y===4&&state.depthsRun?.finds?.includes('sluiceLever')))return null;
+ if(state.location==='depthsGate'&&tile.x===8&&!floodCrossingOpen(state.depthsRun,tile.x,tile.y))return null;
  const foe=arenaEnemy(e);if(tile.x===foe.x&&tile.y===foe.y||(e.adds??[]).some(a=>a.x===tile.x&&a.y===tile.y))return null;
  if(e.brainVersion===2&&stamina<ARENA_STEP_COST)return null;
  const next={...e,arenaPlayer:{x:tile.x,y:tile.y},arenaStepAt:now+(e.buildRelics?.includes('guardianMantle')?300:240)};

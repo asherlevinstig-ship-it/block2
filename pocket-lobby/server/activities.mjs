@@ -297,6 +297,12 @@ export function activityAction(state,action,body,now,random){
     inspectDepthsFind(state,item,now);
     return true;
   }
+  if(action==='depthsFloodCache'){
+    idle(state);
+    if(state.depthsRun?.finds?.includes('submergedCache'))throw new Error('Choose another discovery. This lockbox is already empty.');
+    const item=moonwood.layouts[state.location]?.scenery.find(prop=>prop.type==='submergedCache');
+    inspectDepthsFind(state,item,now,body.choice);return true;
+  }
   if(action==='depthsPassage'){
     idle(state);delete state.timberCut;chooseDepthsPassage(state,body.choice);return true;
   }
@@ -312,7 +318,7 @@ export function activityAction(state,action,body,now,random){
     idle(state);delete state.timberCut;
     if(action==='depthsEnter'){
       if(state.location!=='ruins'||!state.depthsDiscovered||state.depthsRun||!state.combatGear.equippedWeapon)throw new Error('Invalid expedition entrance. Defeat the Stoneback Beetle first.');
-      state.depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter(random)};move(state,depthsStages[0].room,{x:4,y:5});
+      state.depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter(random),floodCrossing:random()<.5?4:6};move(state,depthsStages[0].room,{x:4,y:5});
     }else if(action==='depthsNext'){
       const index=depthsStageIndex(state.location),next=depthsStages[index+1];
       if(depthsSideForRoom(state.location)||state.location===depthsCacheRoom||index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');

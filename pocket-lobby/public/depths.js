@@ -1,6 +1,8 @@
 import {normalizeMagic,awardAwakeningStone,stoneForms} from './essences.js';
 import {spendMana} from './player-vitals.js';
 import {normalizeDungeonEncounter} from './dungeon-encounters.js';
+import {floodedCacheChoices} from './flooded-chamber.js';
+export {floodedCacheChoices,floodCrossingRow,floodCrossingOpen} from './flooded-chamber.js';
 export {dungeonEncounters,dungeonEncounterSite,createDungeonEncounter,resolveDungeonEncounter,dungeonEncounterResult} from './dungeon-encounters.js';
 
 export const essenceCacheGold=50;
@@ -46,12 +48,13 @@ export const depthsFinds={
   essenceCache:{label:'Essence Cache',title:'An ancient Essence Cache',room:depthsCacheRoom,text:'The guardian’s seal has broken. Gold and an Awakening Stone wait inside.'},
   sluiceLever:{label:'Sluice lever',title:'The old sluice',room:'depthsGate',text:'The channel drops below an old stone crossing. A supply chest waits on the far bank.'},
   gateSupply:{label:'Supply chest',title:'A dry supply chest',room:'depthsGate',requires:'sluiceLever',healing:15,text:'A sealed flask of spring water survived the flood.'},
+  submergedCache:{label:'Rusted treasure · Optional',title:'The drowned lockbox',room:'depthsGate',requires:'sluiceLever',text:'The rusted lockbox holds expedition gold. Open it with magic, force the lid at a cost to your health, or leave it alone.'},
   shellChime:{label:'Shell chime',title:'A chime in the dark',room:'depthsGallery',text:'The hollow shell rings. Green light traces a hidden cache across the gallery.'},
   galleryCache:{label:'Hidden cache',title:'The gallery’s hidden cache',room:'depthsGallery',requires:'shellChime',gold:18,text:'You found 18 gold. It is held with your expedition spoils until you bank them.'},
   vaultRelief:{label:'Vault relief',title:'A warning carved in stone',room:'depthsVault',text:'Ironclad armour, unbound blades, then a runic heart. Stagger the plating, dodge and counter its swings, then interrupt the charged spell with three quick hits or dodge the blast.'}
 };
 
-export function inspectDepthsFind(state,item,now=Date.now()){
+export function inspectDepthsFind(state,item,now=Date.now(),choice){
   const {depthsRun,location,position}=state;
   const find=item&&Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
   if(!depthsRun||!find||find.room!==location||!position||Math.abs(position.x-item.x)+Math.abs(position.y-item.y)!==1){
@@ -60,6 +63,15 @@ export function inspectDepthsFind(state,item,now=Date.now()){
   const found=depthsRun.finds??[];
   if(find.requires&&!found.includes(find.requires))throw new Error('Choose a discovery you can reach.');
   if(found.includes(item.type))return;
+  if(item.type==='submergedCache'){
+    const option=Object.hasOwn(floodedCacheChoices,choice)?floodedCacheChoices[choice]:null;
+    if(depthsRun.cleared<1)throw new Error('Defeat the Mire Skitter before opening the lockbox.');
+    if(!option)throw new Error('Choose how to open the lockbox, or leave it sealed.');
+    if(option.health&&state.health<=option.health)throw new Error('Choose magic or leave it sealed. You need more than 12 HP to force the lid.');
+    if(option.mana&&!spendMana(state,now,option.mana))throw new Error('Choose magic with at least 20 mana, or leave the lockbox sealed.');
+    if(option.health)state.health-=option.health;
+    depthsRun.floodCacheChoice=choice;
+  }
   if(['galleryCrack','runeCoffer'].includes(item.type)&&depthsRun.cleared<2)throw new Error('Choose this discovery after defeating the Shell Warden.');
   if(find.mana&&!spendMana(state,now,find.mana))throw new Error('Choose the coffer with at least 60 mana. Let your mana recover, or leave it sealed.');
   if(item.type==='sideTreasure'&&!depthsRun.sideWins?.includes('treasure'))throw new Error('Defeat the Ironhide Guardian first.');
@@ -141,9 +153,11 @@ export function normalizeDepthsRun(input,room,encounter){
   if(input.victorySeen!==undefined&&typeof input.victorySeen!=='boolean')throw new Error('Invalid victory acknowledgment.');
   if(input.vaultWeapon!==undefined&&!['breakerSpear','duelistBlade','quickfang'].includes(input.vaultWeapon))throw new Error('Invalid vault reward.');
   const finds=[...new Set(Array.isArray(input.finds)?input.finds.filter(id=>Object.hasOwn(depthsFinds,id)):[])];
+  if(input.floodCrossing!==undefined&&![4,6].includes(input.floodCrossing))throw new Error('Invalid flooded crossing.');
+  if(input.floodCacheChoice!==undefined&&!Object.hasOwn(floodedCacheChoices,input.floodCacheChoice)||finds.includes('submergedCache')&&(!finds.includes('sluiceLever')||!input.floodCacheChoice||input.cleared<1)||input.floodCacheChoice&&!finds.includes('submergedCache'))throw new Error('Invalid flooded treasure.');
   if(finds.includes('runeCoffer')&&!finds.includes('galleryCrack')||input.cleared<2&&finds.some(id=>['galleryCrack','runeCoffer'].includes(id)))throw new Error('Invalid gallery discovery.');
   if(finds.includes('sideSeal')&&!input.sideWins?.includes('trial')||finds.includes('sideTreasure')&&!input.sideWins?.includes('treasure'))throw new Error('Invalid optional room reward.');
-  return {cleared:input.cleared,...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
+  return {cleared:input.cleared,...(input.floodCrossing?{floodCrossing:input.floodCrossing}:{}),...(input.floodCacheChoice?{floodCacheChoice:input.floodCacheChoice}:{}),...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
     ...(finds.includes('essenceCache')&&Object.hasOwn(stoneForms,input.cacheStone)?{cacheStone:input.cacheStone}:{})};
 }
@@ -170,6 +184,7 @@ export function depthsStageSpoils(stage,includeTreasure=true){
 export function depthsSpoils(run){
   const loot={};
   let gold=['galleryCache','runeCoffer'].reduce((sum,id)=>sum+(run?.finds?.includes(id)?depthsFinds[id].gold:0),0);
+  if(run?.finds?.includes('submergedCache'))gold+=floodedCacheChoices[run.floodCacheChoice]?.gold??0;
   gold+=run?.encounter?.gold??0;
   for(const stage of depthsStages.slice(0,run?.cleared??0)){
     const reward=depthsStageSpoils(stage,run.shardEarned===true);

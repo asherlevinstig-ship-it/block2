@@ -35,3 +35,57 @@ test('main-screen exploration reveals the coffer gradually and asks before spend
  await g.run("examineDepths(roomFurniture().find(p=>p.type==='runeCoffer'))");assert.equal(g.nodes.get('runeCofferDialog').open,true);assert.equal(g.read('playerVitals.mana'),100);
  g.nodes.get('runeCofferCancel').onclick();assert.equal(g.nodes.get('runeCofferDialog').open,false);assert(!g.read("depthsRun.finds.includes('runeCoffer')"));assert.deepEqual(g.errors,[]);
 });
+
+test('both sluice layouts lead to the optional lockbox, which charges once and banks only on extraction',()=>{
+ for(const [row,choice,gold] of [[4,'careful',25],[6,'force',40]]){
+  let s=normalizeState({location:'depthsGate',position:{x:3,y:5},health:60,depthsRun:{cleared:1,routeChoice:'pending',floodCrossing:row},vitals:{mana:100,manaAt:1000}});
+  const walkable=(x,y)=>!moonwood.blocked('depthsGate',x,y,{},s.depthsRun);
+  assert.equal(walkable(8,row),false);
+  assert.throws(()=>applyGameplayAction(s,'depthsFloodCache',{choice},1000),/beside/);
+  act(s,'sluiceLever');
+  assert.equal(walkable(8,row),true);
+  assert.equal(walkable(8,row===4?6:4),false);
+  const props=moonwood.layouts.depthsGate.scenery.filter(prop=>prop.type!=='depthsSkitter');
+  const queue=[s.position],seen=new Set();
+  for(const tile of queue){
+   const key=tile.x+','+tile.y;
+   if(seen.has(key)||!walkable(tile.x,tile.y)||props.some(prop=>prop.x===tile.x&&prop.y===tile.y))continue;
+   seen.add(key);
+   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])queue.push({x:tile.x+dx,y:tile.y+dy});
+  }
+  assert(seen.has('9,6'));
+  s.position={x:9,y:6};
+  const before=s.actionPoints.value;
+  assert.throws(()=>applyGameplayAction(s,'depthsFloodCache',{choice:'constructor'},1000),/Choose how/);
+  assert.equal(s.actionPoints.value,before);
+  applyGameplayAction(s,'depthsFloodCache',{choice},1000);
+  assert.equal(s.actionPoints.value,before-1);
+  assert.equal(s.credits,100);
+  assert.equal(s.health,choice==='force'?48:60);
+  assert.equal(s.vitals.mana,choice==='careful'?80:100);
+  s=normalizeState(s);
+  assert.throws(()=>applyGameplayAction(s,'depthsFloodCache',{choice},1000),/already empty/);
+  assert.equal(s.actionPoints.value,before-1);
+  assert.equal(depthsSpoils(s.depthsRun).gold,12+gold);
+  applyGameplayAction(s,'bank',{},1000);
+  assert.equal(s.credits,112+gold);
+  assert.equal(s.location,'ruins');
+ }
+});
+
+test('the lockbox can be skipped or left sealed when the player lacks resources',async()=>{
+ const s=normalizeState({location:'depthsGate',position:{x:9,y:6},health:12,depthsRun:{cleared:1,routeChoice:'pending',finds:['sluiceLever']},vitals:{mana:5,manaAt:1000}});
+ for(const [choice,message] of [['force',/more than 12 HP/],['careful',/at least 20 mana/]]){
+  const before=structuredClone(s);
+  assert.throws(()=>applyGameplayAction(s,'depthsFloodCache',{choice},1000),message);
+  assert.deepEqual(s,before);
+ }
+ const g=boot(s);
+ await g.run("examineDepths(roomFurniture().find(p=>p.type==='submergedCache'))");
+ assert.equal(g.nodes.get('floodCacheDialog').open,true);
+ g.nodes.get('floodCacheCancel').onclick();
+ assert.equal(g.nodes.get('floodCacheDialog').open,false);
+ assert.deepEqual(g.errors,[]);
+ applyGameplayAction(s,'depthsPassage',{choice:'safe'},1000);
+ assert.equal(s.location,'depthsGallery');
+});
