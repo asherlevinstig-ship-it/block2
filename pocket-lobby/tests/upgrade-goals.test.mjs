@@ -15,6 +15,11 @@ test('an empty bag starts a two-catch task and the second catch switches to sell
  const travel=game.read("goalTravelCost('pond')");
  assert(travel>0);
  assert.equal(ironSwordCatchTask(state,travel,0).questions,travel+2);
+ const saleTravel=game.read("hudRoute('market','pond').length");
+ assert(saleTravel>0);
+ assert.equal(game.read('currentIronSwordFishTask().budget'),travel+2+saleTravel);
+ game.run('setGoalFishing(true);fishStock.perch=2;updateUpgradeGoalHud()');
+ assert.equal(game.nodes.get('goalSellCatch').hidden,false);
  state.fishStock={perch:1};
  assert.equal(ironSwordCatchTask(state,0,1,true).remaining,1);
  state.fishStock.perch++;

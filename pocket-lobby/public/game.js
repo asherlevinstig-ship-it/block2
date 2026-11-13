@@ -4147,10 +4147,10 @@ function drawTradingGuide(time){
   const pulse=reducedMotion.matches?1:.65+Math.sin(time/450)*.22;
   ctx.save();ctx.globalAlpha=pulse;surface(goal.x+.06,goal.y+.06,.88,.88,.8,'#ffd78b22','#f8d58b');ctx.restore();
 }
-function hudRoute(destination){
-  if(depthsRun||currentRoom===destination)return [];
-  const visited=new Set([currentRoom]);
-  const queue=[{room:currentRoom,path:[]}];
+function hudRoute(destination,from=currentRoom){
+  if(depthsRun||from===destination)return [];
+  const visited=new Set([from]);
+  const queue=[{room:from,path:[]}];
   for(const {room,path} of queue){
     for(const door of hudRoomExits(room)){
       if(visited.has(door.to))continue;
@@ -6573,6 +6573,7 @@ let savingRules=false,ruleQueueDraft=[];
 function currentGoalState(){return {...(window.playerCloud?.initial??savedPlayerState??{}),credits,stats:playerStats,combatGear,fishingGear,characterRules};}
 function updateUpgradeGoalHud(){
   const g=upgradeGoalProgress(currentGoalState()),button=$('upgradeGoalHud');button.hidden=!g;
+  $('goalSellCatch').hidden=!(catchingGoalFish&&g?.target==='weapon:ironSword'&&!g.owned&&g.gold<g.item.price&&caughtFishCount()>=2&&!unavailable()&&!depthsRun);
   if(!g){
     button.hidden=!quest.claimed;
     button.textContent='Pin an upgrade goal';
@@ -6620,7 +6621,8 @@ function setGoalFishing(active){
 function currentIronSwordFishTask(){
   const ap=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
   const state={...currentGoalState(),fishStock};
-  const catchTask=ironSwordCatchTask(state,goalTravelCost('pond'),ap,catchingGoalFish);
+  const saleTravel=hudRoute('market','pond').length||null;
+  const catchTask=ironSwordCatchTask(state,goalTravelCost('pond'),ap,catchingGoalFish,saleTravel);
   const sale=ironSwordFishTask(state,goalTravelCost('market'),ap);
   if(catchTask?.needsBait&&sale)return sale;
   return catchTask?{...catchTask,catching:true}:sale;
@@ -6631,8 +6633,8 @@ function renderIronSwordFishTask(){
   if(!task)return;
   if(task.catching){
     $('ironSwordFishValue').textContent='Catch two fish at Silverfin Pond';
-    $('ironSwordFishTravel').textContent=task.needsBait?'Bring two Riverworms to start.':task.caught+' / 2 caught · '+task.travel+' AP to travel + '+task.remaining+' AP to fish';
-    $('ironSwordFishResult').textContent=task.needsBait?'Buy bait at Silverfin Outfitters.':task.questions?'Answer '+task.questions+' more question'+(task.questions===1?'':'s')+' for travel and fishing.':'Sell your catch at the Trading Post afterwards. Travel there uses AP separately.';
+    $('ironSwordFishTravel').textContent=task.needsBait?'Bring two Riverworms to start.':task.caught+' / 2 caught · '+task.budget+' AP total';
+    $('ironSwordFishResult').textContent=task.needsBait?'Buy bait at Silverfin Outfitters.':'Silverfin Pond '+task.travel+' AP · Fishing '+task.remaining+' AP · Trading Post '+task.saleTravel+' AP. '+(task.questions?'Answer '+task.questions+' more question'+(task.questions===1?'':'s')+'.':'You have enough AP to finish the trip.');
     $('ironSwordFishAction').textContent=task.needsBait?'Go to Silverfin Outfitters':task.questions?'Answer questions':task.travel?'Follow route to Silverfin Pond':'Walk to the fishing post';
     return;
   }
@@ -6649,7 +6651,7 @@ $('ironSwordFishAction').onclick=async()=>{
     if(!task.needsBait)setGoalFishing(true);
     $('pinnedGoalDialog').close();
     if(task.questions){
-      window.towerLearning?.open({travelAP:task.budget,goalLabel:'Silverfin Pond fishing task',readyText:'You have enough AP to reach the pond and catch two fish.',onContinue:()=>openPinnedGoal()});
+      window.towerLearning?.open({travelAP:task.budget,goalLabel:'Fishing and Trading Post trip',readyText:'You have enough AP to catch the fish and reach the Trading Post.',onContinue:()=>openPinnedGoal()});
     }else if(task.needsBait||task.travel){
       const destination=task.needsBait?'store':'pond';
       if(currentRoom===destination)openMerchant();
@@ -6681,6 +6683,13 @@ $('ironSwordFishAction').onclick=async()=>{
     showTransaction('Fish sold',[{icon:'✦',text:pinnedGoalSummary(currentGoalState())}],receipt.gold);
   }catch(error){$('pinnedGoalStatus').textContent=error.message;}
   finally{sellingGoalFish=false;button.disabled=false;}
+};
+$('goalSellCatch').onclick=()=>{
+  if(unavailable())return;
+  const task=currentIronSwordFishTask();
+  if(!task||task.catching)return;
+  if(task.questions||!task.travel){openPinnedGoal();return;}
+  setExplorationDestination('market');navigateHud('market');
 };
 async function savePinnedGoal(target){
   const save=$('pinnedGoalSave'),clear=$('pinnedGoalClear');

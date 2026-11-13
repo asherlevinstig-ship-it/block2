@@ -48,15 +48,15 @@ export function ironSwordFishTask(state,travel,ap){
  return {quantity,gold,travel,questions:Math.max(0,travel-ap),remaining:Math.max(0,goal.item.price-goal.gold-gold)};
 }
 
-export function ironSwordCatchTask(state,travel,ap,active=false){
+export function ironSwordCatchTask(state,travel,ap,active=false,saleTravel=0){
  const goal=upgradeGoalProgress(state);
- if(goal?.target!=='weapon:ironSword'||goal.owned||goal.gold>=goal.item.price||travel===null)return null;
+ if(goal?.target!=='weapon:ironSword'||goal.owned||goal.gold>=goal.item.price||travel===null||saleTravel===null)return null;
  const caught=Object.keys(fishProducts).reduce((sum,id)=>sum+(state.fishStock?.[id]??0),0);
  if(caught>=(active?2:1))return null;
  const remaining=2-caught;
  const rod=fishingCatalog.rods[state.fishingGear?.equippedRod];
  if(!rod||!state.fishingGear.ownedRods?.includes(state.fishingGear.equippedRod)||skillLevel(state.stats?.patienceXp??0)<rod.patience)return null;
  if(state.fishingGear.bait<remaining)return {needsBait:true};
- const budget=travel+remaining;
- return {caught,remaining,travel,budget,questions:Math.max(0,budget-ap)};
+ const budget=travel+remaining+saleTravel;
+ return {caught,remaining,travel,saleTravel,budget,questions:Math.max(0,budget-ap)};
 }
