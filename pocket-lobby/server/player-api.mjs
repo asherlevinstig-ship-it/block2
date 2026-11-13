@@ -187,6 +187,7 @@ export async function handlePlayerApi(request,env){
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
       delete legacy.vaultCoop;
+      delete legacy.loadouts;
       delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}

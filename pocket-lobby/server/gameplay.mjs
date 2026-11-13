@@ -1,4 +1,5 @@
 import {cellarAction} from './mill-cellar.mjs';
+import {saveCombatLoadout,applyCombatLoadout,removeCombatLoadout} from '../public/dungeon-preparation.js';
 import {cellarFlags} from '../public/mill-cellar.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {familiarAction} from './familiars.mjs';
@@ -69,6 +70,9 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
   if(state.miningCut)throw new Error('Choose a floor tile to stop mining before another activity.');
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
+  if(action==='loadoutSave'){saveCombatLoadout(state,body.id,body.name);return;}
+  if(action==='loadoutApply'){applyCombatLoadout(state,body.id);return;}
+  if(action==='loadoutDelete'){removeCombatLoadout(state,body.id);return;}
   if(action==='campRest'){startTrailCampRest(state,camp,now);return;}
   if(action==='campStand'){stopTrailCampRest(state);return;}
   if(cellarAction(state,action))return;
@@ -337,6 +341,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  if(previous.loadouts!==undefined)next.loadouts=previous.loadouts;else delete next.loadouts;
   if(previous.vaultCoop)next.vaultCoop=previous.vaultCoop;else delete next.vaultCoop;
   if(previous.vaultCoop){next.location=previous.location;next.wardrobe=previous.wardrobe;next.combatGear=previous.combatGear;next.magic=previous.magic;}
   next.mining=previous.mining;

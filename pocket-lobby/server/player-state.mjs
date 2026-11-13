@@ -1,4 +1,5 @@
 import {normalizeRobbery} from '../public/robbery-rules.js';
+import {normalizeLoadouts} from '../public/dungeon-preparation.js';
 import {normalizeMining} from '../public/mining.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
 import {autoHasNoPoints,stopForActionPoints,spendAutoPoint,requireActionPoint} from './action-points.mjs';
@@ -108,6 +109,7 @@ export function normalizeState(input={}){
   const position=input.position;
   if(stats.cookingXp!==undefined&&(!Number.isSafeInteger(stats.cookingXp)||stats.cookingXp<0||stats.cookingXp>MAX_SKILL_XP))throw new Error('Invalid Cooking XP.');
   const state={
+    ...(input.loadouts!==undefined?{loadouts:normalizeLoadouts(input.loadouts)}:{}),
     ...(input.vaultCoop?{vaultCoop:{id:input.vaultCoop.id}}:{}),
     controlMode:input.controlMode??'play',...(input.autoSwitch===true?{autoSwitch:true}:{}),...(['required','complete'].includes(input.autoLesson)?{autoLesson:input.autoLesson}:{}),...(input.autoConfigured===true?{autoConfigured:true}:{}),...(input.pendingCharacterRules?{pendingCharacterRules:normalizeCharacterRules(input.pendingCharacterRules)}:{}),bank:normalizeBank(input.bank),
     ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,stealthXp:stats.stealthXp,leadershipXp:stats.leadershipXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},

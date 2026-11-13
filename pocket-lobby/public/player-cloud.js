@@ -580,7 +580,7 @@
         const {initializeActionPointFeedback}=await import('./action-point-feedback.js');
         apFeedback=initializeActionPointFeedback({doc:document,initial:packet,onEarn:()=>window.towerLearning.open()});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');
-        window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks); const {initializeVaultCoop}=await import('./vault-coop-ui.js');window.towerVaultCoop=initializeVaultCoop(window.towerVaultCoopHooks);
+        window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks); const {initializeVaultCoop}=await import('./vault-coop-ui.js');window.towerVaultCoop=initializeVaultCoop(window.towerVaultCoopHooks);const {initializeDungeonPreparation}=await import('./dungeon-preparation-ui.js');window.towerPreparation=initializeDungeonPreparation(window.towerPreparationHooks);
 
         if(!(pending||retryJob||sending))setStatus('Server saved');
         if(packet.state.autoDisconnected)suspendForPoints(packet);

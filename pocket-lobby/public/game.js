@@ -1026,8 +1026,9 @@ function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
 }
-function enterMoonwellDepths(){
+function enterMoonwellDepths(prepared=false){
   if(currentRoom!=='ruins'||!depthsDiscovered||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
+  if(prepared!==true&&window.towerPreparation){window.towerPreparation.open();return;}
   if(window.playerCloud?.gameplay){serverTravel('depthsEnter');return;}
   depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter()};
   enterRoom(depthsStages[0].room);
@@ -1145,6 +1146,7 @@ function formatDepthsSpoils({gold,loot}){
   return [gold+' gold',...items].join(' · ');
 }
 function reviewDepthsEntrance(){
+  if(window.towerPreparation){window.towerPreparation.open();return;}
   if($('depthsEntrance').hidden)return;
   $('depthsEntryTitle').scrollIntoView({block:'nearest'});
   $('depthsEntryTitle').focus({preventScroll:true});
@@ -6245,7 +6247,7 @@ $('approachBeetle').onclick=()=>{
   const monster=roomFurniture().find(item=>item.type===roomEnemy()?.prop);
   if(monster)use(monster);
 };
-$('enterDepths').onclick=enterMoonwellDepths;
+$('enterDepths').onclick=()=>enterMoonwellDepths();
 $('combatRecapDismiss').onclick=()=>dismissCombatRecap();
 $('combatRecapClose').onclick=()=>dismissCombatRecap();
 $('combatRecapNext').onclick=()=>dismissCombatRecap(true);
@@ -6260,6 +6262,7 @@ $('depthsCacheRoute').onclick=visitDepthsCache;
 $('dungeonRelicCamp').onclick=$('dungeonRelicEntrance').onclick=()=>openDungeonLoot();
 $('bagRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot();};
 $('bagGuardianRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot(null,null,true);};
+$('bagLoadouts').onclick=()=>{$('inventoryDialog').close();window.towerPreparation?.open();};
 $('dungeonShowWeapons').onclick=()=>{$('guardianCollection').hidden=true;$('dungeonWeaponsSection').hidden=false;renderDungeonLoot();};
 $('dungeonShowClothing').onclick=()=>{$('guardianCollection').hidden=false;$('dungeonWeaponsSection').hidden=true;renderDungeonLoot();};
 $('guardianCollectionClose').onclick=async()=>{await closeDungeonLoot();if(!$('dungeonLootDialog').open)openInventory();};
@@ -7349,3 +7352,4 @@ window.towerRobberyHooks={peers:()=>[...remotePeers.values()],local:()=>({x:play
 
 function currentCombatBuild(){return window.combatBuild({combatGear,wardrobe,magic:magicState,hunting});}
 window.towerBuildHooks={state:()=>({...currentGoalState(),wardrobe,magic:magicState,hunting}),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences()};
+window.towerPreparationHooks={state:()=>({...currentGoalState(),health,vitals:playerVitals,wardrobe,magic:magicState,hunting}),now:()=>combatNow(),locked:()=>unavailable()||!!woodSession||!!fishingSession||!!miningCut||!!homeBedRest||!!campRest,atEntrance:()=>currentRoom==='ruins'&&depthsDiscovered&&!depthsRun,change:(name,body)=>serverGameplay(name,body),enter:()=>enterMoonwellDepths(true),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences(),questions:()=>window.towerLearning?.open()};
