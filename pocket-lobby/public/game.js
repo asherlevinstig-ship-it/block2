@@ -3937,7 +3937,39 @@ async function refreshPublicRequests(){
     worldLabelKey='';
     updateExplorationNav();
   }else publicRequestBoard=board;
+  updateBridgeGuide();
+  if($('publicRequestDialog').open&&!publicBoardBusy)renderPublicRequests();
 }
+function bridgeGuideKey(){return 'silverfin-bridge-pin:'+(window.playerCloud?.characterKey??'local');}
+function bridgePinned(){return load(bridgeGuideKey(),false)===true;}
+function updateBridgeGuide(){
+  const panel=$('bridgeRequestGuide');
+  const delivered=window.playerCloud?.initial?.publicRequests?.includes('bridge');
+  panel.hidden=!bridgePinned()||!publicRequestBoard||unavailable()||!!depthsRun;
+  if(panel.hidden)return;
+  const open=publicRequestBoard.open,ready=woodcutting.timber>=publicRequests.bridge.quantity;
+  $('bridgeRequestText').textContent=open?'Silverfin Bridge is open.':delivered?'Timber delivered · '+publicRequestBoard.delivered+' / '+publicRequestBoard.target+' for the bridge.':'Silverfin Bridge · '+Math.min(woodcutting.timber,10)+' / 10 timber';
+  $('bridgeRequestNext').hidden=delivered&&!open;
+  $('bridgeRequestNext').textContent=open?'Visit the crossing':ready?(currentRoom==='market'?'Open request board':'Return to Trading Post'):currentRoom==='logging'?(woodcutting.equipped?'Chop timber':'Get your axe'):'Go to Timber Hollow';
+  $('bridgeRequestAuto').hidden=open||delivered||ready;
+}
+$('bridgeRequestDismiss').onclick=()=>{save(bridgeGuideKey(),false);updateBridgeGuide();};
+$('bridgeRequestNext').onclick=()=>{
+  if(unavailable())return;
+  if(publicRequestBoard.open&&['trail','pond'].includes(currentRoom)){
+    const door=roomDoors[currentRoom].find(exit=>exit.gate==='publicPondBridge');
+    if(door)followHudDoor(door);
+    return;
+  }
+  const destination=publicRequestBoard.open?'trail':woodcutting.timber>=10?'market':'logging';
+  if(currentRoom!==destination){followGoalTaskRoute(destination,true);return;}
+  if(destination==='market')$('publicRequestOpen').onclick();
+  else{
+    const item=roomFurniture().find(prop=>woodcutting.equipped?isTimberTree(prop)&&!treeState(prop).regrowsAt:prop.type==='woodcutter');
+    if(item)use(item);else note('Wait for a tree to regrow.');
+  }
+};
+$('bridgeRequestAuto').onclick=()=>openCharacterRules({bridgeTimber:true});
 function renderPublicRequests(){
   const board=publicRequestBoard;
   $('publicBridgeProgress').textContent=board?.open?'Silverfin Bridge is open to everyone.':board?board.delivered+' / '+board.target+' timber delivered for Silverfin Bridge.':'Loading bridge progress…';
@@ -3962,6 +3994,7 @@ function renderPublicRequests(){
         applyServerGameplay(result.state);
         worldLabelKey='';
         updateInventory();
+        updateBridgeGuide();
         $('publicRequestStatus').textContent='Delivered '+request.quantity+' '+item+' · +'+request.gold+' gold.'+(id==='bridge'&&result.board.open?' Silverfin Bridge is open!':'');
       }catch(error){
         $('publicRequestStatus').textContent=error.message;
@@ -3976,13 +4009,24 @@ $('publicRequestOpen').onclick=async()=>{
   $('publicRequestStatus').textContent='';
   $('publicRequestDialog').showModal();
   renderPublicRequests();
+  $('publicRequestPin').textContent=bridgePinned()?'Unpin Silverfin Bridge':'Pin Silverfin Bridge';
   try{await refreshPublicRequests();renderPublicRequests();}
   catch(error){$('publicRequestStatus').textContent=error.message;}
 };
 $('publicRequestClose').onclick=()=>$('publicRequestDialog').close();
+$('publicRequestPin').onclick=()=>{
+  save(bridgeGuideKey(),!bridgePinned());
+  if(bridgePinned())selectGoalTask(null);
+  $('publicRequestPin').textContent=bridgePinned()?'Unpin Silverfin Bridge':'Pin Silverfin Bridge';
+  updateBridgeGuide();
+  if(bridgePinned()){
+    $('publicRequestDialog').close();
+    if($('merchantDialog').open)$('merchantDialog').close();
+  }
+};
 window.towerRefreshPublicRequests=()=>refreshPublicRequests().catch(()=>{});
 window.setInterval?.(()=>{
-  if(!document.hidden&&['trail','pond','market'].includes(currentRoom))window.towerRefreshPublicRequests();
+  if(!document.hidden&&(bridgePinned()||['trail','pond','market'].includes(currentRoom)))window.towerRefreshPublicRequests();
 },30000);
 function doorAvailable(door,room=currentRoom){
   if(door.gate==='publicPondBridge')return publicRequestBoard?.open===true;
@@ -4787,6 +4831,7 @@ function animation(time){
 }
 let lastVitalsPaint=-Infinity;
 function updateVitalsHud(){
+ if(bridgePinned())updateBridgeGuide();
  if(load(goalFishingKey()+':task',null)||goalTaskSale)updateGoalTaskGuide();
  updateDepthsDecisionVitals();
  const values={health:Math.ceil(homeBedRest?bedRestHealth(homeBedRest,combatNow()):health),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
@@ -6678,6 +6723,7 @@ function goalTravelCost(destination){
 }
 function selectGoalTask(task){
   goalTaskSale=null;
+  if(task){save(bridgeGuideKey(),false);updateBridgeGuide();}
   if(task!=='fish'&&catchingGoalFish)setGoalFishing(false);
   save(goalFishingKey()+':task',task);
   updateGoalTaskGuide();
@@ -7066,12 +7112,13 @@ function openCharacterRules(options={}){
  if(!routineControlled())window.towerPauseForAccount();
  const state=window.playerCloud?.initial??{},rules=normalizeCharacterRules(state.pendingCharacterRules??characterRules);
  simpleAutoRisk=rules.simpleRisk??'balanced';
- simpleAutoChoice=rules.simpleMode??(['fishing','woodcutting','exploring','rest'].includes(rules.activity)?rules.activity:'random');
+ simpleAutoChoice=options.bridgeTimber?'woodcutting':rules.simpleMode??(['fishing','woodcutting','exploring','rest'].includes(rules.activity)?rules.activity:'random');
  $('simpleAutoBreadBudget').value=rules.food?.breadBudget??0;
  $('simpleAutoIdle').checked=rules.enabled;$('simpleAutoReserve').value=rules.simpleMode?rules.goldPolicy.reserveGold:0;
  $('simpleAutoTable').value=rules.gambling.game;$('simpleAutoBet').value=rules.gambling.bet;$('simpleAutoLoss').value=rules.gambling.lossLimit;
  const timber=rules.timberMarket??normalizeTimberMarket();
  $('simpleAutoTimberPrice').value=timber.minimumPrice;$('simpleAutoTimberKeep').value=timber.keepTimber;
+ if(options.bridgeTimber)$('simpleAutoTimberKeep').value=Math.max(10,timber.keepTimber);
  const miningPolicy=rules.mining??normalizeAutoMining();
  $('simpleAutoMiningArea').value=miningPolicy.area??quarryRoom;$('simpleAutoMiningOre').value=miningPolicy.ore;$('simpleAutoMiningKeep').value=miningPolicy.keep;
  $('simpleAutoMiningAdvice').textContent='Mining '+miningLevel(mining)+' · Quarry is safe. Crystaldeep gives 2 ore per swing; needs Mining 3, an upgraded pick and a weapon. Auto fights guardians, retreats at 45 HP, and returns to the quarry below 75 HP.';
@@ -7088,6 +7135,7 @@ function openCharacterRules(options={}){
  const label=document.createElement('b');label.textContent=mode.name;button.append(label);button.onclick=()=>{if(id==='random'&&simpleAutoChoice!=='random'&&rules.simpleMode!=='random'&&Number($('simpleAutoBreadBudget').value)===0)$('simpleAutoBreadBudget').value=30;simpleAutoChoice=id;if(id==='gambling'){$('simpleAutoBet').value=simpleAutoRisks[simpleAutoRisk].bet;$('simpleAutoLoss').value=simpleAutoRisks[simpleAutoRisk].lossLimit;}$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
  }
  renderSimpleAuto();$('simpleAutoDialog').showModal();
+ if(options.bridgeTimber)$('simpleAutoTimberKeep').focus();
  if(options.focusFood)$('simpleAutoBreadBudget').focus();
 }
 function simpleAutoOptions(){
