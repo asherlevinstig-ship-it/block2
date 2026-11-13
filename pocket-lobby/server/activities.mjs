@@ -23,7 +23,7 @@ import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
-import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest} from '../public/depths.js';
+import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 import {moonbackRules,moonbackSighting} from '../public/moonback.js';
 import {veilCloakId} from '../public/wardrobe.js';
@@ -285,6 +285,7 @@ export function activityAction(state,action,body,now,random){
     }else settleActivities(state,now,random);
     return true;
   }
+  if(action==='depthsEncounter'){idle(state);resolveDungeonEncounter(state,body.choice,now,random);return true;}
   if(action==='depthsSide'){idle(state);delete state.timberCut;visitDepthsSide(state,body.id);return true;}
   if(action==='depthsShrine'){idle(state);useDepthsRest(state);return true;}
   if(action==='depthsInspect'){
@@ -308,7 +309,7 @@ export function activityAction(state,action,body,now,random){
     idle(state);delete state.timberCut;
     if(action==='depthsEnter'){
       if(state.location!=='ruins'||!state.depthsDiscovered||state.depthsRun||!state.combatGear.equippedWeapon)throw new Error('Invalid expedition entrance. Defeat the Stoneback Beetle first.');
-      state.depthsRun={cleared:0,routeChoice:'pending'};move(state,depthsStages[0].room,{x:4,y:5});
+      state.depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter(random)};move(state,depthsStages[0].room,{x:4,y:5});
     }else if(action==='depthsNext'){
       const index=depthsStageIndex(state.location),next=depthsStages[index+1];
       if(depthsSideForRoom(state.location)||state.location===depthsCacheRoom||index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');

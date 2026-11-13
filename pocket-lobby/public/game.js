@@ -1026,7 +1026,7 @@ function stopForCombat(){
 function enterMoonwellDepths(){
   if(currentRoom!=='ruins'||!depthsDiscovered||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
   if(window.playerCloud?.gameplay){serverTravel('depthsEnter');return;}
-  depthsRun={cleared:0,routeChoice:'pending'};
+  depthsRun={cleared:0,routeChoice:'pending',encounter:createDungeonEncounter()};
   enterRoom(depthsStages[0].room);
   note('Moonwell Depths. Your current health carries through all three chambers.');
 }
@@ -1190,6 +1190,40 @@ async function examineDepths(item,confirmed=false){
     if(!already&&find.gold)showTransaction('Hidden cache discovered',[{icon:'✦',text:find.gold+' gold added to unbanked spoils'}]);
   }catch(error){if(item.type==='runeCoffer'&&$('runeCofferDialog').open)$('runeCofferError').textContent=error.message;else note(error.message,6500);}
 }
+function openGalleryEncounter(){
+  const event=depthsRun?.encounter,discovery=dungeonEncounters[event?.kind];
+  if(unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2||!discovery)return;
+  const dialog=$('galleryEncounterDialog');dialog.style.setProperty('--encounter-color',discovery.color);
+  $('galleryEncounterTitle').textContent=discovery.name;$('galleryEncounterTag').textContent=discovery.tag;
+  $('galleryEncounterArt').textContent=event.kind==='explorer'?'⛏':event.kind==='merchant'?'◈':'◇';
+  $('galleryEncounterText').textContent=event.choice?dungeonEncounterResult(event):discovery.text;
+  $('galleryEncounterStatus').textContent=event.choice?'Completed this expedition · You can still explore, take a side route, or extract.':'';
+  $('galleryEncounterLater').textContent=event.choice?'Continue exploring':'Walk past for now';
+  const choices=$('galleryEncounterChoices');choices.replaceChildren();
+  if(!event.choice)for(const [id,option] of Object.entries(discovery.choices)){
+    const button=document.createElement('button'),name=document.createElement('strong'),detail=document.createElement('span');button.type='button';name.textContent=option.name;detail.textContent=option.detail+' · 1 AP';button.append(name,detail);button.onclick=()=>chooseGalleryEncounter(id);choices.append(button);
+  }
+  if(!dialog.open)dialog.showModal();
+}
+let galleryEncounterBusy=false;
+async function chooseGalleryEncounter(choice){
+  if(galleryEncounterBusy||unavailable())return;galleryEncounterBusy=true;
+  const before={health,mana:manaAvailable(playerVitals,combatNow()),credits};
+  for(const button of $('galleryEncounterChoices').children)button.disabled=true;
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('depthsEncounter',{choice});
+    else{const state={location:currentRoom,depthsRun,position:{x:player.cx,y:player.cy},health,credits,vitals:playerVitals,meals};resolveDungeonEncounter(state,choice,combatNow());health=state.health;credits=state.credits;playerVitals=state.vitals;savePlayerState();}
+    openGalleryEncounter();updatePlayerStats();updateInventory();updateDepthsPanel();
+    const event=depthsRun.encounter,changes=[];
+    if(event.gold)changes.push({icon:'◈',text:'+'+event.gold+' gold · Unbanked until you extract'});
+    if(health!==before.health)changes.push({icon:'♥',text:(health>before.health?'+':'')+(health-before.health)+' HP'});
+    if(choice==='rations')changes.push({icon:'✦',text:'+2 Tower Bread · Inventory'});
+    if(credits!==before.credits)changes.push({icon:'◈',text:(credits-before.credits)+' wallet gold'});
+    const mana=manaAvailable(playerVitals,combatNow());if(mana!==before.mana)changes.push({icon:'✦',text:(mana>before.mana?'+':'')+(mana-before.mana)+' mana'});
+    showTransaction('Encounter complete',changes);
+  }catch(error){$('galleryEncounterStatus').textContent=error.message;for(const button of $('galleryEncounterChoices').children)button.disabled=false;}
+  finally{galleryEncounterBusy=false;}
+}
 function updateDepthsPanel(){
   updateDungeonLootUi();
   const index=depthsStageIndex(currentRoom);
@@ -1241,6 +1275,9 @@ function updateDepthsPanel(){
   const atCamp=cleared&&!unavailable();
   const canDecide=atCamp&&!depthsExploring;
   const galleryExploring=atCamp&&depthsExploring&&currentRoom==='depthsGallery';
+  const encounter=depthsRun?.encounter,discovery=dungeonEncounters[encounter?.kind];
+  $('galleryEncounterVisit').hidden=!galleryExploring||!discovery;
+  if(discovery)$('galleryEncounterVisit').textContent=encounter.choice?'Review '+discovery.name:'Visit '+discovery.name+' · Optional';
   $('galleryExplore').hidden=!galleryExploring;
   $('depthsCampRibbon').hidden=!atCamp||!depthsExploring||galleryExploring;
   if(galleryExploring){
@@ -2020,7 +2057,7 @@ function roomFurniture(){
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
       return true;
-    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
+    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -3390,7 +3427,10 @@ function updateWorldLabels(){
     }
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
     if(passage&&depthsSideForRoom(currentRoom))add('Shell Gallery ←',...point(passage.x+.5,passage.y+.5,38),'npc',()=>visitDungeonSide('return'));
-    if(currentRoom==='depthsGallery'&&depthsRun.cleared===2)add('Optional rooms',...point(4.5,2.5,35),'npc',openDungeonSideChoices,'Treasure · Rest · Challenge');
+    if(currentRoom==='depthsGallery'&&depthsRun.cleared===2){
+      add('Optional rooms',...point(4.5,2.5,35),'npc',openDungeonSideChoices,'Treasure · Rest · Challenge');
+      const event=depthsRun.encounter,item=roomFurniture().find(p=>p.type==='galleryEncounter');if(event&&item)add(dungeonEncounters[event.kind].name,...point(item.x+.5,item.y+.5,48),'npc',()=>use(item),event.choice?'Completed':'Optional encounter');
+    }
     if(currentRoom==='depthsRest')add('Rest shrine',...point(6.5,4.5,40),'npc',useDungeonShrine,depthsRun.shrineUsed?'Blessing used':'30 HP · 15 unbanked gold');
     if(passage&&(currentRoom===depthsCacheRoom||canEnterDepthsCache(depthsRun,currentRoom)))add(currentRoom===depthsCacheRoom?(depthsCacheReturn(depthsRun)==='depthsGate'?'Flooded Gate ←':'Shell Gallery →'):'Essence Cache →',...point(passage.x+.5,passage.y+.5,38),'npc',()=>use(passage));
     for(const item of roomFurniture()){
@@ -4395,6 +4435,7 @@ function finishInteraction(){
   }else if(item.type==='cachePassage'){
     if(depthsSideForRoom(currentRoom))visitDungeonSide('return');else visitDepthsCache();
   }else if(item.type==='restAltar'){useDungeonShrine();
+  }else if(item.type==='galleryEncounter'){openGalleryEncounter();
   }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
   }else if(item.type==='hallBoard'){
@@ -6240,6 +6281,8 @@ $('depthsExplore').onclick=()=>{
   (currentRoom==='depthsGallery'?$('galleryRoutes'):$('depthsCampRibbon')).focus({preventScroll:true});
 };
 $('galleryRoutes').onclick=()=>{depthsExploring=false;updateDepthsPanel();};
+$('galleryEncounterVisit').onclick=()=>{const item=roomFurniture().find(p=>p.type==='galleryEncounter');if(item)use(item);};
+$('galleryEncounterClose').onclick=$('galleryEncounterLater').onclick=()=>$('galleryEncounterDialog').close();
 $('gallerySearch').onclick=()=>{const type=depthsRun?.finds?.includes('galleryCrack')?'runeCoffer':'galleryCrack';const item=roomFurniture().find(p=>p.type===type);if(item)use(item);};
 $('runeCofferCancel').onclick=()=>$('runeCofferDialog').close();
 $('runeCofferOpen').onclick=async()=>{

@@ -51,7 +51,7 @@ function location(state,rooms){
   if(!rooms.includes(state.location))throw new Error('Travel to the right location for this action.');
 }
 
-const pointActions=new Set(['cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
+const pointActions=new Set(['depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
  const room=state.location,fish=state.fishingReceipt?.castId,timber=state.timberReceipt?.id;

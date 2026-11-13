@@ -1,5 +1,7 @@
 import {normalizeMagic,awardAwakeningStone,stoneForms} from './essences.js';
 import {spendMana} from './player-vitals.js';
+import {normalizeDungeonEncounter} from './dungeon-encounters.js';
+export {dungeonEncounters,dungeonEncounterSite,createDungeonEncounter,resolveDungeonEncounter,dungeonEncounterResult} from './dungeon-encounters.js';
 
 export const essenceCacheGold=50;
 export const depthsSafePassage={gold:10,healing:20};
@@ -141,7 +143,7 @@ export function normalizeDepthsRun(input,room,encounter){
   const finds=[...new Set(Array.isArray(input.finds)?input.finds.filter(id=>Object.hasOwn(depthsFinds,id)):[])];
   if(finds.includes('runeCoffer')&&!finds.includes('galleryCrack')||input.cleared<2&&finds.some(id=>['galleryCrack','runeCoffer'].includes(id)))throw new Error('Invalid gallery discovery.');
   if(finds.includes('sideSeal')&&!input.sideWins?.includes('trial')||finds.includes('sideTreasure')&&!input.sideWins?.includes('treasure'))throw new Error('Invalid optional room reward.');
-  return {cleared:input.cleared,...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
+  return {cleared:input.cleared,...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
     ...(finds.includes('essenceCache')&&Object.hasOwn(stoneForms,input.cacheStone)?{cacheStone:input.cacheStone}:{})};
 }
@@ -168,6 +170,7 @@ export function depthsStageSpoils(stage,includeTreasure=true){
 export function depthsSpoils(run){
   const loot={};
   let gold=['galleryCache','runeCoffer'].reduce((sum,id)=>sum+(run?.finds?.includes(id)?depthsFinds[id].gold:0),0);
+  gold+=run?.encounter?.gold??0;
   for(const stage of depthsStages.slice(0,run?.cleared??0)){
     const reward=depthsStageSpoils(stage,run.shardEarned===true);
     gold+=reward.gold;

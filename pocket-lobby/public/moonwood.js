@@ -40,7 +40,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -229,6 +229,27 @@ export const moonwood=(()=>{
   }
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold'}){
+    if(item.type==='galleryEncounter'){
+      const {x,y}=item,[px,py]=point(x+.5,y+.5),kind=depthsRun?.encounter?.kind,done=!!depthsRun?.encounter?.choice,bob=reduced?0:Math.sin(time/450)*.5;
+      const glow=kind==='shrine'?'#c4afea':kind==='merchant'?'#f1d598':'#a8cebf';
+      ctx.save();ctx.globalAlpha=done?.06:.13;surface(x-.12,y-.12,1.24,1.24,.3,glow);ctx.restore();
+      if(kind==='shrine'){
+        block(x+.12,y+.18,.76,.64,0,8,['#8a819e','#3c3c58','#626079']);
+        block(x+.24,y+.28,.52,.44,8,18,['#a99abf','#55516e','#77728f']);
+        polygon([[px,py-39+bob],[px+7,py-31+bob],[px,py-22+bob],[px-7,py-31+bob]],done?'#746582':glow);
+        rect(px-9,py-13,18,2,'#b7a2cf');
+      }else{
+        const coat=kind==='merchant'?'#725a72':'#527d72',ink='#253344';
+        rect(px-7,py-15,5,15,ink);rect(px+2,py-15,5,15,ink);
+        rect(px-9,py-31+bob,18,20,coat);rect(px-12,py-29+bob,4,17,coat);rect(px+9,py-29+bob,4,17,coat);
+        rect(px-7,py-44+bob,14,14,'#e5bd91');rect(px-8,py-46+bob,16,6,kind==='merchant'?'#d5b471':'#403f52');
+        rect(px-4,py-37+bob,2,2,ink);rect(px+3,py-37+bob,2,2,ink);rect(px-9,py-15,18,2,'#d8b875');
+        if(kind==='merchant'){block(x+.6,y+.6,.38,.3,0,10,['#d0a269','#624b43','#987351']);rect(px+15,py-30,4,13,'#f5d599');}
+        else{block(x+.03,y+.6,.25,.3,0,8,['#8b9b9e','#3d5260','#607b7f']);rect(px-16,py-17,10,3,'#98abb0');}
+      }
+      if(!done&&!reduced){for(let i=0;i<3;i++)rect(px-12+i*12,py-20-(time/75+i*10)%32,1,2,glow);}
+      return;
+    }
     if(item.type==='crystalCluster'||item.type==='crystalGuardian'){drawCrystalProp(item,time,{point,polygon,rect,ctx,reduced,pose});return;}
     const {x,y,type}=item;
     if(Object.hasOwn(cellarHeights,type)){drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,pose});return;}
