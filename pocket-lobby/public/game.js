@@ -3958,7 +3958,16 @@ function updateBridgeGuide(){
   $('bridgeRequestText').textContent=open?'Silverfin Bridge is open.':delivered?'Timber delivered · '+publicRequestBoard.delivered+' / '+publicRequestBoard.target+' for the bridge.':'Silverfin Bridge · '+Math.min(woodcutting.timber,10)+' / 10 timber';
   $('bridgeRequestNext').hidden=delivered&&!open;
   $('bridgeRequestNext').textContent=open?'Visit the crossing':ready?(currentRoom==='market'?'Open request board':'Return to Trading Post'):currentRoom==='logging'?(woodcutting.equipped?'Chop timber':'Get your axe'):'Go to Timber Hollow';
-  $('bridgeRequestAuto').hidden=open||delivered||ready;
+  const stored=bridgeChestTimber();
+  if(!open&&!delivered&&!ready&&stored){
+    $('bridgeRequestText').textContent+=' in bag · '+stored+' reserved in chest';
+    $('bridgeRequestNext').textContent=currentRoom==='home'?'Collect timber from chest':'Go home for timber';
+  }
+  $('bridgeRequestAuto').hidden=open||delivered||ready||woodcutting.timber+stored>=10;
+}
+function bridgeChestTimber(){
+  const state=window.playerCloud?.initial;
+  return state?.chestPurposes?.timber==='bridge'?state.chestItems?.timber??0:0;
 }
 $('bridgeRequestDismiss').onclick=()=>{save(bridgeGuideKey(),false);updateBridgeGuide();};
 $('bridgeRequestNext').onclick=()=>{
@@ -3968,9 +3977,14 @@ $('bridgeRequestNext').onclick=()=>{
     if(door)followHudDoor(door);
     return;
   }
-  const destination=publicRequestBoard.open?'trail':woodcutting.timber>=10?'market':'logging';
+  const collect=!publicRequestBoard.open&&woodcutting.timber<10&&bridgeChestTimber()>0;
+  const destination=publicRequestBoard.open?'trail':woodcutting.timber>=10?'market':collect?'home':'logging';
   if(currentRoom!==destination){followGoalTaskRoute(destination,true);return;}
-  if(destination==='market')$('publicRequestOpen').onclick();
+  if(collect){
+    const chest=homeFurniture.find(item=>item.type==='chest');
+    if(chest)use({...chest,collectBridgeTimber:true});
+    else note('Place your Wooden chest from Inventory → Furniture first.');
+  }else if(destination==='market')$('publicRequestOpen').onclick();
   else{
     const item=roomFurniture().find(prop=>woodcutting.equipped?isTimberTree(prop)&&!treeState(prop).regrowsAt:prop.type==='woodcutter');
     if(item)use(item);else note('Wait for a tree to regrow.');
@@ -4716,7 +4730,7 @@ function finishInteraction(){
   }else if(isRestBed(item.type)&&atHome()){
     beginBedRest(item);
   }else if(item.type==='chest'&&atHome()){
-    openHomeChest();
+    openHomeChest(item.collectBridgeTimber===true);
   }else if(item.type==='safe'&&atHome()){
     window.towerOpenSafe?.();
   }else if(item.type==='trainingDummy'){
@@ -5358,11 +5372,18 @@ function updateInventory(){
   $('huntingInventory').textContent=spoils.map(([id,count])=>tradeCatalog[id].name+' ×'+count).join(' · ');
 }
 let chestBusy=false;
-function openHomeChest(){
+function openHomeChest(collectBridgeTimber=false){
   if(unavailable()||!window.playerCloud?.gameplay)return;
   $('homeChestMessage').textContent='';
   $('homeChestDirection').value='deposit';
   renderHomeChest();
+  if(collectBridgeTimber){
+    $('homeChestDirection').value='withdraw';
+    renderHomeChest();
+    $('homeChestItem').value='timber';
+    renderHomeChest();
+    $('homeChestAmount').value=Math.min(bridgeChestTimber(),10-woodcutting.timber);
+  }
   if(!$('homeChestDialog').open)$('homeChestDialog').showModal();
 }
 function renderHomeChest(){
@@ -5375,7 +5396,8 @@ function renderHomeChest(){
     if(!count)continue;
     const option=document.createElement('option');
     option.value=id;
-    option.textContent=item.name+' ×'+count;
+    const purpose=state.chestPurposes?.[id];
+    option.textContent=item.name+' ×'+count+(!deposit&&purpose?' · '+chestPurposeLabels[purpose]:'');
     option.dataset.count=count;
     select.append(option);
   }
@@ -5387,7 +5409,24 @@ function renderHomeChest(){
   $('homeChestSubmit').textContent=deposit?'Store in chest':'Take to inventory';
   for(const id of ['homeChestItem','homeChestAmount','homeChestSubmit'])$(id).disabled=chestBusy||!count;
   $('homeChestDirection').disabled=chestBusy;
+  const purposes=deposit?[]:chestPurposeOptions(select.value);
+  $('homeChestPurposeRow').hidden=!purposes.length;
+  $('homeChestPurpose').replaceChildren(new Option('No purpose',''),...purposes.map(id=>new Option(chestPurposeLabels[id],id)));
+  $('homeChestPurpose').value=state.chestPurposes?.[select.value]??'';
+  $('homeChestPurpose').disabled=chestBusy;
 }
+$('homeChestPurpose').onchange=async()=>{
+  if(chestBusy)return;
+  chestBusy=true;
+  const item=$('homeChestItem').value,purpose=$('homeChestPurpose').value||null;
+  renderHomeChest();
+  try{
+    await serverGameplay('chestPurpose',{item,purpose});
+    $('homeChestMessage').textContent=purpose?'Reserved for '+chestPurposeLabels[purpose]+'.':'Purpose cleared.';
+    updateBridgeGuide();
+  }catch(error){$('homeChestMessage').textContent=error.message;}
+  finally{chestBusy=false;renderHomeChest();}
+};
 $('homeChestClose').onclick=()=>$('homeChestDialog').close();
 $('homeChestDirection').onchange=renderHomeChest;
 $('homeChestItem').onchange=renderHomeChest;

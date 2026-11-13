@@ -24,17 +24,21 @@ test('chest contents survive pickup, saves and replacement without changing the 
  const ap=s.actionPoints.value;
  const move=(kind,item,amount)=>applyGameplayAction(s,'chestTransfer',{kind,item,amount},1000);
  move('deposit','fish:perch',3);move('deposit','loot:ironOre',2);
+ applyGameplayAction(s,'chestPurpose',{item:'loot:ironOre',purpose:'forge'},1000);
+ assert.throws(()=>applyGameplayAction(s,'chestPurpose',{item:'fish:perch',purpose:'bridge'},1000),/Choose a purpose/);
  assert.equal(s.fishStock.perch,1);assert.equal(s.huntingLoot.ironOre,1);
  assert.equal(s.actionPoints.value,ap);
  assert.equal(s.bank.vault,undefined);
  s=normalizeState(protectFishingState(s,{...structuredClone(s),homeFurniture:[],chestItems:{'fish:perch':99}}));
  assert.throws(()=>move('withdraw','fish:perch',1),/placed Wooden chest/);
  assert.equal(s.chestItems['fish:perch'],3);
+ assert.deepEqual(s.chestPurposes,{'loot:ironOre':'forge'});
  s=normalizeState(protectFishingState(s,{...structuredClone(s),homeFurniture:[chest]}));
  assert.throws(()=>move('withdraw','fish:perch',4),/quantity/);
  move('withdraw','fish:perch',3);move('withdraw','loot:ironOre',2);
  assert.equal(s.fishStock.perch,4);assert.equal(s.huntingLoot.ironOre,3);
  assert.deepEqual(s.chestItems,{});
+ assert.deepEqual(s.chestPurposes,{});
 });
 test('invalid orders, low wallet balances, bank-only wealth and activity locks leave the character unchanged',()=>{
  for(const body of [{id:'moonbloom',quantity:1},{id:'__proto__',quantity:1},{id:'sofa',quantity:0},{id:'sofa',quantity:-1},{id:'sofa',quantity:1.5},{id:'sofa',quantity:100},{id:'safe',quantity:2}]){

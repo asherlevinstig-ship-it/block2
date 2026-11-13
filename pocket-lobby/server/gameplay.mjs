@@ -18,7 +18,7 @@ import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {besideHomeSafe} from '../public/home-safe.js';
 import {vaultTransfer,transferStorageItem} from './vault.mjs';
-import {besideHomeChest,chestCatalog,normalizeChest} from '../public/home-chest.js';
+import {besideHomeChest,chestCatalog,normalizeChest,normalizeChestPurposes,chestPurposeOptions} from '../public/home-chest.js';
 import {normalizeVault} from '../public/vault.js';
 import {bankTransfer} from './banking.mjs';
 import {normalizeBank} from '../public/bank.js';
@@ -117,11 +117,20 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
   }
   if(action==='buyFurniture'){purchaseFurniture(state,body.id,body.quantity);return;}
   if(action==='buySafe'){purchaseFurniture(state,'safe',1);return;}
-  if(action==='chestTransfer'){
+  if(action==='chestTransfer'||action==='chestPurpose'){
     available(state);
     if(!besideHomeChest(state)||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Travel beside your placed Wooden chest after finishing your activity.');
     const items=normalizeChest(state.chestItems);
+    const purposes=normalizeChestPurposes(state.chestPurposes??{},items);
+    if(action==='chestPurpose'){
+      if(!Object.hasOwn(items,body.item)||body.purpose!==null&&!chestPurposeOptions(body.item).includes(body.purpose))throw new Error('Choose a purpose for a stack in your chest.');
+      if(body.purpose===null)delete purposes[body.item];
+      else purposes[body.item]=body.purpose;
+      state.chestPurposes=purposes;
+      return;
+    }
     transferStorageItem(state,items,chestCatalog,body.kind,body.item,body.amount);
+    if(!Object.hasOwn(items,body.item)&&state.chestPurposes){delete purposes[body.item];state.chestPurposes=purposes;}
     state.chestItems=items;
     return;
   }
@@ -359,6 +368,7 @@ export function protectFishingState(previous,next){
   if(previous.miningReceipt)next.miningReceipt=previous.miningReceipt;
   next.bank=previous.bank;
   if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
+  if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;
   next.familiars=previous.familiars;
   next.adventure={...next.adventure};for(const key of [...watchFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');
