@@ -3926,7 +3926,68 @@ function updateLoungeDressGuide(){
 $('loungeDressWardrobe').onclick=openLoungeWardrobe;
 $('loungeWardrobeContinue').onclick=continueToLounge;
 $('loungeDressGuideAction').onclick=()=>isSmartlyDressed(wardrobe)?continueToLounge():openLoungeWardrobe();
-function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
+let publicRequestBoard=null;
+let publicBoardBusy=false;
+async function refreshPublicRequests(){
+  if(!window.playerCloud?.readPublicRequests||publicRequestBoard?.open)return;
+  const {board}=await window.playerCloud.readPublicRequests();
+  if(publicRequestBoard&&board.delivered<publicRequestBoard.delivered)return;
+  if(board.open&&!publicRequestBoard?.open){
+    publicRequestBoard=board;
+    worldLabelKey='';
+    updateExplorationNav();
+  }else publicRequestBoard=board;
+}
+function renderPublicRequests(){
+  const board=publicRequestBoard;
+  $('publicBridgeProgress').textContent=board?.open?'Silverfin Bridge is open to everyone.':board?board.delivered+' / '+board.target+' timber delivered for Silverfin Bridge.':'Loading bridge progress…';
+  const list=$('publicRequestList');
+  list.replaceChildren();
+  const completed=window.playerCloud?.initial?.publicRequests??[];
+  for(const [id,request] of Object.entries(publicRequests)){
+    const count=id==='kitchen'?caughtFishCount():id==='bridge'?woodcutting.timber:huntingLoot.ironOre??0;
+    const button=document.createElement('button'),title=document.createElement('strong'),detail=document.createElement('span');
+    const done=completed.includes(id)||id==='bridge'&&board?.open;
+    const item={kitchen:'fish',bridge:'timber',forge:'iron ore'}[id];
+    title.textContent=request.title;
+    detail.textContent=request.description+' '+request.quantity+' '+item+' for '+request.gold+' gold. '+(done?'Complete.':count+' in your bag.');
+    button.type='button';button.disabled=publicBoardBusy||done||count<request.quantity||!board;
+    button.append(title,detail);
+    button.onclick=async()=>{
+      if(publicBoardBusy||currentRoom!=='market')return;
+      publicBoardBusy=true;renderPublicRequests();
+      try{
+        const result=await window.playerCloud.deliverPublicRequest(id);
+        publicRequestBoard=result.board;
+        applyServerGameplay(result.state);
+        worldLabelKey='';
+        updateInventory();
+        $('publicRequestStatus').textContent='Delivered '+request.quantity+' '+item+' · +'+request.gold+' gold.'+(id==='bridge'&&result.board.open?' Silverfin Bridge is open!':'');
+      }catch(error){
+        $('publicRequestStatus').textContent=error.message;
+        await refreshPublicRequests().catch(()=>{});
+      }finally{publicBoardBusy=false;renderPublicRequests();}
+    };
+    list.append(button);
+  }
+}
+$('publicRequestOpen').onclick=async()=>{
+  if(currentRoom!=='market'||!window.playerCloud?.readPublicRequests)return;
+  $('publicRequestStatus').textContent='';
+  $('publicRequestDialog').showModal();
+  renderPublicRequests();
+  try{await refreshPublicRequests();renderPublicRequests();}
+  catch(error){$('publicRequestStatus').textContent=error.message;}
+};
+$('publicRequestClose').onclick=()=>$('publicRequestDialog').close();
+window.towerRefreshPublicRequests=()=>refreshPublicRequests().catch(()=>{});
+window.setInterval?.(()=>{
+  if(!document.hidden&&['trail','pond','market'].includes(currentRoom))window.towerRefreshPublicRequests();
+},30000);
+function doorAvailable(door,room=currentRoom){
+  if(door.gate==='publicPondBridge')return publicRequestBoard?.open===true;
+  return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);
+}
 function travelDoor(door){
   if(miningCut){stopMining().then(ok=>{if(ok)travelDoor(door);});return;}
   miningTarget=null;
@@ -4341,7 +4402,7 @@ function use(item){
   cancelFishing();
   const start=startPosition(),[w,d]=dimensions(item);
   const items=roomFurniture();
-  const exits=new Set(roomDoors[currentRoom].filter(door=>moonwood.open(door,adventure)).map(({tile})=>tileKey(tile.x,tile.y)));
+  const exits=new Set(roomDoors[currentRoom].filter(door=>doorAvailable(door)).map(({tile})=>tileKey(tile.x,tile.y)));
   let shortest=null;
   for(let y=Math.floor(item.y)-1;y<=Math.ceil(item.y+d);y++){
     for(let x=Math.floor(item.x)-1;x<=Math.ceil(item.x+w);x++){
@@ -5105,6 +5166,7 @@ function renderBag(){
 function openMerchant(){
   if(currentRoom==='furnishings'){use(furnishingsFurniture.find(item=>item.type==='reception'));return;}
   if(!['store','armory','market','furnishings'].includes(currentRoom))return;
+  $('publicRequestOpen').hidden=currentRoom!=='market';
   updateFishingShop();updateArmoryShop();updateTradingPost();
   $('merchantTitle').textContent=roomDetails[currentRoom].name;
   if(!$('merchantDialog').open)$('merchantDialog').showModal();
@@ -6177,7 +6239,7 @@ function updateAdventurePanel(){
   landmark.textContent=(action??'')+(action&&isFishingRoom(currentRoom)&&!fishingSession?' · 1 AP / catch':action&&currentRoom==='clearing'?' · 1 AP / attack':action&&currentRoom==='creek'?' · Travel 1 AP':'');
   const links=$('adventureRoutes');
   links.replaceChildren();
-  for(const door of roomDoors[currentRoom].filter(item=>moonwood.open(item,adventure))){
+  for(const door of roomDoors[currentRoom].filter(item=>doorAvailable(item))){
     if(currentRoom==='creek'&&door.to==='ruins')continue;
     const button=document.createElement('button');
     button.type='button';
@@ -7367,6 +7429,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false,explore=false}={}){
+  if(['trail','pond','market'].includes(next))window.towerRefreshPublicRequests?.();
   if(next!==currentRoom&&window.playerCloud?.initial?.location!==next&&window.playerCloud?.initial?.actionPoints?.value===0){note('Travelling to another area costs 1 AP. Answer an MCQ to earn a point.');window.towerLearning?.open();return;}
   if(miningCut&&next!==currentRoom){stopMining().then(ok=>{if(ok)enterRoom(next,arrival,{automatic,explore});});return;}
   if(next!==currentRoom)window.quarryForgeUI?.close();

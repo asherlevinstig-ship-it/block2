@@ -1,3 +1,4 @@
+import {readPublicRequests,deliverPublicRequest} from './public-requests.mjs';
 import {robberyAction} from './robbery.mjs';
 import {cellarFlags} from '../public/mill-cellar.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
@@ -187,7 +188,7 @@ export async function handlePlayerApi(request,env){
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
       delete legacy.vaultCoop;
-      delete legacy.loadouts;
+      delete legacy.loadouts;delete legacy.publicRequests;
       delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
@@ -222,6 +223,7 @@ export async function handlePlayerApi(request,env){
       return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
+    if(path==='/api/player/public-requests'&&request.method==='GET')return json({board:await readPublicRequests(env.TOWER_DB)});
     if(path==='/api/player/vault-coop'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id),state=row&&readPlayerState(row),code=new URL(request.url).searchParams.get('id')??state?.vaultCoop?.id;
       if(state?.location!=='depthsVault'&&!state?.vaultCoop)return json({error:'Visit the Sunken Vault to view a co-op party.'},400);
@@ -260,6 +262,7 @@ export async function handlePlayerApi(request,env){
     const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation){
+      if(path==='/api/player/public-requests')return json({...packet(row),board:await readPublicRequests(env.TOWER_DB)});
       if(path==='/api/player/robbery')return json({...packet(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
       if(path==='/api/player/gameplay/campRefuel')return json({...packet(row),camp:await readTrailCamp(env.TOWER_DB)});
       return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
@@ -284,6 +287,11 @@ export async function handlePlayerApi(request,env){
       return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
     }
     let state=readPlayerState(row),factionId=null,treeMutation=null;
+    if(path==='/api/player/public-requests'){
+      const updated=await deliverPublicRequest(env.TOWER_DB,row,state,body.id,body.operation,Date.now());
+      if(!updated)return json({error:'The board changed. Refresh it and try again.',...packet(await read(env.TOWER_DB,id))},409);
+      return json({...packet(updated),board:await readPublicRequests(env.TOWER_DB)});
+    }
     if(path==='/api/player/robbery'){
       const result=await robberyAction(env,row,state,body);
       if(result.preview)return json({...packet(row),preview:result.preview});
@@ -369,6 +377,7 @@ export async function handlePlayerApi(request,env){
         }
       case "/api/player/save":
         if(body.state?.location&&body.state.location!==state.location)requireActionPoint(state);
+        if((state.location==='trail'&&body.state?.location==='pond'||state.location==='pond'&&body.state?.location==='trail')&&!(await readPublicRequests(env.TOWER_DB)).open)throw new Error('Choose the Glass Creek route until Silverfin Bridge is complete.');
         if(body.state?.location==='millCellar'&&(state.location!=='millCellar'||!state.adventure.millCellarFound))throw new Error('Choose the loose bricks at the watermill to enter the cellar.');
         if(state.location==='millCellar'&&body.state?.location&&body.state.location!=='millCellar')throw new Error('Choose the cellar stairs to return to Millbrook.');
         if(body.state?.location===factionHall&&(state.location!==factionHall||!await factionHallAccess(env.TOWER_DB,id)))return json({error:"Enter the hall through your faction board."},403);

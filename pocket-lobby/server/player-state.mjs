@@ -132,6 +132,7 @@ export function normalizeState(input={}){
   if(input.magic!==undefined)state.magic=normalizeMagic(input.magic);
   state.meals=counts(input.meals);
   if(Object.keys(state.meals).some(id=>!Object.hasOwn(foodItems,id)))throw new Error('Invalid meal inventory.');
+  if(Array.isArray(input.publicRequests))state.publicRequests=[...new Set(input.publicRequests.filter(id=>['kitchen','bridge','forge'].includes(id)))];
   if(depthsRun)state.depthsRun=depthsRun;
   if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";

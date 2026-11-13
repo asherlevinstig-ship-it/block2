@@ -75,6 +75,7 @@ export const moonwood=(()=>{
   connect('grove','shrine',[11,4,10,4,'GROVE'],[0,4,1,4,'SHRINE'],'groveTrail');
   connect('creek','ruins',[11,4,10,4,'CREEK'],[0,4,1,4,'RUINS']);
   connect('creek','pond',[2,9,2,8,'CREEK'],[0,5,1,5,'POND']);
+  connect('trail','pond',[4,9,4,8,'LANTERN TRAIL'],[0,3,1,3,'SILVERFIN BRIDGE'],'publicPondBridge');
   connect('ruins','roots',[11,5,10,5,'RUINS'],[0,4,1,4,'ROOTS'],'shortcut');
   connect('roots','trail',[11,5,10,5,'ROOTS'],[5,9,5,8,'TRAIL'],'shortcut');
   doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'TOWER'});

@@ -412,6 +412,7 @@ export function protectFishingState(previous,next){
   const placed={};for(const item of next.homeFurniture??[]){placed[item.type]=(placed[item.type]??0)+1;if(placed[item.type]>(next.ownedFurniture[item.type]??0))throw new Error('Invalid furniture ownership. Only place furniture you own.');}
   next.meals=previous.meals??{};
   next.magic=previous.magic;
+  if(previous.publicRequests)next.publicRequests=previous.publicRequests;else delete next.publicRequests;
   next.depthsRun=previous.depthsRun??null;
   next.depthsDiscovered=previous.depthsDiscovered===true;
   if(previous.depthsRun&&next.location!==previous.location){next.location=previous.location;next.position=previous.position;}
