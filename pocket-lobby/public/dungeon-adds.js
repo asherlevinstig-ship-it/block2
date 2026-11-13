@@ -49,7 +49,7 @@ function valid(e,q,exclude){return q.x>=1&&q.x<=10&&q.y>=1&&q.y<=8&&dungeonFloor
 export function spawnAddWave(e,now){
  const wave=e.addWaves.length+1;
  let kinds=['skitter','wisp'];
- if(e.enemy==='depthsBeetle')kinds=['skitter'];
+ if(e.enemy==='depthsBeetle')kinds=['skitter','skitter'];
  if(e.enemy==='depthsGuardian')kinds=wave===1?['skitter']:['wisp'];
  const p=arenaPlayer(e),adds=e.adds.map(a=>({...a})),next={...e,adds,addWaveAt:0,addWaves:[...e.addWaves,wave]};
  for(const kind of kinds){

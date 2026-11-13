@@ -16,6 +16,14 @@ test('boss phases spawn a single finite add wave and all members see the same ta
 test('wards and Renewal help another player; shields expire and mana/AP costs are authoritative',()=>{
  const {r,a,b}=party();act(r,a,'a','start',1000);r.members.b.hp=40;const ally=r.members.b.id;act(r,a,'a','power',2000,{slot:'e',ally});assert(r.members.b.hp>40);assert.equal(a.actionPoints.value,99);assert.equal(a.vitals.mana,90);act(r,a,'a','power',2100,{slot:'q',ally});assert(r.members.b.ward>0);assert.equal(r.members.b.wardUntil,7100);assert.equal(a.actionPoints.value,98);assert.throws(()=>act(r,a,'a','power',2200,{slot:'q'}),/ready/);assert.equal(a.actionPoints.value,98);
 });
+test('co-op Fire Blade splashes nearby adds once and all members see the same remaining health',()=>{
+ const {r,a}=party();act(r,a,'a','start',1000);a.magic=normalizeMagic({...a.magic,slots:{q:'fire:sword',e:'ice:shield'}});r.adds=[{id:'near',name:'Hatchling',kind:'skitter',hp:30,x:6,y:6,landsAt:20000,target:{x:5,y:5}},{id:'far',name:'Wisp',kind:'wisp',hp:30,x:10,y:8,landsAt:20000,target:{x:5,y:5}}];
+ const result=act(r,a,'a','power',2000,{slot:'q'});assert.match(result.text,/Splash hit 1/);assert(r.adds[0].hp<30);assert.equal(r.adds[1].hp,30);assert.equal(a.actionPoints.value,99);assert.equal(a.vitals.mana,90);assert.deepEqual(publicVaultParty(r,'a').adds,publicVaultParty(r,'b').adds);assert.throws(()=>act(r,a,'a','power',2001,{slot:'q'}),/ready/);
+});
+test('co-op allies can flank the same committed plating instead of both attacking its front',()=>{
+ const {r,a,b}=party();act(r,a,'a','start',1000);b.position={x:7,y:5};r.members.b.pos={...b.position};r.targetTile={x:5,y:5};r.warningAt=1500;r.landsAt=4000;
+ act(r,a,'a','strike',2000);act(r,b,'b','strike',2000);assert(r.members.b.damage>r.members.a.damage);assert.match(r.members.b.lastFeedback,/Flank/);assert.deepEqual(r.targetTile,{x:5,y:5});
+});
 test('Storm and three quick weapon hits interrupt a charged volley rather than a detonation',()=>{
  const {r,a}=party();a.combatGear.equippedWeapon='quickfang';r.members.a.weapon='quickfang';act(r,a,'a','start',1000);Object.assign(r,{hp:220,max:900,phase:3,move:'bossFan',warningAt:2000,landsAt:3500});act(r,a,'a','strike',2000);act(r,a,'a','strike',2550);act(r,a,'a','strike',3100);assert(r.landsAt>3500);assert(r.members.a.support>0);
  a.magic=normalizeMagic({...a.magic,slots:{q:'storm:sword',e:'fire:renewal'}});r.warningAt=4000;r.landsAt=5500;r.move='bossFan';act(r,a,'a','power',4100,{slot:'q'});assert(r.landsAt>5500);assert.match(r.members.a.lastFeedback,/interrupted/);

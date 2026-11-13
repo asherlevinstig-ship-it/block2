@@ -1,7 +1,8 @@
 import {roleDamage} from '../public/enemy-roles.js';
 import {combatBuild} from '../public/combat-builds.js';
 import {activeAdd,addEncounter,mergeAddEvent} from '../public/dungeon-adds.js';
-import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
+import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems,bladeSplash} from '../public/essences.js';
+import {arenaEnemy} from '../public/dungeon-arena.js';
 import {spendMana} from '../public/player-vitals.js';
 import {combatStamina,huntEnemy,enemyAttack,transitionVaultPhase} from '../public/hunting.js';
 
@@ -49,6 +50,21 @@ export function essenceAction(state,action,body){
 }
 
 export function castEssencePower(state,now,slot='q'){
+  const before=state.hunting.encounter,event=castSingleEssencePower(state,now,slot);
+  const splash=bladeSplash(essencePower(event?.powerId,state.stats,state.magic,combatBuild(state)));
+  if(!splash||!event?.encounter||!before?.adds?.length)return event;
+  const primary=activeAdd(before),origin=primary??arenaEnemy(before),next=event.encounter,hits=[];
+  next.adds=next.adds.map(a=>{
+    if(a.id===primary?.id||a.spawnAt>now||Math.hypot(a.x-origin.x,a.y-origin.y)>splash.radius)return a;
+    const damage=Math.min(a.health,splash.damage);hits.push({id:a.id,x:a.x,y:a.y,damage,killed:damage===a.health});return {...a,health:a.health-damage};
+  }).filter(a=>a.health>0);
+  if(!hits.length)return event;
+  event.splash=hits;event.splashKills=hits.filter(a=>a.killed).length;next.addKills=(next.addKills??0)+event.splashKills;
+  if(next.combatTarget!=='leader'&&!next.adds.some(a=>a.id===next.combatTarget)){next.combatTarget='leader';next.manualTarget=false;}
+  if(before.enemy==='cacheGuardian'&&before.adds.some(a=>a.kind==='wisp'&&a.spawnAt<=now)&&!next.adds.some(a=>a.kind==='wisp')){next.staggerWeakUntil=Math.max(next.staggerWeakUntil??0,now+3000);event.wardBroken=true;}
+  event.effect+=' · Splash hit '+hits.length+' nearby reinforcement'+(hits.length===1?'':'s');return event;
+}
+function castSingleEssencePower(state,now,slot='q'){
   if(!['q','e'].includes(slot))throw new Error('Choose the Q or E power slot.');
   const magic=state.magic,encounter=state.hunting.encounter;
   const id=magic?.slots[slot];
@@ -60,7 +76,7 @@ export function castEssencePower(state,now,slot='q'){
   const target=!encounter?.addActor&&activeAdd(encounter);
   if(target&&now>=target.spawnAt&&form==='sword'){
     const proxy={...state,hunting:{...state.hunting,encounter:addEncounter(encounter,target)}};
-    const event=castEssencePower(proxy,now,slot);state.vitals=proxy.vitals;
+    const event=castSingleEssencePower(proxy,now,slot);state.vitals=proxy.vitals;
     return mergeAddEvent(encounter,target,event,now);
   }
   if(!spendMana(state,now))return null;

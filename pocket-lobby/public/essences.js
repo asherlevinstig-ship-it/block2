@@ -74,6 +74,7 @@ export function essencePower(id,stats,magic,build){
   const rank=magicRank(stats),base=essence.values[forms.indexOf(form)]+(rank-1)*stone.scaling,value=Math.round(base*(['sword','shield','renewal'].includes(form)?build?.spell??1:1)*(form==='shield'?build?.ward??1:form==='renewal'?build?.heal??1:1));
   return {id,gem,form,rank,value,masteryLevel:essenceMastery(magic,gem)?.level??1,name:essence.name+' '+stone.power,color:essence.color,cooldown:stone.cooldown};
 }
+export const bladeSplash=power=>power?.form==='sword'&&['fire','storm'].includes(power.gem)?{radius:2,damage:Math.max(1,Math.round(power.value*.5))}:null;
 export function powerDescription(power){
   const description=powerActionDescription(power),bonus=(power.masteryLevel??1)-1;
   if(power.gem==='fire')return description+' Burns for '+(power.rank+2+bonus*essenceEffects.fire.masteryBonus)+' damage per second for 3 seconds. Recasting refreshes the burn.';
@@ -84,7 +85,7 @@ export function powerDescription(power){
 }
 function powerActionDescription(power){
   const {form,value}=power;
-  if(form==='sword')return 'Deal '+value+' magic damage.';
+  if(form==='sword')return 'Deal '+value+' magic damage.'+(bladeSplash(power)?' Splash nearby reinforcements within 2 tiles for '+bladeSplash(power).damage+' damage.':'' );
   if(form==='shield')return 'Block up to '+value+' damage from the next hit within 5 seconds.';
   if(form==='speed')return 'Recover up to '+value+' stamina and bring your next strike forward.';
   if(form==='focus')return 'Delay the enemy’s next strike by '+(value/1000).toFixed(2).replace(/0$/,'')+' seconds.';

@@ -1,4 +1,4 @@
-import {roleDamage} from './enemy-roles.js';
+import {roleDamage,physicalPlating} from './enemy-roles.js';
 export {enemyRoleInfo,channelerWardActive} from './enemy-roles.js';
 export {combatBuild} from './combat-builds.js';
 import {buildProfile} from './combat-builds.js';
@@ -342,8 +342,9 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.damage=attributes.damage+Math.floor(random()*5);
     if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
-      result.damage=exposed?result.damage+enemy.exposedBonus:Math.max(1,Math.floor((result.damage-enemy.shellArmor)*(enemy.archetype==='armoured'?.5:1)));
-      result.shellGuarded=!exposed;
+      const plating=physicalPlating(encounter,result.damage,enemy.shellArmor,enemy.exposedBonus,now);
+      if(plating)Object.assign(result,plating);
+      else{result.damage=exposed?result.damage+(enemy.exposedBonus??0):Math.max(1,Math.floor((result.damage-enemy.shellArmor)*(enemy.archetype==='armoured'?.5:1)));result.shellGuarded=!exposed;}
     }
     if(now<(encounter.counterUntil??0)){
       result.counter=true;result.counterBonus=Math.ceil(result.damage*((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)+build.counter));result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
@@ -352,7 +353,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(now<(encounter.staggerWeakUntil??0)){
       result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
     }
-    const roleHit=roleDamage(encounter,result.damage,now);result.damage=roleHit.damage;result.wardAbsorbed=roleHit.wardAbsorbed;
+    const roleHit=roleDamage(encounter,result.damage,now);result.damage=roleHit.damage;result.wardAbsorbed=roleHit.wardAbsorbed;result.recoveryOpening=result.recoveryOpening||roleHit.recoveryOpening;
     result.encounter.health=Math.max(0,encounter.health-result.damage);
     if(result.encounter.health>0&&enemy.archetype==='caster'&&enemyAttack(encounter,enemy).shape==='bolt'&&now>=encounter.nextBoarAt-enemyAttack(encounter,enemy).tell&&now<encounter.nextBoarAt){
       const hits=(encounter.castDeadline===encounter.nextBoarAt?encounter.castHits??0:0)+1;result.encounter.castDeadline=encounter.nextBoarAt;result.encounter.castHits=hits;

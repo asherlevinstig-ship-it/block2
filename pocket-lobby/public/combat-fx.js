@@ -1,4 +1,4 @@
-import {channelerWardActive} from './enemy-roles.js';
+import {channelerWardActive,platedDefence} from './enemy-roles.js';
 import {drawFamiliar} from './familiars.js';
 import {addEncounter,addKinds} from './dungeon-adds.js';
 export {createCombatSound} from './combat-sound.js';
@@ -16,6 +16,8 @@ export function combatShake(time,events,reduced=false){
 export function drawCombatGroundFx({ctx,point,time,now,encounter,player,reduced}){
   if(!encounter)return;
   const move=enemyAttack(encounter);
+  const opening=platedDefence(encounter,now)==='open'||encounter.enemy==='depthsBoar'&&encounter.brainVersion===2&&now<encounter.brainRecoveryUntil;
+  if(opening){const foe=arenaEnemy(encounter),[x,y]=point(foe.x+.5,foe.y+.5,1);ctx.save();ctx.strokeStyle='#c7eda2';ctx.globalAlpha=reduced?.7:.6+Math.sin(time/130)*.15;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y,22,11,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
   if(encounter.arenaVersion===1){const drawMark=(view,attack)=>drawArenaTelegraph({ctx,point,surface:(x,y,w,d,z,fill,line)=>{ctx.beginPath();for(const [i,[u,v]] of [[x,y],[x+w,y],[x+w,y+d],[x,y+d]].entries()){const [px,py]=point(u,v,z);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(line){ctx.strokeStyle=line;ctx.stroke();}},encounter:view,move:attack,now,reduced});drawMark(encounter,move);for(const a of encounter.adds??[]){if(a.spawnAt>now){const [x,y]=point(a.x+.5,a.y+.5,1);ctx.save();ctx.strokeStyle='#bda2f4';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y,13,6.5,0,0,Math.PI*2);ctx.stroke();ctx.restore();}else drawMark(addEncounter(encounter,a),addKinds[a.kind].move);}return;}
   const remaining=encounter.nextBoarAt-now;
   if(remaining<0||remaining>move.tell)return;
@@ -59,7 +61,7 @@ export function recordCombatFx(events,result,time){
   if(result.outcome==='victory')events.victoryAt=time;
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
-  events.bursts=[...live,{time,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
+  events.bursts=[...live,{time,splash:result.splash,flanked:result.flanked,recoveryOpening:result.recoveryOpening,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
     wardBroken,wardAbsorbed,staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
@@ -196,7 +198,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
     const t=progress(time,effect.time,feedbackLife),rise=reduced?0:t*13;
     const [ex,ey]=effect.targetId&&effect.enemyTile?point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15):[bx,by];
     if(effect.damage&&enemyRow<3){
-      const suffix=effect.counter?' COUNTER':effect.weakSpot?' WEAK SPOT':effect.action==='burn'?' BURN':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
+      const suffix=effect.counter?' COUNTER':effect.weakSpot?' WEAK SPOT':effect.action==='burn'?' BURN':effect.flanked?' FLANK':effect.recoveryOpening?' OPENING':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
       popup(ctx,'−'+effect.damage+suffix,ex,ey-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
@@ -204,6 +206,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
     else if(effect.wardAbsorbed&&enemyRow<3)popup(ctx,'RUNE WARD −'+effect.wardAbsorbed,ex,ey-22-rise-enemyRow++*13,t,'#c3b1ef',9);
     if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',10);
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',9);
+    for(const hit of effect.splash??[]){const [x,y]=point(hit.x+.5,hit.y+.5,15);popup(ctx,'−'+hit.damage+' SPLASH',x,y-26-rise,t,effect.powerColor??'#ffe49a',10);}
     const blocks=(effect.warded??0)+(effect.absorbed??0);
     const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.spatialAvoided?(effect.covered?'COVER':'CLEAR'):effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
@@ -251,6 +254,7 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     const t=progress(time,effect.time,duration);
     const [ex,ey]=effect.targetId&&effect.enemyTile?point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15):[bx,by];
     const target={...points,bx:ex,by:ey,aim:Math.atan2(ey-py,ex-px)};
+    for(const hit of effect.splash??[]){const [x,y]=point(hit.x+.5,hit.y+.5,15);particles(ctx,x,y,t,effect.powerColor??'#ffe49a',reduced,20,6);}
     if(effect.power)drawSpell(ctx,target,t,effect,reduced);
     else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,target,t,effect,reduced);
     if(effect.addKill)particles(ctx,ex,ey,t,'#ddcbfa',reduced,22,9);

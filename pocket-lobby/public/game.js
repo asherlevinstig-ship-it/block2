@@ -1395,6 +1395,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for '+(1.8+(currentCombatBuild().counterWindow??0)/1000).toFixed(1)+' seconds.';
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
+  if(result.flanked)combatMessage+=' Flank hit · Plating bypassed or reduced.';
+  if(result.recoveryOpening)combatMessage+=' Recovery opening!';
   if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
   if(result.phaseChange)combatMessage='Phase '+result.phaseChange.index+' · '+result.phaseChange.name+'. '+result.phaseChange.hint;
   if(result.automaticDodge)combatMessage='Auto dodge · Attack avoided.';
@@ -1913,7 +1915,8 @@ function updateDungeonArenaHud(){
  $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
  $('dungeonEnemyHealth').textContent=(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health;
  $('dungeonEnemyBar').max=targetEnemy.health;$('dungeonEnemyBar').value=selected?.health??e?.health??enemy.health;
- const role=enemyRoleInfo(e,combatNow(),enemy.id);$('dungeonWeakness').hidden=!role;$('dungeonWeakness').textContent=role?.status??'';$('dungeonWeakness').title=role?.hint??'';
+ const role=enemyRoleInfo(e,combatNow(),enemy.id),pack=e?.adds?.filter(a=>a.spawnAt<=combatNow()).length>=2;
+ $('dungeonWeakness').hidden=!role&&!pack;$('dungeonWeakness').textContent=(role?.status??'')+(pack?' · PACK · Fire / Storm Blade splash nearby reinforcements':'');$('dungeonWeakness').title=role?.hint??'';
  const targets=$('dungeonTargets');targets.hidden=!e?.adds?.length;
  const targetKey=e?.adds?.length?JSON.stringify([e.combatTarget,e.health,e.adds.map(a=>[a.id,a.health,a.spawnAt<=combatNow()])]):'';
  if(targets.dataset.key!==targetKey){targets.dataset.key=targetKey;const focused=document.activeElement?.dataset.target;targets.replaceChildren();

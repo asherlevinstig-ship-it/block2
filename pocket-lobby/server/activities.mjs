@@ -59,6 +59,7 @@ function result(state,event,now,random=Math.random){
   if(event.action==='flee'){summary.fleeAttempts++;if(event.automatic)summary.automaticFlees++;}
   if(event.interrupted)summary.interrupts++;
   if(event.addKill)awardFamiliarBond(state,'fox',5);
+  for(let i=0;i<(event.splashKills??0);i++)awardFamiliarBond(state,'fox',5);
   if(event.dodged)summary.dodges++;
   if(event.automaticDodge)summary.automaticDodges++;
   if(event.perfectDodge)summary.perfectDodges++;

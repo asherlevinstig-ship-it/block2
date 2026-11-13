@@ -1,8 +1,9 @@
-import {vaultCoopRules,coopPhase,coopMove,coopDanger,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
+import {vaultCoopRules,coopPhase,coopMove,coopDanger,coopEncounter,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
+import {physicalPlating} from '../public/enemy-roles.js';
 import {combatBuild} from '../public/combat-builds.js';
 import {huntingAttributes,weaponStagger,weaponProfile,armourSelection,armourProfile,playerMeleeReach,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsSpoils} from '../public/depths.js';
-import {essencePower,normalizeMagic,awardEssenceMastery,bondedEssences} from '../public/essences.js';
+import {essencePower,normalizeMagic,awardEssenceMastery,bondedEssences,bladeSplash} from '../public/essences.js';
 import {manaAvailable,normalizeVitals} from '../public/player-vitals.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
@@ -99,7 +100,8 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   if(!weapon)throw invalid('You joined without a weapon. Use abilities, or retreat and equip one.');
   if(now<m.lastStrike+stats.attackInterval)throw invalid('Wait for your weapon to recover.');
   if(Math.hypot(m.pos.x-position.x,m.pos.y-position.y)>playerMeleeReach(m.weapon))throw invalid('Move closer to your target.');
-  damage=Math.max(1,stats.damage-armour);if(now<m.counterUntil){damage=Math.ceil(damage*(1+(weapon.counterMultiplier??.5)+build.counter));m.counterUntil=0;text='Counter! ';}if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
+  const plating=!target&&r.phase===1?physicalPlating({...coopEncounter(r),arenaPlayer:m.pos,arenaLockedFor:now>=r.warningAt?r.landsAt:0,brainRecoveryUntil:r.lastAttack?r.warningAt-600:0},stats.damage,9,0,now):null;
+  damage=plating?.damage??Math.max(1,stats.damage-armour);if(plating?.flanked)text='Flank hit! ';if(now<m.counterUntil){damage=Math.ceil(damage*(1+(weapon.counterMultiplier??.5)+build.counter));m.counterUntil=0;text+='Counter! ';}if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
   m.lastStrike=now;
   if(!target){r.stagger+=Math.ceil(weaponStagger(m.weapon,s.combatGear.activeSwordUpgrade)*build.stagger)+(build.id==='vanguard'&&m.ward>0&&m.wardUntil>now?8:0);if(r.stagger>=160){r.stagger=0;r.exposedUntil=now+3000;r.landsAt=Math.max(r.landsAt,now+2000);text='Stagger break! Core exposed. ';}
    if(r.phase===3&&r.move==='bossFan'&&now>=r.warningAt){r.castHits++;if(r.castHits>=3){plan(r,now,1800);m.support++;text+='Charged volley interrupted! ';}}
@@ -109,7 +111,9 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   const magic=normalizeMagic(s.magic),power=essencePower(magic.slots[body.slot],s.stats,magic,build);if(!power||!magic.unlocked.includes(power.id)||!bondedEssences(magic.picks).includes(power.gem)||!['q','e'].includes(body.slot)||now<(magic.cooldowns[power.id]??0))throw invalid('Choose an equipped ability that is ready.');
   const mana=manaAvailable(s.vitals,now);if(mana<build.mana)throw invalid('Wait for '+build.mana+' mana before casting.');
   const ally=Object.values(r.members).find(a=>a.id===body.ally&&a.hp>0&&!a.left)??m;
-  if(power.form==='sword'){const shatter=!target&&build.id==='spellweaver'&&r.chilledUntil>now;damage=Math.max(1,Math.round(power.value*(shatter?1.15:1))-armour);if(shatter){r.chilledUntil=0;text='Shatter! ';}}
+  if(power.form==='sword'){const shatter=!target&&build.id==='spellweaver'&&r.chilledUntil>now;damage=Math.max(1,Math.round(power.value*(shatter?1.15:1))-armour);if(shatter){r.chilledUntil=0;text='Shatter! ';}
+   const splash=bladeSplash(power);let count=0;if(splash)for(const add of r.adds??[]){if(add.hp<=0||add.id===target?.id||Math.hypot(add.x-position.x,add.y-position.y)>splash.radius)continue;const hit=Math.min(add.hp,splash.damage);add.hp-=hit;m.damage+=hit;m.threat+=hit;count++;}if(count)text+='Splash hit '+count+' nearby reinforcements. ';
+  }
   else if(power.form==='shield'){ally.ward=power.value;ally.wardUntil=now+5000;m.support++;text='Ward raised for '+ally.name+'. ';}
   else if(power.form==='renewal'){if(ally.hp>=100)throw invalid('Choose an injured ally to heal.');ally.hp=Math.min(100,ally.hp+power.value);m.support++;text='Healed '+ally.name+'. ';}
   else if(power.form==='focus'){r.landsAt+=Math.min(1000,power.value);m.support++;text='Guardian delayed. ';}

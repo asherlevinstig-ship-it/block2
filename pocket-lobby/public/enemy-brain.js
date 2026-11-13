@@ -88,12 +88,14 @@ export function brainThinkEvent(state,enemy,move,now){
  if(now<(e.staggerUntil??0)||now<(e.brainRecoveryUntil??0)||now>=warning){next.brainNextThinkAt=now<Math.max(e.staggerUntil??0,e.brainRecoveryUntil??0)?Math.max(e.staggerUntil??0,e.brainRecoveryUntil??0):e.nextBoarAt+1;return {action:'enemyThink',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};}
  const caster=enemy.archetype==='caster',distance=Math.hypot(p.x-from.x,p.y-from.y);
  const valid=q=>!(e.adds??[]).some(a=>a.x===q.x&&a.y===q.y)&&q.x>=1&&q.x<=10&&q.y>=1&&q.y<=8&&dungeonFloor(state.location,q.x,q.y)&&!(q.x===p.x&&q.y===p.y)&&!(e.arenaSolids??[]).some(s=>s.x===q.x&&s.y===q.y)&&!(state.location==='depthsGate'&&q.x===8);
- const goals=[];for(let y=1;y<=8;y++)for(let x=1;x<=10;x++){const q={x,y},d=Math.hypot(x-p.x,y-p.y);if(valid(q)&&(caster?d>=2.5&&d<=4&&!coverBetween(q,p):d>=1&&d<=1.45))goals.push(q);}
+ let goals=[];for(let y=1;y<=8;y++)for(let x=1;x<=10;x++){const q={x,y},d=Math.hypot(x-p.x,y-p.y);if(valid(q)&&(caster?d>=2.5&&d<=4&&!coverBetween(q,p):d>=1&&d<=1.45))goals.push(q);}
+ const hunter=enemy.id==='depthsBoar';
+ if(hunter&&distance>1.45){const dx=from.x-p.x,dy=from.y-p.y,flanks=goals.filter(q=>((q.x-p.x)*dx+(q.y-p.y)*dy)/distance<.5&&((q.x-p.x)*dy-(q.y-p.y)*dx)>0);if(flanks.length)goals=flanks;}
  const queue=[{...from,first:null}],seen=new Set(),goal=new Set(goals.map(p=>p.x+','+p.y));let step=null;
  for(const q of queue){const k=q.x+','+q.y;if(seen.has(k))continue;seen.add(k);if(goal.has(k)){step=q.first;break;}for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:q.x+dx,y:q.y+dy};if(valid(n)&&!seen.has(n.x+','+n.y))queue.push({...n,first:q.first??n});}}
  if(step)next.arenaEnemy=step;
  next.brainNextThinkAt=now+(enemy.id==='depthsBoar'?420:caster?600:550);
- return {action:step?'enemyMove':'enemyThink',behaviour:step?(caster?'Seeking a clear firing line.':'Closing to attack range.'):'Watching for an opening.',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
+ return {action:step?'enemyMove':'enemyThink',behaviour:step?(caster?'Seeking a clear firing line.':hunter?'Circling your flank before the pounce.':'Closing to attack range.'):'Watching for an opening.',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
 }
 export function normalizeBrain(e,base){
  if(e.brainVersion===undefined)return {};
