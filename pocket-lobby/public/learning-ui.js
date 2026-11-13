@@ -27,6 +27,7 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
   el('learningBalance').textContent=(s.actionPoints?.value??0)+' / 100 AP';
   trip.hidden=!goalTrip;
   if(goalTrip){
+   tripContinue.textContent=goalTrip.continueLabel??'Back to your upgrade goal';
    const remaining=Math.max(0,goalTrip.travelAP-(s.actionPoints?.value??0));
    const label=goalTrip.goalLabel??'Trading Post trip';
    tripStatus.textContent=remaining?label+' · '+remaining+' more answer'+(remaining===1?'':'s')+' needed':goalTrip.readyText??'You have enough AP to reach the Trading Post.';
