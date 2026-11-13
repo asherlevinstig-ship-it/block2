@@ -1,6 +1,7 @@
 import {cellarFloor} from './mill-cellar.js';
 import {moonbackSite} from './moonback.js';
 import {floodCrossingOpen} from './flooded-chamber.js';
+import {vaultSpillwayTiles,vaultScreen} from './vault-mechanisms.js';
 
 // Shared geometry and attack footprints. Rendering and server damage use the same cells.
 export const dungeonRooms=['depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'];
@@ -8,17 +9,18 @@ export const isCombatArena=room=>dungeonRooms.includes(room)||room==='millCellar
 export const dungeonMobTypes=['crystalGuardian','depthsSkitter','depthsWarden','depthsSeer','depthsSentinel','depthsColossus'];
 export const isDungeonMob=type=>dungeonMobTypes.includes(type);
 export const dungeonCover=[{x:4,y:3},{x:3,y:6}];
-export function dungeonFloor(room,x,y){
+export function dungeonFloor(room,x,y,mechanism){
  if(room==='millCellar')return cellarFloor(x,y);
  if(!dungeonRooms.includes(room))return true;
+ if(room==='depthsVault'&&mechanism==='spillway'&&vaultSpillwayTiles.some(tile=>tile.x===x&&tile.y===y))return true;
  if(x<1||x>10||y<1||y>8)return false;
  if(room==='depthsGate')return x<=7?(x>=2&&y>=2||y>=4&&y<=6):x===8?y>=2&&y<=7:x>=9&&y>=2&&y<=7;
  if(room==='depthsVault')return ((x-6)**2/25+(y-5)**2/15<=1.35)||x>=2&&x<=5&&y>=4&&y<=6;
  if(room==='depthsGallery')return (x>=2&&x<=9&&y>=2&&y<=8)||(y>=4&&y<=6);
  return x>=2&&x<=10&&y>=2&&y<=8||x===1&&y>=4&&y<=6;
 }
-export function dungeonWalkable(room,tile,scenery=[]){
- return Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&dungeonFloor(room,tile.x,tile.y)&&!scenery.some(p=>!isDungeonMob(p.type)&&p.x===tile.x&&p.y===tile.y);
+export function dungeonWalkable(room,tile,scenery=[],mechanism){
+ return Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&dungeonFloor(room,tile.x,tile.y,mechanism)&&!scenery.some(p=>!isDungeonMob(p.type)&&p.x===tile.x&&p.y===tile.y);
 }
 export const arenaEnemy=encounter=>encounter?.arenaEnemy??moonbackSite(encounter?.moonbackRoom)??{x:6,y:5};
 export const arenaPlayer=encounter=>encounter?.arenaPlayer??{x:5,y:5};
@@ -31,7 +33,7 @@ export function lockArenaAttack(e,move,enemy){
   const h=e.brainPlayerHistory??[],last=h.at(-1),previous=h.at(-2);
   if(move.center==='target'&&last&&previous&&last.dx===previous.dx&&last.dy===previous.dy){
    const p={x:next.arenaTarget.x+last.dx,y:next.arenaTarget.y+last.dy};
-   if(p.x>=1&&p.x<=10&&p.y>=1&&p.y<=8&&dungeonFloor(e.arenaRoom,p.x,p.y)&&!(e.arenaSolids??[]).some(s=>s.x===p.x&&s.y===p.y))next.arenaTarget=p;
+   if(dungeonFloor(e.arenaRoom,p.x,p.y,e.vaultMechanism)&&!(e.arenaSolids??[]).some(s=>s.x===p.x&&s.y===p.y))next.arenaTarget=p;
   }
   return next;
  }
@@ -66,11 +68,12 @@ export function arenaInDanger(e,move,tile=arenaPlayer(e)){
 export function arenaBehindCover(e,move,tile=arenaPlayer(e)){
  if(move.shape!=='bolt'||e.brainVersion===2&&!move.blockable)return false;
  const enemy=e.brainVersion===2?(e.brainOrigin??arenaEnemy(e)):arenaEnemy(e),distance=Math.hypot(tile.x-enemy.x,tile.y-enemy.y);
- return dungeonCover.some(p=>lineDistance(p,enemy,tile)<.65&&Math.hypot(p.x-enemy.x,p.y-enemy.y)<distance-.4);
+ const cover=e.arenaRoom==='depthsVault'&&e.vaultMechanism==='screen'?[...dungeonCover,vaultScreen]:dungeonCover;
+ return cover.some(p=>lineDistance(p,enemy,tile)<.65&&Math.hypot(p.x-enemy.x,p.y-enemy.y)<distance-.4);
 }
 export function arenaMoveEvent(state,tile,now,scenery=[],stamina=state.hunting?.encounter?.stamina??100){
  const e=state.hunting?.encounter,from=e&&arenaPlayer(e);
- if(e?.arenaVersion!==1||!tile||now<(e.arenaStepAt??0)||Math.abs(tile.x-from.x)+Math.abs(tile.y-from.y)!==1||!dungeonWalkable(state.location,tile,scenery))return null;
+ if(e?.arenaVersion!==1||!tile||now<(e.arenaStepAt??0)||Math.abs(tile.x-from.x)+Math.abs(tile.y-from.y)!==1||!dungeonWalkable(state.location,tile,scenery,e.vaultMechanism))return null;
  if(state.location==='depthsGate'&&tile.x===8&&!floodCrossingOpen(state.depthsRun,tile.x,tile.y))return null;
  const foe=arenaEnemy(e);if(tile.x===foe.x&&tile.y===foe.y||(e.adds??[]).some(a=>a.x===tile.x&&a.y===tile.y))return null;
  if(e.brainVersion===2&&stamina<ARENA_STEP_COST)return null;

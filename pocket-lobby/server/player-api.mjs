@@ -209,7 +209,7 @@ export async function handlePlayerApi(request,env){
         delete state.hunting.encounter.tacticsAt;
         delete state.hunting.encounter.interruptResistUntil;
       }
-      if(state.depthsRun){delete state.depthsRun.shardEarned;delete state.depthsRun.sideWins;delete state.depthsRun.sideStone;delete state.depthsRun.finds;delete state.depthsRun.floodCacheChoice;delete state.depthsRun.galleryLight;delete state.depthsRun.cacheGuardDefeated;delete state.depthsRun.cacheStone;}
+      if(state.depthsRun){delete state.depthsRun.shardEarned;delete state.depthsRun.sideWins;delete state.depthsRun.sideStone;delete state.depthsRun.finds;delete state.depthsRun.floodCacheChoice;delete state.depthsRun.galleryLight;delete state.depthsRun.vaultMechanism;delete state.depthsRun.cacheGuardDefeated;delete state.depthsRun.cacheStone;}
       delete state.huntingLoot.moonwellShard;
       delete state.combatGear.moonwellCharmOwned;
       delete state.combatGear.moonwellCharmEquipped;

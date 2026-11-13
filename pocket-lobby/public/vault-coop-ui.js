@@ -1,9 +1,10 @@
+import {vaultMechanisms} from './vault-mechanisms.js';
 import {coopEncounter,coopMove,vaultPhaseDetails} from './vault-coop.js';
 import {drawArenaTelegraph} from './dungeon-art.js';
 export function initializeVaultCoop(api){
  const entry=document.createElement('button');entry.id='vaultCoopEntry';entry.className='vault-coop-entry';entry.textContent='Co-op Vault · Form or join a party';entry.hidden=true;
  const panel=document.createElement('section');panel.id='vaultCoopPanel';panel.className='vault-coop-panel';panel.hidden=true;panel.setAttribute('aria-label','Shared Vault Guardian fight');
- panel.innerHTML='<header><b id="coopPhaseName">Co-op Vault</b><span id="coopBossHealth"></span></header><progress id="coopBossBar" max="420" value="420"></progress><p id="coopWarning"></p><p id="coopHint"></p><div id="coopMembers"></div><div id="coopTargets"></div><label class="coop-ally">Support target <select id="coopAlly"><option value="">Yourself</option></select></label><div class="coop-actions"><button id="coopStrike" type="button">Attack · 1 AP</button><button id="coopDodge" type="button">Dodge · Free</button><button id="coopTaunt" type="button">Taunt · 1 AP</button><button id="coopQ" type="button">Q ability · 1 AP</button><button id="coopE" type="button">E ability · 1 AP</button><button id="coopStart" type="button">Awaken Guardian</button><button id="coopClaim" type="button">Claim Vault victory</button><button id="coopLeave" type="button">Retreat to Gallery</button></div><p id="coopFeedback" role="status"></p>';
+ panel.innerHTML='<header><b id="coopPhaseName">Co-op Vault</b><span id="coopBossHealth"></span></header><progress id="coopBossBar" max="420" value="420"></progress><p id="coopWarning"></p><p id="coopHint"></p><div id="coopMembers"></div><div id="coopTargets"></div><label class="coop-ally">Support target <select id="coopAlly"><option value="">Yourself</option></select></label><div class="coop-actions"><button id="coopStrike" type="button">Attack · 1 AP</button><button id="coopDodge" type="button">Dodge · Free</button><button id="coopTaunt" type="button">Taunt · 1 AP</button><button id="coopQ" type="button">Q ability · 1 AP</button><button id="coopE" type="button">E ability · 1 AP</button><button id="coopSpillway" type="button">Open spillway</button><button id="coopScreen" type="button">Raise stone screen</button><button id="coopStart" type="button">Awaken Guardian</button><button id="coopClaim" type="button">Claim Vault victory</button><button id="coopLeave" type="button">Retreat to Gallery</button></div><p id="coopFeedback" role="status"></p>';
  const dialog=document.createElement('dialog');dialog.id='vaultCoopDialog';dialog.className='game-window vault-coop-dialog';dialog.innerHTML='<button class="close" type="button" aria-label="Close co-op party">×</button><div class="eyebrow">ONE GUARDIAN · SHARED HEALTH · UP TO FOUR PLAYERS</div><h2>Face the Vault together.</h2><p>The party leader starts the fight once everyone has joined. One player can Taunt; allies clear adds, interrupt the charged volley, or ward and heal each other.</p><p>Weapons and outfits stay locked. This is a live Play-mode fight. Retreat before leaving your browser.</p><button id="coopCreate" type="button" class="primary">Create a party</button><label>Join with a party code<input id="coopCode" maxlength="8" placeholder="8-character code" autocomplete="off"></label><button id="coopJoin" type="button">Join party</button><p id="coopJoinError" role="status"></p>';
  document.getElementById('scene').append(entry,panel);document.body.append(dialog);const $=id=>document.getElementById(id);
  const details=document.createElement('button');details.id='coopDetails';details.type='button';details.textContent='Party & support';panel.querySelector('header').after(details);panel.dataset.compact=String(window.matchMedia('(max-width:900px)').matches);details.onclick=()=>{panel.dataset.compact=String(panel.dataset.compact!=='true');render();};
@@ -21,7 +22,7 @@ export function initializeVaultCoop(api){
  async function send(kind,slot){
   if(['strike','dodge','power','taunt'].includes(kind)&&raid?.status!=='battle')return;
   if(busy)return;busy=true;
-  try{const result=await api.change({kind,id:raid?.id??api.state().party,slot,target:selected,ally:$('coopAlly').value});accept(result);if(dialog.open)dialog.close();const tile=raid?.adds.find(a=>a.id===selected)??raid?.origin;if(kind==='strike')api.strike(tile);if(kind==='power')api.cast(tile);if(kind==='dodge')api.dodge();}
+  try{const result=await api.change({kind,id:raid?.id??api.state().party,slot,mechanism:kind==="mechanism"?slot:undefined,target:selected,ally:$('coopAlly').value});accept(result);if(dialog.open)dialog.close();const tile=raid?.adds.find(a=>a.id===selected)??raid?.origin;if(kind==='strike')api.strike(tile);if(kind==='power')api.cast(tile);if(kind==='dodge')api.dodge();}
   catch(error){$('coopFeedback').textContent=error.message;$('coopJoinError').textContent=error.message;if((error.status===402||/closer|mana|Action Point/i.test(error.message))&&kind==='strike')autoAttack=false;}
   finally{busy=false;render();}
  }
@@ -35,6 +36,13 @@ export function initializeVaultCoop(api){
    const ally=$('coopAlly').value;$('coopAlly').replaceChildren();for(const m of raid.members.filter(m=>m.hp>0)){const option=document.createElement('option');option.value=m.id;option.textContent=m.name+(m.id===raid.self?.id?' (you)':'');$('coopAlly').append(option);}if([...$('coopAlly').options].some(o=>o.value===ally))$('coopAlly').value=ally;else $('coopAlly').value=raid.self?.id??'';
    if(selected!=='boss'&&!raid.adds.some(a=>a.id===selected))selected='boss';$('coopTargets').replaceChildren();for(const target of [{id:'boss',name:'Guardian',hp:raid.hp},...raid.adds]){const b=document.createElement('button');b.type='button';b.textContent=target.name+' · '+target.hp;b.setAttribute('aria-pressed',String(selected===target.id));b.onclick=()=>{selected=target.id;lastKey='';render();};$('coopTargets').append(b);}
   }
+  const mechanism=vaultMechanisms[raid.vaultMechanism];
+  if(mechanism)$('coopHint').textContent+=' '+mechanism.detail;
+  const canChoose=raid.status==='waiting'&&raid.leader&&!mechanism;
+  if(canChoose)$('coopHint').textContent='Choose one before awakening the Guardian. The spillway opens an east lane. The screen gives cover from charged bolts.';
+  $('coopSpillway').hidden=$('coopScreen').hidden=!canChoose;
+  $('coopSpillway').title=vaultMechanisms.spillway.detail;
+  $('coopScreen').title=vaultMechanisms.screen.detail;
   $('coopStart').hidden=raid.status!=='waiting'||!raid.leader;$('coopClaim').hidden=raid.status!=='victory'||raid.self?.claimed||!(raid.self?.damage>0||raid.self?.support>=1);
   for(const id of ['coopStrike','coopDodge','coopTaunt','coopQ','coopE'])$(id).hidden=!battle;
   for(const b of panel.querySelectorAll('button'))b.disabled=busy;$('coopStrike').textContent=autoAttack?'Stop attacking':'Attack · 1 AP / hit';
@@ -42,6 +50,8 @@ export function initializeVaultCoop(api){
  }
  entry.onclick=()=>{if(!dialog.open)dialog.showModal();};dialog.querySelector('.close').onclick=()=>dialog.close();
  $('coopCreate').onclick=()=>send('create');$('coopJoin').onclick=async()=>{const code=$('coopCode').value.trim().toUpperCase();if(!/^[A-F0-9]{8}$/.test(code)){$('coopJoinError').textContent='Enter the eight-character party code.';return;}raid={id:code,members:[],adds:[]};await send('join');};
+ $('coopSpillway').onclick=()=>send('mechanism','spillway');
+ $('coopScreen').onclick=()=>send('mechanism','screen');
  $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};$('coopDodge').onclick=()=>send('dodge');$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
  $('coopStrike').onclick=()=>{autoAttack=!autoAttack;if(autoAttack)send('strike');else render();};
  document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();send('dodge');}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});

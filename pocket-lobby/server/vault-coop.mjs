@@ -1,3 +1,5 @@
+import {validVaultMechanism,vaultMechanisms} from '../public/vault-mechanisms.js';
+import {dungeonFloor} from '../public/dungeon-arena.js';
 import {vaultCoopRules,coopPhase,coopMove,coopDanger,coopEncounter,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
 import {physicalPlating} from '../public/enemy-roles.js';
 import {combatBuild} from '../public/combat-builds.js';
@@ -59,7 +61,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  s.health=0;s.location='home';s.position={x:5,y:7};s.depthsRun=null;s.hunting.recoveryUntil=now+boarRules.recovery;delete s.vaultCoop;
  }else s.health=m.hp;}
 export function publicVaultParty(r,id,now=Date.now()){
- const self=r.members[id];return {id:r.id,status:r.status,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,observedAt:now,
+ const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,observedAt:now,
   targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
@@ -69,9 +71,11 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   eligible(s);if(r.status!=='waiting'||Object.values(r.members).filter(m=>!m.left).length>=vaultCoopRules.limit)throw invalid('This party has started or is full.');
   if(s.vaultCoop&&s.vaultCoop.id!==r.id)throw invalid('Leave your current party first.');
   if(r.members[id]?.left)throw invalid('You have already left this expedition party.');
+  if(s.position?.x===11&&!dungeonFloor('depthsVault',s.position.x,s.position.y,r.vaultMechanism))throw invalid('Travel off the spillway lane before joining this party.');
   r.members[id]??=member(s,now);s.vaultCoop={id:r.id};return {text:'Joined co-op Vault party.'};
  }
  const m=r.members[id];if(!m||m.left||s.vaultCoop?.id!==r.id)throw invalid('Join this Vault party first.');
+ if(s.position?.x===11&&!dungeonFloor('depthsVault',s.position.x,s.position.y,r.vaultMechanism))throw invalid('Choose a walkable tile in the shared Vault.');
  // A movement arriving after the impact cannot erase damage from that impact.
  if(r.status!=='battle'||now<r.landsAt)m.pos={...s.position};
  advanceVaultParty(r,now);m.pos={...s.position};m.lastAt=now;syncPlayer(s,r,id,now);
@@ -81,9 +85,17 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='claim'){
   if(r.status!=='victory'||m.claimed||!(m.damage>0||m.support>=1)||s.depthsRun?.cleared!==2)throw invalid('Help defeat the Guardian to claim one Vault reward.');
-  m.claimed=true;s.depthsRun.cleared=3;s.depthsRun.shardEarned=true;delete s.vaultCoop;
+  m.claimed=true;s.depthsRun.cleared=3;s.depthsRun.shardEarned=true;
+  if(r.vaultMechanism)s.depthsRun.vaultMechanism=r.vaultMechanism;
+  delete s.vaultCoop;
   for(const [key,xp] of Object.entries({strengthXp:75,agilityXp:55,vitalityXp:75}))s.stats[key]=Math.min(MAX_SKILL_XP,s.stats[key]+xp);
   awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
+ }
+ if(kind==='mechanism'){
+  if(r.leader!==id||r.status!=='waiting'||r.vaultMechanism||s.depthsRun.vaultMechanism)throw invalid('Only the waiting party leader can choose one Vault mechanism.');
+  if(!validVaultMechanism(body.mechanism))throw invalid('Choose the spillway or stone screen.');
+  r.vaultMechanism=body.mechanism;s.depthsRun.vaultMechanism=body.mechanism;
+  return {text:vaultMechanisms[body.mechanism].detail};
  }
  if(kind==='start'){
   if(r.leader!==id||r.status!=='waiting')throw invalid('Only the party leader can start this waiting fight.');
@@ -135,7 +147,7 @@ export async function readVaultParty(db,id,playerId,now=Date.now()){
 }
 export async function writeVaultParty(db,row,body,now=Date.now(),random=Math.random){
  const create=body.kind==='create',original=JSON.parse(row.state_json);let party=body.id??original.vaultCoop?.id;
- if(create){eligible(original);if(original.vaultCoop)throw invalid('Leave your current party first.');await db.prepare("DELETE FROM tower_vault_parties WHERE expires_at<? AND json_extract(state_json,'$.closed')=1").bind(now-7*86400000).run();party=uid();const r={id:party,leader:row.player_id,status:'waiting',expiresAt:now+vaultCoopRules.lifetime,hp:420,max:420,members:{},adds:[]};await db.prepare('INSERT INTO tower_vault_parties(party_id,state_json,expires_at) VALUES(?,?,?)').bind(party,JSON.stringify(r),r.expiresAt).run();}
+ if(create){eligible(original);if(original.vaultCoop)throw invalid('Leave your current party first.');await db.prepare("DELETE FROM tower_vault_parties WHERE expires_at<? AND json_extract(state_json,'$.closed')=1").bind(now-7*86400000).run();party=uid();const r={id:party,leader:row.player_id,status:'waiting',vaultMechanism:original.depthsRun.vaultMechanism,expiresAt:now+vaultCoopRules.lifetime,hp:420,max:420,members:{},adds:[]};await db.prepare('INSERT INTO tower_vault_parties(party_id,state_json,expires_at) VALUES(?,?,?)').bind(party,JSON.stringify(r),r.expiresAt).run();}
  const operation=JSON.stringify([row.player_id,body.operation]);
  for(let retry=0;retry<5;retry++){
   const {row:record,raid}=await readVaultParty(db,party,row.player_id,now),s=JSON.parse(row.state_json);if(now>=raid.expiresAt&&body.kind!=='leave'&&!(body.kind==='claim'&&raid.status==='victory'))throw invalid('This party has expired. Leave it and start a new expedition.');

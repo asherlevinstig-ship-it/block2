@@ -102,7 +102,7 @@ export function normalizeBrain(e,base){
  if(e.brainVersion!==2||e.arenaVersion!==1||!(base.room.startsWith('depths')||base.room==='millCellar'||base.room==='crystaldeep')||e.brainMaxHealth!==smartProfile(base).health||!smartAttacks[e.brainMove])throw new Error('Invalid enemy intelligence.');
  if(!Array.isArray(e.brainRecentMoves??[])||!Array.isArray(e.brainPlayerHistory??[])||!e.brainCooldowns||typeof e.brainCooldowns!=='object'||Array.isArray(e.brainCooldowns))throw new Error('Invalid enemy memory.');
  const time=v=>{if(v===undefined)return 0;if(!Number.isSafeInteger(v)||v<0)throw new Error('Invalid enemy clock.');return v;};
- const tile=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&p.x>=1&&p.x<=10&&p.y>=1&&p.y<=8&&dungeonFloor(base.room,p.x,p.y);
+ const tile=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&p.x>=1&&p.x<=11&&p.y>=1&&p.y<=8&&dungeonFloor(base.room,p.x,p.y,e.vaultMechanism);
  const out={brainVersion:2,brainMaxHealth:e.brainMaxHealth,brainMove:e.brainMove,brainCombo:e.brainCombo===true};
  for(const key of ['brainNextThinkAt','brainRecoveryUntil','brainAutoStepAt','brainAttackCount','brainMisses','brainBlockedCount','brainStepsSinceAttack'])out[key]=time(e[key]);
  if(e.brainOrigin){if(!tile(e.brainOrigin))throw new Error('Invalid enemy origin.');out.brainOrigin={...e.brainOrigin};}
@@ -115,7 +115,7 @@ export function normalizeBrain(e,base){
 export function advanceOnEnemy(e,reach){
  const hero=arenaPlayer(e),foe=arenaEnemy(e),queue=[{...hero,first:null}],seen=new Set();
  for(const p of queue){const key=p.x+','+p.y;if(seen.has(key))continue;seen.add(key);if(Math.hypot(p.x-foe.x,p.y-foe.y)<=reach)return p.first;
-  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:p.x+dx,y:p.y+dy};if(!(e.adds??[]).some(a=>a.x===n.x&&a.y===n.y)&&n.x>=1&&n.x<=10&&n.y>=1&&n.y<=8&&dungeonFloor(e.arenaRoom,n.x,n.y)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8)&&!seen.has(n.x+','+n.y))queue.push({...n,first:p.first??n});}
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:p.x+dx,y:p.y+dy};if(!(e.adds??[]).some(a=>a.x===n.x&&a.y===n.y)&&n.x>=1&&n.x<=11&&n.y>=1&&n.y<=8&&dungeonFloor(e.arenaRoom,n.x,n.y,e.vaultMechanism)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8)&&!seen.has(n.x+','+n.y))queue.push({...n,first:p.first??n});}
  }
  return null;
 }

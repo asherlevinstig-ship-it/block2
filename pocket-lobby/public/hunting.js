@@ -267,9 +267,9 @@ export function normalizeHunting(input={}){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
     if(input.encounter.arenaVersion!==undefined){
-      const e=input.encounter,profile=huntEnemy(e),valid=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&dungeonFloor(profile.room,p.x,p.y);
+      const e=input.encounter,profile=huntEnemy(e),valid=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&dungeonFloor(profile.room,p.x,p.y,e.vaultMechanism);
       if(e.arenaVersion!==1||!isCombatArena(profile.room)||e.arenaRoom!==profile.room||!valid(e.arenaPlayer)||!valid(e.arenaEnemy)||e.arenaTarget&&!valid(e.arenaTarget))throw new Error('Invalid dungeon arena.');
-      Object.assign(result.encounter,{arenaVersion:1,arenaRoom:profile.room,arenaPlayer:{...e.arenaPlayer},arenaEnemy:{...e.arenaEnemy},arenaStepAt:time(e.arenaStepAt),arenaLockedFor:time(e.arenaLockedFor),arenaCycle:time(e.arenaCycle),arenaSolids:(Array.isArray(e.arenaSolids)?e.arenaSolids:[]).filter(valid).slice(0,80).map(p=>({x:p.x,y:p.y})),...(e.arenaTarget?{arenaTarget:{...e.arenaTarget}}:{})});
+      Object.assign(result.encounter,{arenaVersion:1,arenaRoom:profile.room,...(profile.room==="depthsVault"&&["spillway","screen"].includes(e.vaultMechanism)?{vaultMechanism:e.vaultMechanism}:{}),arenaPlayer:{...e.arenaPlayer},arenaEnemy:{...e.arenaEnemy},arenaStepAt:time(e.arenaStepAt),arenaLockedFor:time(e.arenaLockedFor),arenaCycle:time(e.arenaCycle),arenaSolids:(Array.isArray(e.arenaSolids)?e.arenaSolids:[]).filter(valid).slice(0,80).map(p=>({x:p.x,y:p.y})),...(e.arenaTarget?{arenaTarget:{...e.arenaTarget}}:{})});
     }
     Object.assign(result.encounter,normalizeBrain(input.encounter,huntEnemies[enemy]??boar),normalizeAdds(input.encounter));
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}

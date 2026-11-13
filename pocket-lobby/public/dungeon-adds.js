@@ -78,7 +78,7 @@ export function normalizeAdds(e){
  if(e.addsVersion===undefined)return {};
  if(e.addsVersion!==1||e.brainVersion!==2||!Array.isArray(e.adds)||e.adds.length>ADD_LIMIT||!Array.isArray(e.addWaves)||e.addWaves.length>2||e.addWaves.some((v,i)=>v!==i+1))throw new Error('Invalid dungeon reinforcements.');
  const time=v=>{if(!Number.isSafeInteger(v)||v<0)throw new Error('Invalid reinforcement clock.');return v;};
- const ids=new Set(),tile=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.y)&&dungeonFloor(e.arenaRoom,p.x,p.y);
+ const ids=new Set(),tile=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.y)&&dungeonFloor(e.arenaRoom,p.x,p.y,e.vaultMechanism);
  const adds=e.adds.map(a=>{
   if(!Object.hasOwn(addKinds,a.kind)||typeof a.id!=='string'||!/^wave[12]-(skitter|wisp)-[0-2]$/.test(a.id)||ids.has(a.id)||!tile(a)||!Number.isInteger(a.health)||a.health<1||a.health>addKinds[a.kind].health)throw new Error('Invalid dungeon add.');ids.add(a.id);
   const out={id:a.id,kind:a.kind,health:a.health,x:a.x,y:a.y,...(a.pounceBonded===true?{pounceBonded:true}:{})};for(const key of ['spawnAt','thinkAt','attackAt','lockedFor'])out[key]=time(a[key]);

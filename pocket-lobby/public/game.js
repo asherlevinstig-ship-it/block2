@@ -1289,6 +1289,8 @@ async function chooseGalleryEncounter(choice){
   finally{galleryEncounterBusy=false;}
 }
 function updateDepthsPanel(){
+  const mechanisms=$('vaultMechanismOptions');
+  mechanisms.hidden=currentRoom!=='depthsVault'||depthsRun?.cleared!==2||!!depthsRun?.vaultMechanism||!!vaultCoopState||unavailable();
   updateDungeonLootUi();
   const index=depthsStageIndex(currentRoom);
   const inDepths=index>=0&&!!depthsRun;
@@ -3254,6 +3256,23 @@ function moonfinPoolOpen(){
 }
 function drawMoonwoodDetails(time){
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,drainAt:floodDrainAt,progress:adventure});
+  if(currentRoom==='depthsVault'){
+    const mechanism=currentVaultMechanism();
+    for(const {x,y} of vaultSpillwayTiles){
+      if(mechanism==='spillway'){
+        block(x,y,1,1,-8,8,['#a28b76','#433a55','#645369']);
+        surface(x+.06,y+.06,.88,.88,.4,'#ad9477','#ead2a0');
+      }else{
+        surface(x+.04,y+.04,.92,.92,-2,'#284959','#415f72');
+        const ripple=reducedMotion.matches?0:(time/1200+y*.21)%1;
+        surface(x+.15+ripple*.3,y+.35,.34,.04,-1,'#9ed8e366');
+      }
+    }
+  }
+  if(currentRoom==='depthsVault'&&currentVaultMechanism()==='screen'){
+    block(vaultScreen.x+.4,vaultScreen.y+.12,.16,.76,0,21,['#b4b8c7','#5a566a','#807d94']);
+    surface(vaultScreen.x+.4,vaultScreen.y+.12,.16,.76,21,'#c4e5ee');
+  }
   if(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&!depthsRun.galleryLight?.claimed){
     const beam=galleryLightPath(depthsRun);
     ctx.save();
@@ -3752,7 +3771,11 @@ function installGamingTables(items){
 }
 function inRoom(x,y){return x>=0&&y>=0&&x<view.cols&&y<view.rows;}
 function blocked(x,y,items=roomFurniture()){
-  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure,depthsRun)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
+  const run=currentRoom==='depthsVault'?{vaultMechanism:currentVaultMechanism()}:depthsRun;
+  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure,run)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
+}
+function currentVaultMechanism(){
+  return vaultCoopState?window.towerVaultCoop?.view()?.vaultMechanism:depthsRun?.vaultMechanism;
 }
 function canPlace(item){
   const [w,d]=dimensions(item);
@@ -6395,6 +6418,27 @@ $('depthsExplore').onclick=()=>{
   updateDepthsPanel();
   (currentRoom==='depthsGallery'?$('galleryRoutes'):currentRoom==='depthsGate'?$('floodExploreRoutes'):$('depthsCampRibbon')).focus({preventScroll:true});
 };
+$('vaultMechanismOptions').onclick=()=>{
+  openWatchDialog('Vault mechanisms','Choose one before the Guardian wakes. The spillway opens an east lane. The screen blocks charged bolts from behind cover.');
+  const dialog=$('watchDialog');
+  const choices=$('vaultMechanismChoices');
+  choices.hidden=false;
+  dialog.addEventListener('close',()=>{choices.hidden=true;},{once:true});
+};
+for(const id of Object.keys(vaultMechanisms)){
+  $('vaultMechanism-'+id).onclick=async()=>{
+    const buttons=Object.keys(vaultMechanisms).map(key=>$('vaultMechanism-'+key));
+    buttons.forEach(button=>button.disabled=true);
+    try{
+      if(window.playerCloud?.gameplay)await serverGameplay('depthsVaultMechanism',{id});
+      else{chooseVaultMechanism({location:currentRoom,depthsRun,hunting},id);savePlayerState();}
+      $('watchDialog').close();
+      updateDepthsPanel();
+      note(vaultMechanisms[id].detail,6500);
+    }catch(error){$('watchDialogError').textContent=error.message;}
+    finally{buttons.forEach(button=>button.disabled=false);}
+  };
+}
 $('galleryRoutes').onclick=()=>{depthsExploring=false;updateDepthsPanel();};
 $('galleryLightGuide').onclick=()=>{
   const id=galleryLightReceiver(depthsRun?.galleryLight)??(depthsRun?.galleryLight?.first?'lightMirrorB':'lightMirrorA');

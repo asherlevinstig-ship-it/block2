@@ -1,8 +1,34 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import {arenaBehindCover,arenaMoveEvent} from '../public/dungeon-arena.js';
+import {coopEncounter} from '../public/vault-coop.js';
+import {smartAttacks} from '../public/enemy-brain.js';
 import {normalizeState} from '../server/player-state.mjs';import {protectFishingState,applyGameplayAction} from '../server/gameplay.mjs';import {actVaultParty,advanceVaultParty,publicVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';import {testDatabase} from './db-helper.mjs';import {handlePlayerApi} from '../server/player-api.mjs';import {normalizeMagic} from '../public/essences.js';import {advanceServerCombat} from '../server/activities.mjs';import {boot} from './helpers/game-client.mjs';import {enemyRoleInfo} from '../public/enemy-roles.js';
 function player(name='A'){return normalizeState({avatar:{name,outfit:0,hair:0},location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2,routeChoice:'safe'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword','quickfang'],equippedWeapon:'ironSword'},magic:{picks:['fire','ice','storm'],unlocked:['fire:sword','ice:shield','fire:renewal','storm:sword'],slots:{q:'ice:shield',e:'fire:renewal'}}});}
 function party(){const r={id:'AAAABBBB',leader:'a',status:'waiting',expiresAt:2000000,hp:420,max:420,members:{},adds:[]},a=player(),b=player('B');b.position={x:9,y:6};actVaultParty(r,a,'a',{kind:'join'},1000);actVaultParty(r,b,'b',{kind:'join'},1000);return {r,a,b};}
 const act=(r,s,id,kind,at=2000,extra={})=>actVaultParty(r,s,id,{kind,...extra},at,()=>.5);
+test('the spillway opens a real combat tile and survives a save on that tile',()=>{
+ const s=player();
+ applyGameplayAction(s,'depthsVaultMechanism',{id:'spillway'},1000);
+ assert.throws(()=>applyGameplayAction(s,'depthsVaultMechanism',{id:'screen'},1000),/once/);
+ applyGameplayAction(s,'fight',{},1000);
+ s.hunting.encounter.arenaPlayer={x:10,y:6};
+ const tile={x:11,y:6};
+ assert.equal(arenaMoveEvent({...s,hunting:{encounter:{...s.hunting.encounter,vaultMechanism:undefined}}},tile,1100),null);
+ s.hunting.encounter=arenaMoveEvent(s,tile,1100).encounter;
+ assert.deepEqual(normalizeState(s).hunting.encounter.arenaPlayer,tile);
+});
+test('the waiting leader selects shared bolt cover once and it does not stop detonation',()=>{
+ const {r,a,b}=party();
+ assert.throws(()=>act(r,b,'b','mechanism',1100,{mechanism:'screen'}),/leader/);
+ act(r,a,'a','mechanism',1100,{mechanism:'screen'});
+ assert.throws(()=>act(r,a,'a','mechanism',1200,{mechanism:'spillway'}),/once|one/);
+ assert.equal(publicVaultParty(r,'b').vaultMechanism,'screen');
+ act(r,a,'a','start',1300);
+ const e=coopEncounter(r),tile={x:4,y:5};
+ assert(arenaBehindCover(e,smartAttacks.bossFan,tile));
+ assert(!arenaBehindCover({...e,vaultMechanism:undefined},smartAttacks.bossFan,tile));
+ assert(!arenaBehindCover(e,smartAttacks.bossErupt,tile));
+});
 test('a party shares one scaled Guardian, locks membership at start and preserves saved membership',()=>{
  const {r,a,b}=party();assert.equal(normalizeState(a).vaultCoop.id,r.id);assert.throws(()=>act(r,b,'b','start'),/leader/);act(r,a,'a','start');assert.equal(r.max,693);assert.equal(publicVaultParty(r,'b').hp,693);assert.throws(()=>act(r,player('C'),'c','join'),/started/);
  const forged=structuredClone(a);delete forged.vaultCoop;forged.location='home';forged.combatGear.equippedWeapon='quickfang';forged.position={x:5,y:5};const next=protectFishingState(a,forged);assert.equal(next.vaultCoop.id,r.id);assert.equal(next.location,'depthsVault');assert.equal(next.combatGear.equippedWeapon,'ironSword');

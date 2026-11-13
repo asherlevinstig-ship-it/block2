@@ -1,3 +1,4 @@
+import {chooseVaultMechanism} from '../public/vault-mechanisms.js';
 import {useGalleryLight} from '../public/gallery-light.js';
 import {detectCombatBuild} from '../public/combat-builds.js';
 import {vaultDefeatTip} from '../public/vault-coop.js';
@@ -43,7 +44,7 @@ export function startCombatEncounter(state,enemy,now){
   state.hunting.encounter.buildId=detectCombatBuild(state).id;
   const relics=detectCombatBuild(state).relics;if(relics?.length)state.hunting.encounter.buildRelics=relics;
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
-  if(enemy.room.startsWith('depths')||enemy.room==='millCellar'||enemy.room==='crystaldeep')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
+  if(enemy.room.startsWith('depths')||enemy.room==='millCellar'||enemy.room==='crystaldeep')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,...(enemy.room==="depthsVault"&&state.depthsRun?.vaultMechanism?{vaultMechanism:state.depthsRun.vaultMechanism}:{}),arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
   if(enemy.room==='millCellar'||enemy.room==='crystaldeep')state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt||state.plan?.miningWork)state.hunting.encounter.tacticsAt=now;
@@ -298,6 +299,7 @@ export function activityAction(state,action,body,now,random){
     inspectDepthsFind(state,item,now);
     return true;
   }
+  if(action==='depthsVaultMechanism'){idle(state);chooseVaultMechanism(state,body.id);return true;}
   if(action==='depthsLight'){
     idle(state);
     useGalleryLight(state,body.id,now);

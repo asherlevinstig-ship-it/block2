@@ -81,7 +81,7 @@ export const moonwood=(()=>{
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
   const isWater=(id,x,y)=>id===wildlifeRoom?reserveWater(x,y):watchRooms.includes(id)?watchWater(id,x,y):willowmereRooms.includes(id)?riverWater(id,x,y):id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
-  const blocked=(id,x,y,progress,depthsRun)=>!dungeonFloor(id,x,y)||isWater(id,x,y)&&!riverBridge(id,x,y)&&!(id==='creek'&&y===4&&progress.bridge||id==='depthsGate'&&floodCrossingOpen(depthsRun,x,y));
+  const blocked=(id,x,y,progress,depthsRun)=>!dungeonFloor(id,x,y,depthsRun?.vaultMechanism)||isWater(id,x,y)&&!riverBridge(id,x,y)&&!(id==='creek'&&y===4&&progress.bridge||id==='depthsGate'&&floodCrossingOpen(depthsRun,x,y));
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
   // Give trees boxed in by the seeded scenery a reachable side.
   const reachableTreeSites={
