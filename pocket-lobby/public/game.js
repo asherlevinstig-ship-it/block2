@@ -1101,7 +1101,15 @@ function advanceMoonwellDepths(){
   if(unavailable()||depthsSideForRoom(currentRoom)||currentRoom===depthsCacheRoom||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
   if(index===0&&(depthsRun.routeChoice==='pending'||depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated))return;
   const next=depthsStages[index+1];
-  if(next){if(window.playerCloud?.gameplay)serverTravel('depthsNext');else enterRoom(next.room);}
+  if(!next)return;
+  if(currentRoom==='depthsGallery'&&window.playerCloud?.gameplay){
+    $('depthsBankError').hidden=true;
+    serverGameplay('depthsNext').then(({state})=>enterRoom(state.location,state.position)).catch(error=>{
+      $('depthsBankError').textContent=error.message;
+      $('depthsBankError').hidden=false;
+    });
+  }else if(window.playerCloud?.gameplay)serverTravel('depthsNext');
+  else enterRoom(next.room);
 }
 function leaveMoonwellDepths(){
   const index=depthsStageIndex(currentRoom);
@@ -1362,6 +1370,10 @@ function updateDepthsPanel(){
     $('gallerySearch').hidden=!!opened;$('gallerySearch').textContent=crack?'Examine runic coffer':'Search loose stones';
   }
   const decision=$('depthsDecision');
+  const galleryDecision=canDecide&&currentRoom==='depthsGallery'&&depthsRun?.cleared===2;
+  decision.dataset.galleryDecision=String(galleryDecision);
+  $('depthsDecisionVitals').hidden=!galleryDecision;
+  $('depthsDecisionHealth').hidden=galleryDecision;
   const newlyCleared=canDecide&&decision.hidden;
   if(!canDecide)$('depthsBankError').hidden=true;
   decision.hidden=!canDecide;
@@ -1378,7 +1390,8 @@ function updateDepthsPanel(){
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next||atFork||pendingGuardian;
-  $('depthsNext').textContent=currentRoom==='depthsGallery'?'Risk the Vault · 1 AP':'Press deeper · 1 AP';
+  $('depthsNext').textContent=galleryDecision?'Enter the Vault · 1 AP':'Press deeper · 1 AP';
+  $('depthsLeave').textContent=galleryDecision?'Bank & leave · 1 AP':'Bank spoils & leave';
   $('depthsExplore').textContent=currentRoom==='depthsGallery'?'Search this room':'Explore chamber';
   $('depthsSideOptions').textContent='Side routes · Rest, treasure or trial';
   $('depthsLeave').hidden=!canDecide;
@@ -1387,6 +1400,10 @@ function updateDepthsPanel(){
   $('depthsDecisionStep').textContent='MOONWELL DEPTHS · '+depthsRun.cleared+' / '+depthsStages.length+' CLEARED';
   $('depthsDecisionTitle').textContent=side?(sideId==='rest'?'A moment to recover':sideId==='trial'?(depthsRun.finds?.includes('sideSeal')?'Challenge reward collected':'The Awakening Seal is open'):'Treasury secured'):choosingPassage?'Choose your passage':cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):needsSluice?'Drain the flooded crossing':(next?stage.name+' cleared':'Expedition complete');
   $('depthsBankNow').textContent=formatDepthsSpoils(spoils);
+  if(galleryDecision){
+    $('depthsDecisionTitle').textContent='Bank your haul or face the Guardian?';
+    updateDepthsDecisionVitals();
+  }
   $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
   if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
   $('depthsRisk').hidden=!next||choosingPassage||pendingGuardian;
@@ -1394,9 +1411,17 @@ function updateDepthsPanel(){
   if(next){
     $('depthsNextReward').textContent='Earn '+formatDepthsSpoils(depthsStageSpoils(next));
     $('depthsNextEnemy').textContent=next.name+' · '+huntEnemies[next.enemy].name+' · '+dungeonEnemyPreview(huntEnemies[next.enemy]).health+' HP';
-    $('depthsRiskText').textContent='If you fall, you lose the unbanked spoils above. A successful flee returns you to this chamber.';
+    $('depthsRiskText').textContent=galleryDecision?'Defeat costs the unbanked haul shown here.':'If you fall, you lose the unbanked spoils above. A successful flee returns you to this chamber.';
   }
   if(newlyCleared)$('depthsDecisionTitle').focus({preventScroll:true});
+}
+function updateDepthsDecisionVitals(){
+  if($('depthsDecisionVitals').hidden)return;
+  const ap=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
+  $('depthsDecisionHp').textContent=health+' / '+maxHealth();
+  $('depthsDecisionMana').textContent=manaAvailable(playerVitals,combatNow())+' / 100';
+  $('depthsDecisionAp').textContent=ap;
+  $('depthsDecisionApHint').textContent=ap===0?'Answer a question to earn 1 AP before travelling.':ap===1?'Entering uses your last AP. Attacks and abilities also cost AP.':'';
 }
 function startMonsterEncounter(enemy,standGround=false){
   combatAudio.enable(combatSoundEnabled);
@@ -4696,6 +4721,7 @@ function animation(time){
 }
 let lastVitalsPaint=-Infinity;
 function updateVitalsHud(){
+ updateDepthsDecisionVitals();
  const values={health:Math.ceil(homeBedRest?bedRestHealth(homeBedRest,combatNow()):health),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
  values.actionPoints=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
  const hungerStatus=$('hungerStatus');
