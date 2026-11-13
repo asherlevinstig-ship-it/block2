@@ -2,11 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
-import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary,ironSwordFishTask} from '../public/upgrade-goals.js';
+import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary,ironSwordFishTask,ironSwordCatchTask} from '../public/upgrade-goals.js';
 import {autoRecapSnapshot,autoRecapView} from '../public/auto-recap.js';
 import {AWAY_GRACE_MS as G} from '../public/character-rules.js';
 import {protectFishingState} from '../server/gameplay.mjs';
 import {boot} from './helpers/game-client.mjs';
+test('an empty bag starts a two-catch task and the second catch switches to selling',()=>{
+ const state=normalizeState({location:'home',credits:112,fishStock:{},quest:{accepted:true,claimed:true,fish:3,boars:1,sold:true},characterRules:{goal:{target:'weapon:ironSword',autoBuy:false}},actionPoints:{value:0}});
+ const game=boot(state);
+ game.run('openPinnedGoal()');
+ assert.match(game.nodes.get('ironSwordFishValue').textContent,/Catch two fish/);
+ const travel=game.read("goalTravelCost('pond')");
+ assert(travel>0);
+ assert.equal(ironSwordCatchTask(state,travel,0).questions,travel+2);
+ state.fishStock={perch:1};
+ assert.equal(ironSwordCatchTask(state,0,1,true).remaining,1);
+ state.fishStock.perch++;
+ assert.equal(ironSwordCatchTask(state,0,1,true),null);
+ assert.equal(ironSwordFishTask(state,0,0).remaining,26);
+});
 test('a short fish sale uses the current bag value and asks only for missing travel points',()=>{
  const state=normalizeState({credits:112,fishStock:{perch:4},characterRules:{goal:{target:'weapon:ironSword',autoBuy:false}}});
  assert.deepEqual(ironSwordFishTask(state,2,0),{quantity:4,gold:24,travel:2,questions:2,remaining:14});

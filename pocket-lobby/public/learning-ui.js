@@ -28,7 +28,8 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
   trip.hidden=!goalTrip;
   if(goalTrip){
    const remaining=Math.max(0,goalTrip.travelAP-(s.actionPoints?.value??0));
-   tripStatus.textContent=remaining?'Trading Post trip · '+remaining+' more answer'+(remaining===1?'':'s')+' needed':'You have enough AP to reach the Trading Post.';
+   const label=goalTrip.goalLabel??'Trading Post trip';
+   tripStatus.textContent=remaining?label+' · '+remaining+' more answer'+(remaining===1?'':'s')+' needed':goalTrip.readyText??'You have enough AP to reach the Trading Post.';
   }
   el('learningSessionCount').textContent=answered+' / '+target+' answered';el('learningSessionBar').value=answered;el('learningSessionBar').max=target;
   el('learningSessionBar').setAttribute('aria-label','Homework: '+answered+' of '+target+' questions answered');
