@@ -1,3 +1,4 @@
+import {useGalleryLight} from '../public/gallery-light.js';
 import {detectCombatBuild} from '../public/combat-builds.js';
 import {vaultDefeatTip} from '../public/vault-coop.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
@@ -295,6 +296,11 @@ export function activityAction(state,action,body,now,random){
     idle(state);
     const item=moonwood.layouts[state.location]?.scenery.find(prop=>prop.type===body.id);
     inspectDepthsFind(state,item,now);
+    return true;
+  }
+  if(action==='depthsLight'){
+    idle(state);
+    useGalleryLight(state,body.id,now);
     return true;
   }
   if(action==='depthsFloodCache'){

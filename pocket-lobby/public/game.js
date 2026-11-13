@@ -1225,6 +1225,35 @@ async function openFloodCache(choice){
   }catch(error){$('floodCacheError').textContent=error.message;}
   finally{floodCacheBusy=false;buttons.forEach(button=>button.disabled=false);}
 }
+async function activateGalleryLight(item){
+  const claim=item.type==='lightAlcove'||item.type==='lightShrine';
+  if(claim&&galleryLightReceiver(depthsRun?.galleryLight)!==item.type){
+    note('Turn the mirrors until the moonbeam reaches this receiver.');
+    return;
+  }
+  const apply=async()=>{
+    const before={health,mana:manaAvailable(playerVitals,combatNow())};
+    try{
+      if(window.playerCloud?.gameplay)await serverGameplay('depthsLight',{id:item.type});
+      else{
+        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health,vitals:playerVitals};
+        useGalleryLight(state,item.type,combatNow());
+        health=state.health;playerVitals=state.vitals;savePlayerState();
+      }
+      updateDepthsPanel();updatePlayerStats();
+      if(item.type==='lightAlcove')showTransaction('Moonlit alcove opened',[{icon:'◈',text:'+35 gold · Unbanked until you extract'}]);
+      else if(item.type==='lightShrine')showTransaction('Moonlit shrine restored you',[
+        {icon:'♥',text:'+'+(health-before.health)+' HP'},
+        {icon:'✦',text:'+'+Math.max(0,manaAvailable(playerVitals,combatNow())-before.mana)+' mana'}
+      ]);
+      else{combatAudio.play('mirror');note('The mirror clicks into place.');}
+    }catch(error){if(claim)throw error;note(error.message,6500);}
+  };
+  if(claim){
+    const reward=item.type==='lightAlcove'?'35 unbanked gold':'up to 25 HP and 30 mana';
+    openWatchDialog(item.label,'Claim '+reward+' and spend this expedition’s moonbeam.','Claim reward',apply);
+  }else if(item.type!=='lightSource')await apply();
+}
 function openGalleryEncounter(){
   const event=depthsRun?.encounter,discovery=dungeonEncounters[event?.kind];
   if(unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2||!discovery)return;
@@ -1323,6 +1352,8 @@ function updateDepthsPanel(){
   $('galleryExplore').hidden=!galleryExploring;
   $('depthsCampRibbon').hidden=!atCamp||!depthsExploring||galleryExploring||gateExploring;
   if(galleryExploring){
+    const light=depthsRun.galleryLight,receiver=galleryLightReceiver(light);
+    $('galleryLightHint').textContent=light?.claimed?'The moonbeam has been spent.':receiver==='lightAlcove'?'Alcove lit · 35 unbanked gold':receiver==='lightShrine'?'Shrine lit · Up to 25 HP and 30 mana':light?.first?'Turn the second mirror toward a receiver.':'Turn the first mirror to redirect the moonbeam.';
     const crack=depthsRun.finds?.includes('galleryCrack'),opened=depthsRun.finds?.includes('runeCoffer');
     $('galleryExploreTitle').textContent=opened?'45 gold added to your haul':crack?'A coffer behind the wall':'A cold draught stirs the roots';
     $('galleryExploreText').textContent=opened?'45 extra gold is at risk. Leave now, recover at the Shrine, or push toward the Vault.':crack?'Spend 60 mana for 45 unbanked gold, or keep your magic for the next fight.':'Look for the loose, glowing stones along the lower wall. Click to walk over and investigate.';
@@ -2098,7 +2129,9 @@ function roomFurniture(){
     const stag=moonbackHere();
     const index=depthsStageIndex(currentRoom);
     const available=currentRoom==='millCellar'? !adventure.millCellarCleared:index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
-    return [...moonwood.layouts[currentRoom].scenery.filter(item=>{
+    const lightProps=currentRoom==='depthsGallery'&&depthsRun?.cleared===2
+      ?Object.entries(galleryLightSites).map(([type,site])=>({type,...site,rot:0})): [];
+    return [...lightProps,...moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
@@ -3221,6 +3254,19 @@ function moonfinPoolOpen(){
 }
 function drawMoonwoodDetails(time){
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,drainAt:floodDrainAt,progress:adventure});
+  if(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&!depthsRun.galleryLight?.claimed){
+    const beam=galleryLightPath(depthsRun);
+    ctx.save();
+    ctx.beginPath();
+    beam.forEach((tile,index)=>{
+      const [x,y]=point(tile.x+.5,tile.y+.5,2);
+      if(index===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    });
+    ctx.lineJoin='round';ctx.lineWidth=8;ctx.strokeStyle='#91dfff55';ctx.stroke();
+    ctx.lineWidth=2;ctx.strokeStyle='#e5faff';
+    if(!reducedMotion.matches){ctx.setLineDash([7,4]);ctx.lineDashOffset=-time/55;}
+    ctx.stroke();ctx.restore();
+  }
   const clue=moonbackClue();
   if(clue){
     const {tile,inside}=clue.door,dx=inside.x-tile.x,dy=inside.y-tile.y;
@@ -3335,7 +3381,7 @@ function updateWorldLabels(){
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
@@ -3450,6 +3496,13 @@ function updateWorldLabels(){
   }
   if(watchRooms.includes(currentRoom)){
     for(const item of roomFurniture()){
+      if(Object.hasOwn(galleryLightSites,item.type)){
+        if(!depthsRun.galleryLight?.claimed&&item.type!=='lightSource'){
+          const lit=galleryLightReceiver(depthsRun.galleryLight)===item.type;
+          add(item.label,...point(item.x+.5,item.y+.5,27),'npc',()=>use(item),lit?'Lit · Ready to claim':undefined);
+        }
+        continue;
+      }
       const label=watchInteractLabel(currentRoom,item.type,adventure);
       if(label)add(label,...point(item.x+.5,item.y+.5,moonwood.heights[item.type]+9),'npc',()=>use(item));
       if(item.type==='fishingPost')add('Hidden fishing pool',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item));
@@ -4485,6 +4538,7 @@ function finishInteraction(){
   }else if(item.type==='cachePassage'){
     if(depthsSideForRoom(currentRoom))visitDungeonSide('return');else visitDepthsCache();
   }else if(item.type==='restAltar'){useDungeonShrine();
+  }else if(Object.hasOwn(galleryLightSites,item.type)){activateGalleryLight(item);
   }else if(item.type==='galleryEncounter'){openGalleryEncounter();
   }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
@@ -6342,6 +6396,11 @@ $('depthsExplore').onclick=()=>{
   (currentRoom==='depthsGallery'?$('galleryRoutes'):currentRoom==='depthsGate'?$('floodExploreRoutes'):$('depthsCampRibbon')).focus({preventScroll:true});
 };
 $('galleryRoutes').onclick=()=>{depthsExploring=false;updateDepthsPanel();};
+$('galleryLightGuide').onclick=()=>{
+  const id=galleryLightReceiver(depthsRun?.galleryLight)??(depthsRun?.galleryLight?.first?'lightMirrorB':'lightMirrorA');
+  const item=roomFurniture().find(prop=>prop.type===id);
+  if(item)use(item);
+};
 $('galleryEncounterVisit').onclick=()=>{const item=roomFurniture().find(p=>p.type==='galleryEncounter');if(item)use(item);};
 $('galleryEncounterClose').onclick=$('galleryEncounterLater').onclick=()=>$('galleryEncounterDialog').close();
 $('gallerySearch').onclick=()=>{const type=depthsRun?.finds?.includes('galleryCrack')?'runeCoffer':'galleryCrack';const item=roomFurniture().find(p=>p.type===type);if(item)use(item);};

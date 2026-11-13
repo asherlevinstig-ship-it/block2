@@ -1,4 +1,5 @@
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
+import {galleryLightReceiver,galleryLightSites} from './gallery-light.js';
 import {floodCrossingRow,floodCrossingOpen} from './flooded-chamber.js';
 import {trailCamp,trailCampPhase} from './trail-camp.js';
 import {crystaldeepArea,drawCrystaldeepGround,drawMineMouth,drawCrystalProp,drawCrystalAtmosphere} from './crystaldeep.js';
@@ -235,6 +236,24 @@ export const moonwood=(()=>{
   }
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold'}){
+    if(Object.hasOwn(galleryLightSites,item.type)){
+      const {x,y,type}=item,[px,py]=point(x+.5,y+.5);
+      const light=depthsRun?.galleryLight,lit=!light?.claimed&&galleryLightReceiver(light)===type;
+      const mirror=type.startsWith('lightMirror');
+      const color=lit?(type==='lightShrine'?'#a9ffce':'#ffe1a0'):type==='lightSource'&&!light?.claimed?'#c8f5ff':'#7493a5';
+      surface(x+.1,y+.1,.8,.8,.3,lit?'#addfff66':'#55718544');
+      block(x+.19,y+.21,.62,.58,0,7,['#79969d','#344751','#516771']);
+      if(mirror){
+        const angle=type==='lightMirrorA'?Number(!!light?.first):light?.second??0;
+        const lean=[8,-8,0][angle];
+        rect(px-2,py-18,4,14,'#6e8792');
+        polygon([[px-8,py-16],[px-8+lean,py-29],[px+8+lean,py-29],[px+8,py-16]],'#92c9dd','#e4f5f7');
+      }else if(type==='lightAlcove'){
+        block(x+.21,y+.22,.58,.54,7,9,[color,'#483b44','#785b50']);
+        rect(px-2,py-13,4,4,lit?'#fff2bb':'#8e8073');
+      }else polygon([[px,py-32],[px+8,py-22],[px,py-10],[px-8,py-22]],color,'#b6dce4');
+      return;
+    }
     if(item.type==='galleryEncounter'){
       const {x,y}=item,[px,py]=point(x+.5,y+.5),kind=depthsRun?.encounter?.kind,done=!!depthsRun?.encounter?.choice,bob=reduced?0:Math.sin(time/450)*.5;
       const glow=kind==='shrine'?'#c4afea':kind==='merchant'?'#f1d598':'#a8cebf';

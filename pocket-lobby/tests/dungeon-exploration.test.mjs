@@ -5,8 +5,49 @@ import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 import {depthsSpoils,inspectDepthsFind} from '../public/depths.js';
 import {moonwood} from '../public/moonwood.js';
 import {boot} from './helpers/game-client.mjs';
+import {galleryLightSites,galleryLightPath} from '../public/gallery-light.js';
 const start=()=>normalizeState({location:'depthsGallery',position:{x:2,y:6},depthsRun:{cleared:2,routeChoice:'safe'},vitals:{mana:100,manaAt:1000},quest:{accepted:true,claimed:true,fish:3,boars:1,sold:true},bedLessonComplete:true});
 const act=(s,id,now=1000)=>applyGameplayAction(s,'depthsInspect',{id},now,()=>.5);
+
+test('the mirror puzzle exposes one reward per expedition and holds treasure until extraction',()=>{
+ let s=start();
+ const use=id=>{
+  const {x,y}=galleryLightSites[id];
+  s.position={x,y:y+1};
+  applyGameplayAction(s,'depthsLight',{id},1000);
+ };
+ assert.throws(()=>use('lightAlcove'),/receiver lit/);
+ use('lightMirrorA');
+ assert.equal(galleryLightPath(s.depthsRun).at(-1).y,7);
+ use('lightMirrorB');
+ assert.equal(galleryLightPath(s.depthsRun).at(-1),galleryLightSites.lightAlcove);
+ use('lightAlcove');
+ s=normalizeState(s);
+ assert.throws(()=>use('lightMirrorB'),/already been spent/);
+ assert.equal(s.credits,100);
+ assert.equal(depthsSpoils(s.depthsRun).gold,71);
+ applyGameplayAction(s,'bank',{},1000);
+ assert.equal(s.credits,171);
+});
+
+test('the recovery receiver is reachable through the room UI and preserves access to the Vault',async()=>{
+ const s=start();
+ s.health=60;s.vitals.mana=40;
+ const use=(id,x,y)=>{s.position={x,y};applyGameplayAction(s,'depthsLight',{id},1000);};
+ use('lightMirrorA',4,4);use('lightMirrorB',6,6);use('lightMirrorB',6,6);
+ assert.equal(galleryLightPath(s.depthsRun).at(-1),galleryLightSites.lightShrine);
+ const g=boot(s);
+ g.run('depthsExploring=true;updateDepthsPanel();draw(2200)');
+ assert.match(g.nodes.get('galleryLightHint').textContent,/Shrine lit/);
+ assert.deepEqual(g.errors,[]);
+ use('lightShrine',4,7);
+ assert.equal(s.health,85);assert.equal(s.vitals.mana,70);
+ assert.throws(()=>use('lightAlcove',9,6),/already been spent/);
+ applyGameplayAction(s,'depthsNext',{},1000);
+ assert.equal(s.location,'depthsVault');
+ const skipped=start();applyGameplayAction(skipped,'depthsNext',{},1000);
+ assert.equal(skipped.location,'depthsVault');
+});
 test('the cracked wall reveals a coffer; mana and risky loot survive return trips and reloads',()=>{
  let s=start();act(s,'galleryCrack');assert.deepEqual(s.depthsRun.finds,['galleryCrack']);s.position={x:3,y:8};act(s,'runeCoffer');assert.equal(s.vitals.mana,40);assert.equal(s.credits,100);assert.equal(depthsSpoils(s.depthsRun).gold,81);
  s=normalizeState(s);act(s,'runeCoffer',1000);assert.equal(s.vitals.mana,40);assert.equal(depthsSpoils(s.depthsRun).gold,81);
