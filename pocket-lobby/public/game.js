@@ -6569,10 +6569,67 @@ let savingRules=false,ruleQueueDraft=[];
 function currentGoalState(){return {...(window.playerCloud?.initial??savedPlayerState??{}),credits,stats:playerStats,combatGear,fishingGear,characterRules};}
 function updateUpgradeGoalHud(){
   const g=upgradeGoalProgress(currentGoalState()),button=$('upgradeGoalHud');button.hidden=!g;
-  if(!g)return;
-  button.textContent=(g.receipt?.status==='purchased'?'Equipped: ':g.receipt||g.owned?'Goal reached: ':'Goal: ')+g.item.name+(!g.receipt&&!g.owned?' · '+Math.min(g.goldPercent,...g.requirements.map(r=>r.percent))+'%':'');
+  if(!g){
+    button.hidden=!quest.claimed;
+    button.textContent='Pin an upgrade goal';
+    button.title='Choose an upgrade to work toward';
+    return;
+  }
+  button.textContent=pinnedGoalSummary(currentGoalState());
   button.title=g.item.name+' · '+g.gold+' / '+g.item.price+' gold · '+g.requirements.map(r=>r.label+' '+r.current+'/'+r.level).join(' · ');
 }
+function openPinnedGoal(){
+  const g=upgradeGoalProgress(currentGoalState());
+  const dialog=$('pinnedGoalDialog');
+  const select=$('pinnedGoalTarget');
+  select.replaceChildren();
+  for(const [id,item] of Object.entries(upgradeTargets)){
+    const option=document.createElement('option');
+    option.value=id;option.textContent=item.name+' · '+item.price+' gold';select.append(option);
+  }
+  select.value=g?.target??'weapon:ironSword';
+  $('pinnedGoalStatus').textContent=g?pinnedGoalSummary(currentGoalState()):'Choose the upgrade you want to work toward.';
+  $('pinnedGoalSave').textContent=g?'Update pinned goal':'Pin goal';
+  $('pinnedGoalClear').hidden=!g;
+  $('pinnedGoalNext').hidden=!g;
+  $('pinnedGoalAuto').hidden=!g||g.owned||g.ready;
+  const trySword=g?.target==='weapon:ironSword'&&combatGear.equippedWeapon==='ironSword';
+  $('pinnedGoalNext').textContent=trySword?'Try it against the Wild Boar':g?.owned?(g.item.kind==='weapon'?'Open equipment':'Open inventory'):g?.ready?'Go to shop':g?.requirements.some(r=>!r.met)?(g.item.kind==='weapon'?'Train with the Wild Boar':'Go fishing'):'Go to the Trading Post';
+  if(!dialog.open)dialog.showModal();
+}
+async function savePinnedGoal(target){
+  const save=$('pinnedGoalSave'),clear=$('pinnedGoalClear');
+  if(save.disabled)return;
+  save.disabled=clear.disabled=true;
+  try{
+    const state=window.playerCloud?.initial;
+    const rules=state?.pendingCharacterRules??state?.characterRules??characterRules;
+    const goal={target,autoBuy:rules.goal?.target===target&&rules.goal.autoBuy===true};
+    const result=await window.playerCloud.saveRules({...rules,goal});
+    characterRules=normalizeCharacterRules(result.characterRules);
+    updateUpgradeGoalHud();
+    if(result.pendingCharacterRules)$('pinnedGoalStatus').textContent='Saved for your next Auto session.';
+    else openPinnedGoal();
+  }catch(error){$('pinnedGoalStatus').textContent=error.message;}
+  finally{save.disabled=clear.disabled=false;}
+}
+$('pinnedGoalClose').onclick=()=>$('pinnedGoalDialog').close();
+$('pinnedGoalSave').onclick=()=>savePinnedGoal($('pinnedGoalTarget').value);
+$('pinnedGoalClear').onclick=()=>savePinnedGoal(null);
+$('pinnedGoalQuestions').onclick=()=>{$('pinnedGoalDialog').close();window.towerLearning?.open();};
+$('pinnedGoalAuto').onclick=()=>{$('pinnedGoalDialog').close();openCharacterRules();};
+$('pinnedGoalNext').onclick=()=>{
+  const g=upgradeGoalProgress(currentGoalState());
+  if(!g)return;
+  $('pinnedGoalDialog').close();
+  if(g.target==='weapon:ironSword'&&combatGear.equippedWeapon==='ironSword'){
+    setExplorationDestination('clearing');navigateHud('clearing');return;
+  }
+  if(g.owned){openInventory();if(g.item.kind==='weapon'){$('weaponSelect').value=g.item.id;updateWeaponInventory();}return;}
+  const destination=g.ready?(g.item.kind==='weapon'?'armory':'store'):g.requirements.some(r=>!r.met)?(g.item.kind==='weapon'?'clearing':'pond'):'market';
+  if(currentRoom===destination&&['armory','store','market'].includes(destination))openMerchant();
+  else{setExplorationDestination(destination);navigateHud(destination);}
+};
 function renderUpgradeGoalProgress(goal){
   const list=$('rulesGoalProgress');list.replaceChildren();
   const g=upgradeGoalProgress(currentGoalState(),goal);$('rulesGoalAutoBuy').disabled=!g||savingRules;
@@ -6781,6 +6838,8 @@ async function saveSimpleAuto(start){
  try{
  simpleAutoBusy=true;renderSimpleAuto();$('simpleAutoStatus').textContent='';
  const options=simpleAutoOptions(),rules=normalizeCharacterRules(simpleAutoRules(simpleAutoChoice,options));
+ const saved=window.playerCloud?.initial;
+ rules.goal=(saved?.pendingCharacterRules??saved?.characterRules??characterRules).goal;
  if(!routineControlled())savePlayerState();
  const state=start?await window.playerCloud.startSimpleAuto(simpleAutoChoice,options):await window.playerCloud.saveRules(rules);
  characterRules=normalizeCharacterRules(state.characterRules);updateUpgradeGoalHud();
@@ -6798,7 +6857,7 @@ $('simpleAutoForm').onsubmit=event=>{event.preventDefault();saveSimpleAuto(true)
 $('simpleAutoSave').onclick=()=>saveSimpleAuto(false);
 $('simpleAutoAdvanced').onclick=()=>{$('simpleAutoDialog').close();openAdvancedCharacterRules();};
 $('simpleAutoDialog').oncancel=event=>{if(simpleAutoBusy)event.preventDefault();};
-$('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
+$('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openPinnedGoal;
 $('clearAutoUpgradeGoal').onclick=()=>{$('rulesGoalTarget').value='';$('rulesGoalAutoBuy').checked=false;updateCharacterRulesPreview();$('rulesStatus').textContent='Completed goal cleared. Save Auto Mode to use your routine again.';};
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
 for(const id of ['rulesFoodEnabled','rulesFoodBelow','rulesFoodKeep','rulesBreadBudget','gambleAutoGame','gambleAutoColor','gambleAutoBet','gambleAutoLoss','gambleAutoReserve','gambleAutoProfit','gambleAutoRounds','rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;

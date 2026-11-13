@@ -1,4 +1,5 @@
 import {autoStatus} from './auto-mode.js';
+import {pinnedGoalSummary,upgradeGoalProgress} from './upgrade-goals.js';
 import {timberSalesText} from './simple-auto.js';
 import {oreProducts,miningFinds} from './mining.js';
 
@@ -13,9 +14,11 @@ export function autoRecapSnapshot(state){
  const plan=routine(state);
  if(!plan)return null;
  const sales=Object.values(plan.oreSales??{});
+ const goal=upgradeGoalProgress(state);
  return {...Object.fromEntries(Object.keys(miningFinds).map(id=>['find_'+id,plan.miningFinds?.[id]??0])),id:String(plan.routineId??plan.startedAt),fish:sum(plan.catches),timber:plan.timber??0,ore:sum(plan.ores),miningXp:plan.miningXp??0,oreSold:sales.reduce((total,sale)=>total+sale.quantity,0),oreGold:sales.reduce((total,sale)=>total+sale.gold,0),wins:plan.hunts?.wins??0,
   places:plan.explored??plan.visited?.length??0,rounds:plan.rounds??0,meals:sum(plan.cookedMeals),
   earned:plan.goldEarned??0,spent:plan.goldSpent??0,bread:plan.rationGoldSpent??0,banked:plan.bankedGold??0,
+  goalTarget:goal?.target??null,goalRemaining:goal?Math.max(0,goal.item.price-goal.gold):null,
   marketQuantity:plan.timberSales?.quantity??0,marketGold:plan.timberSales?.gold??0,marketSales:plan.timberSales?.sales??0,marketVisits:plan.timberSales?.visits??0,
  };
 }
@@ -33,12 +36,15 @@ export function autoRecapView(state,baseline,roomName){
   .map(([key,label])=>({label,value:gained(key)})).filter(item=>item.value>0);
  for(const [id,item] of Object.entries(miningFinds)){const value=gained('find_'+id);if(value)rewards.push({label:item.name,value});}
  const earned=gained('earned'),spent=gained('spent'),bread=gained('bread'),banked=gained('banked');
+ const closer=same&&baseline.goalTarget===totals.goalTarget&&Number.isFinite(baseline.goalRemaining)&&Number.isFinite(totals.goalRemaining)
+  ?baseline.goalRemaining-totals.goalRemaining:0;
+ const goal=pinnedGoalSummary(state)+(closer>0?' · Gold gap narrowed by '+closer:'');
  const wallet=[earned&&'+'+format.format(earned)+' gold earned',spent&&'−'+format.format(spent)+' gold spent'+(bread?' · '+format.format(bread)+' on bread':''),banked&&format.format(banked)+' gold banked'].filter(Boolean);
  const mined=plan.mining&&oreProducts[plan.mining.ore],sold=gained('oreSold');
  const market=mined?'Sold '+sold+' '+mined.name+' for '+gained('oreGold')+' gold. '+(state.huntingLoot?.[plan.mining.ore]??0)+' in your bag.'
    :timberSalesText({quantity:gained('marketQuantity'),gold:gained('marketGold'),sales:gained('marketSales'),visits:gained('marketVisits')},state.woodcutting?.timber??0);
  return {rewards,wallet,location,running,returning:info.returning===true,summary:same?'Since you stepped away':'This Auto session',
-  status:running?activity:info.reason,completion:running?null:totals.id+':'+plan.endedAt,market,
+  status:running?activity:info.reason,completion:running?null:totals.id+':'+plan.endedAt,market,goal,
   startedAt:plan.startedAt,food:!!plan.foodTrip||foodStops.includes(plan.reason)||(plan.simpleMode?foodJobs.includes(plan.simpleMode):[undefined,'fishing','woodcutting','queue'].includes(plan.kind)),
  };
 }
@@ -56,6 +62,8 @@ export function initializeAutoRecap({doc,getPacket,roomName,takeControl,openFood
   dialog.dataset.running=String(view.running);
   byId('autoRecapLocation').textContent=view.location;
   byId('autoRecapStatus').textContent=view.status??'Your routine has finished.';
+  const goal=byId('autoRecapGoal');
+  if(goal){goal.textContent=view.goal;goal.hidden=!view.goal;}
   byId('autoRecapFood').hidden=!view.food;
   primary.disabled=view.returning;
   primary.textContent=view.returning?'Finishing current fight…':view.running?'Take control':'Return to play';

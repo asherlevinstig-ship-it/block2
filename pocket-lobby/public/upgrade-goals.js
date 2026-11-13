@@ -24,3 +24,13 @@ export function normalizeUpgradeReceipt(input){
  if(!input||!Object.hasOwn(upgradeTargets,input.target)||typeof input.autoBuy!=='boolean'||!['ready','owned','purchased'].includes(input.status)||!Number.isSafeInteger(input.at)||input.at<0||!Number.isSafeInteger(input.spent)||input.spent<0||input.spent>100000000||input.reason!==undefined&&!['spending-limit','gold-reserve'].includes(input.reason))throw new Error('Invalid upgrade goal progress.');
  return {target:input.target,autoBuy:input.autoBuy,status:input.status,at:input.at,spent:input.spent,...(input.reason?{reason:input.reason}:{})};
 }
+
+export function pinnedGoalSummary(state){
+ const goal=upgradeGoalProgress(state);
+ if(!goal)return '';
+ const remaining=Math.max(0,goal.item.price-goal.gold);
+ const missing=goal.requirements.filter(requirement=>!requirement.met).map(requirement=>requirement.label+' '+requirement.level);
+ if(goal.owned)return goal.item.name+' · In Inventory';
+ if(goal.ready)return goal.item.name+' · Ready to buy';
+ return [goal.item.name,...(remaining?[remaining+' gold to go']:[]),...missing].join(' · ');
+}

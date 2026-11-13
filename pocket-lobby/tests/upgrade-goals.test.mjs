@@ -2,11 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
-import {upgradeGoalProgress,normalizeUpgradeGoal} from '../public/upgrade-goals.js';
+import {upgradeGoalProgress,normalizeUpgradeGoal,pinnedGoalSummary} from '../public/upgrade-goals.js';
+import {autoRecapSnapshot,autoRecapView} from '../public/auto-recap.js';
 import {AWAY_GRACE_MS as G} from '../public/character-rules.js';
 import {protectFishingState} from '../server/gameplay.mjs';
 import {boot} from './helpers/game-client.mjs';
 const start=(autoBuy=false,extra={},queue={})=>({...normalizeState({credits:55,stats:{patienceXp:40},location:'hub',adventure:{discovered:['pond']},characterRules:{enabled:true,keepBait:0,queue:{enabled:true,steps:[{type:'fishing',amount:1},{type:'sellFish',amount:0},{type:'rest'}],budget:60,reserveGold:0,...queue},goal:{target:'rod:oak',autoBuy}},...extra}),routineLastSeen:0});
+test('a pinned sword goal reports wallet progress since departure and ignores a different goal baseline',()=>{
+ const state=start(false,{credits:112,stats:{strengthXp:1000,agilityXp:1000},characterRules:{goal:{target:'weapon:ironSword',autoBuy:false}}});
+ state.report={kind:'fishing',source:'rules',startedAt:1000,endedAt:2000,catches:{},reason:'returned'};
+ assert.match(pinnedGoalSummary(state),/Iron Sword · 38 gold to go/);
+ const baseline=autoRecapSnapshot(state);
+ state.credits+=13;
+ assert.match(autoRecapView(state,baseline,()=>null).goal,/25 gold to go · Gold gap narrowed by 13/);
+ assert.doesNotMatch(autoRecapView(state,{...baseline,goalTarget:'rod:oak'},()=>null).goal,/narrowed/);
+});
 const pulse=(s,at=G+300000,active=false)=>touchPresence(s,at,{active,random:()=>.5});
 test('goal needs gold and required stats, measures XP progress, and stops exactly after the qualifying sale',()=>{
  const s=start();assert.equal(upgradeGoalProgress(s).ready,false);assert.equal(upgradeGoalProgress(s).requirements[0].percent,80);

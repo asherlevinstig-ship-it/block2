@@ -542,3 +542,4 @@
 .hud-actionbar .dock-primary{flex-wrap:wrap;justify-content:flex-end}
 
 .player-label.enemy-label{pointer-events:auto;cursor:pointer;background:#2c1729ee;border:1px solid #ae7779;color:#ffe3dc;max-width:200px}.player-label.enemy-label[data-target=true]{border-color:#ffcf88;color:#ffdfac}.player-label.enemy-label:disabled{pointer-events:none;opacity:1}
+#pinnedGoalTarget{width:100%;margin:6px 0;padding:9px}.pinned-goal-actions{display:grid;gap:8px}.pinned-goal-actions button{width:100%;padding:8px;white-space:normal}.pinned-goal-actions button[hidden],#autoRecapGoal[hidden]{display:none}#autoRecapGoal{color:#ffe1a0}

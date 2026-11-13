@@ -434,6 +434,7 @@ export async function handlePlayerApi(request,env){
         if(state.depthsRun||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Auto after finishing your current activity and leaving the dungeon.');
         if(state.miningCut)throw new Error('Choose Stop at the quarry before starting Auto.');
         const rules=simpleAutoRules(body.mode,body.options??{});
+        rules.goal=(state.pendingCharacterRules??state.characterRules)?.goal;
         await settleBeforeLeavingFishing(env,id,state,now);
         saveAutoSettings(state,rules,now);
         if(state.plan?.source==='rules'){
