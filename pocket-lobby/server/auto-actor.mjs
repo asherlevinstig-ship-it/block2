@@ -26,7 +26,7 @@ export class AutoActor{
    this.actor.playerId=playerId;
    const observed=path==='/observe';
    const row=await this.tick(observed,observed);
-   if(observed&&row)latest=packet(row);
+   if(observed&&row)latest=packet(row,this.env);
   }
   return Response.json({motion:this.actor.active?{...this.positionAt(Date.now()),walk:this.actor.walk??null}:null,latest});
  });}

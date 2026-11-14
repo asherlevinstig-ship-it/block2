@@ -20,8 +20,9 @@ export function cellarAction(state,action){
  if(state.adventure.millCellarClaimed)return true;
  if(state.credits+cellarReward.gold>100000000)throw new Error('Make room in your wallet before opening the chest.');
  const magic=normalizeMagic(state.magic);
- if(magic.stones.shield>=9999)throw new Error('Make room for a Shield Awakening Stone first.');
+ if(!state.essencesPaused&&magic.stones.shield>=9999)throw new Error('Make room for a Shield Awakening Stone first.');
  state.credits+=cellarReward.gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+cellarReward.gold);
- magic.stones.shield++;state.magic=magic;state.adventure.millCellarClaimed=true;
+ if(!state.essencesPaused){magic.stones.shield++;state.magic=magic;}
+ state.adventure.millCellarClaimed=true;
  return true;
 }

@@ -484,3 +484,35 @@ test('saved mastery and contribution cannot be forged, and concurrent victory re
   assert.equal(retry.status,200);assert.equal(retry.state.magic.mastery.fire,20);
   assert.equal(retry.state.combatReceipt.events[0].mastery[0].leveled,false);
 });
+
+test('the live Essence pause removes saved spells, blocks all casting entry points and keeps cache gold',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const env={TOWER_DB:db,ESSENCES_PAUSED:true};
+ let cookie='',packet;
+ async function call(path,data){
+  const response=await handlePlayerApi(new Request('https://tower.test/api/player/'+path,{
+   method:data?'POST':'GET',headers:{Origin:'https://tower.test','Content-Type':'application/json',Cookie:cookie},
+   body:data?JSON.stringify({revision:packet?.revision,operation:crypto.randomUUID(),...data}):undefined
+  }),env);
+  cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;
+  const result=await response.json();if(response.ok)packet=result;
+  return {status:response.status,result};
+ }
+ await call('session',{});
+ const saved=normalizeState({...packet.state,location:'depthsCache',position:{x:8,y:5},
+  depthsRun:{cleared:1,routeChoice:'dangerous',cacheGuardDefeated:true},
+  magic:{picks:gems,unlocked:['fire:sword'],stones:{sword:2},slots:{q:'fire:sword'}}});
+ sql.prepare('UPDATE tower_players SET state_json=?').run(JSON.stringify(saved));
+ await call('state');
+ assert.equal(packet.state.essencesPaused,true);
+ assert.equal(packet.state.magic,undefined);
+ for(const [path,data] of [['gameplay/bondEssences',{picks:gems}],['gameplay/awakenPower',{id:'fire:sword'}],['gameplay/equipPower',{id:'fire:sword'}],['gameplay/combat',{input:'essence',slot:'q'}],['vault-coop',{kind:'power'}],['mill-raid',{kind:'power'}]]){
+  const result=await call(path,data);
+  assert.equal(result.status,400);
+  assert.match(result.result.error,/currently unavailable/);
+ }
+ assert.equal((await call('gameplay/depthsInspect',{id:'essenceCache'})).status,200);
+ assert.equal(packet.state.credits,saved.credits+50);
+ assert.equal(packet.state.magic,undefined);
+ assert.equal(packet.state.depthsRun.cacheStone,undefined);
+});

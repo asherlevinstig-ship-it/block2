@@ -12,7 +12,7 @@ export function watchAction(state,action,body){
  if(room==='starfall'&&!state.adventure.watchBoar)throw new Error('Defeat the Thorn Boar to break this cache seal.');
  const gold=type==='watchCache'?(room==='starfall'?35:15):0;
  if(state.credits+gold>100000000)throw new Error('Make room in your wallet before opening the cache.');
- if(room==='starfall'){
+ if(room==='starfall'&&!state.essencesPaused){
   const magic=normalizeMagic(state.magic);
   if(magic.stones.sword>=9999)throw new Error('Make room for a Sword Awakening Stone first.');
   magic.stones.sword++;state.magic=magic;

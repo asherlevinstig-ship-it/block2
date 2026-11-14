@@ -107,7 +107,8 @@ let goalTaskSale=null;
 const caughtFishValue=()=>Object.entries(fishStock).reduce((total,[id,count])=>total+count*(fishProducts[id]?.price??0),0);
 const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
 let meals={...savedPlayerState?.meals};
-let magicState=savedPlayerState?.magic?normalizeMagic(savedPlayerState.magic):null;
+const essencesPaused=savedPlayerState?.essencesPaused===true;
+let magicState=!essencesPaused&&savedPlayerState?.magic?normalizeMagic(savedPlayerState.magic):null;
 let characterRules=normalizeCharacterRules(savedPlayerState?.characterRules);
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
@@ -1037,7 +1038,7 @@ function renderCombatRecap(report){
   for(const [form,count] of Object.entries(rewards.stones??{}))row('Inventory · '+stoneForms[form].name+' Awakening Stone ×'+count);
   for(const award of rewards.mastery??[])row(essenceGems[award.gem].name+' Mastery · +'+award.xp+' XP'+(award.leveled?' · Level '+award.level+'!':''));
   if(rewards.held&&(rewards.held.gold||Object.keys(rewards.held.loot).length))row('Unbanked · '+formatDepthsSpoils(rewards.held));
-  if(rewards.cacheUnlocked)row('Essence Cache unlocked · '+essenceCacheGold+' gold + an Awakening Stone to collect');
+  if(rewards.cacheUnlocked)row('Essence Cache unlocked · '+essenceCacheGold+(essencesPaused?' gold to collect':' gold + an Awakening Stone to collect'));
   if(report.lostSpoils&&(report.lostSpoils.gold||Object.keys(report.lostSpoils.loot).length))row('Unbanked spoils lost · '+formatDepthsSpoils(report.lostSpoils));
   if(rewards.weapon)row(weaponCatalog[rewards.weapon].name+' · Rare weapon added to Inventory');
   if(rewards.rareEquipment)row(rareHunts[rewards.rareEquipment].name+' · Rare equipment added to Inventory');
@@ -1125,7 +1126,7 @@ function openDungeonSideChoices(){
   $('sideRoomHealth').textContent=health+' / '+maxHealth()+' HP · At risk: '+formatDepthsSpoils(depthsSpoils(depthsRun));
   for(const [id,side] of Object.entries(depthsSideRooms)){
     const button=$('sideVisit'+id[0].toUpperCase()+id.slice(1)),done=id==='rest'?depthsRun.shrineUsed:depthsRun.sideWins?.includes(id);
-    const status=done?(id==='rest'?'Blessing used this expedition':id==='trial'&&!depthsRun.finds?.includes('sideSeal')?'Won · Stone waiting to claim':'Cleared · No repeat rewards'):side.danger;
+    const status=done?(id==='rest'?'Blessing used this expedition':id==='trial'&&!depthsRun.finds?.includes('sideSeal')?(essencesPaused?'Won · Gold reward waiting':'Won · Stone waiting to claim'):'Cleared · No repeat rewards'):side.danger;
     $('sideStatus'+id[0].toUpperCase()+id.slice(1)).textContent=status;button.disabled=visitingDungeonSide;button.textContent=done?'Revisit room':'Enter '+side.name;
   }
   $('sideRoomError').textContent='';$('depthsSideDialog').showModal();
@@ -1250,7 +1251,7 @@ async function examineDepths(item,confirmed=false){
     if(!already){
       if(window.playerCloud?.gameplay)await serverGameplay('depthsInspect',{id:item.type});
       else{
-        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health,credits,goldEarned,magic:magicState,vitals:playerVitals};
+        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health,credits,goldEarned,magic:magicState,vitals:playerVitals,essencesPaused};
         inspectDepthsFind(state,item,combatNow());playerVitals=state.vitals;
         health=state.health;credits=state.credits;goldEarned=state.goldEarned;magicState=state.magic;
       }
@@ -1268,14 +1269,15 @@ async function examineDepths(item,confirmed=false){
       return;
     }
     if(item.type==='sideSeal'){
-      if(already){note('You have already claimed this expedition’s stone.');return;}
+      if(already){note('You have already claimed this expedition’s reward.');return;}
+      if(essencesPaused){showTransaction('Challenge reward claimed',[],50);return;}
       updatePlayerStats();updateEssenceHotbar();showTransaction('Challenge reward claimed',[{icon:'◆',text:'+1 '+stoneForms[depthsRun.sideStone].name+' Awakening Stone · Yours to keep'}]);return;
     }
     if(item.type==='essenceCache'){
       if(already){note('The Essence Cache is empty. You’ve collected this run’s reward.');return;}
       updatePlayerStats();updateEssenceHotbar();
-      showTransaction('Essence Cache opened',[{icon:'◆',text:'+1 '+stoneForms[depthsRun.cacheStone].name+' Awakening Stone'}],essenceCacheGold);
-      revealEssenceCache();return;
+      showTransaction('Essence Cache opened',essencesPaused?[]:[{icon:'◆',text:'+1 '+stoneForms[depthsRun.cacheStone].name+' Awakening Stone'}],essenceCacheGold);
+      if(!essencesPaused)revealEssenceCache();return;
     }
     if(find.healing){
       note(already?'The chest is empty.':find.text+' Restored '+(health-before)+' HP.',7000);
@@ -1383,7 +1385,7 @@ function updateDepthsPanel(){
     $('depthsShardChoice').textContent='Vault treasure · Sell the Moonwell Shard for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber for +'+moonwellCharm.staminaRegen+' dodge stamina per second.';
     $('depthsEntryAdvice').textContent=!weapon?'Equip a weapon in Inventory to enter.':health<maxHealth()
       ?'Your current health carries in. You can rest at the Tower before entering.'
-      :'Elite foes chain attacks. Equip powers, save stamina, and punish recovery openings. Defeat costs unbanked spoils.';
+      :(essencesPaused?'Save stamina and strike during enemy recovery. Defeat costs unbanked spoils.':'Elite foes chain attacks. Equip powers, save stamina, and punish recovery openings. Defeat costs unbanked spoils.');
     $('enterDepths').disabled=!weapon||health<=0;
   }
 
@@ -1400,6 +1402,7 @@ function updateDepthsPanel(){
   $('depthsShrineUse').hidden=unavailable()||sideId!=='rest';
   $('depthsShrineUse').disabled=health>=maxHealth()||!!depthsRun?.shrineUsed||depthsSpoils(depthsRun).gold<depthsSideRooms.rest.cost;
   $('depthsShrineUse').textContent=depthsRun?.shrineUsed?'Blessing used this expedition':'Restore up to 30 HP · Spend 15 unbanked gold';
+  if(essencesPaused)$('depthsSideClaim').textContent='Claim 50 gold';
   $('depthsSideClaim').hidden=unavailable()||sideId!=='trial'||!depthsRun?.sideWins?.includes('trial')||!!depthsRun?.finds?.includes('sideSeal');
   $('depthsSideFieldReturn').hidden=!side||unavailable();
   $('depthsFork').hidden=!choosingPassage;
@@ -1407,7 +1410,7 @@ function updateDepthsPanel(){
   $('depthsMainOptions').hidden=choosingPassage;
   $('depthsExplore').hidden=choosingPassage&&currentRoom!=='depthsGate';
   $('depthsSafeReward').textContent='+'+Math.min(depthsSafePassage.healing,maxHealth()-health)+' HP · +'+depthsSafePassage.gold+' gold';
-  $('depthsDangerReward').textContent=essenceCacheGold+' gold + Awakening Stone';
+  $('depthsDangerReward').textContent=essenceCacheGold+(essencesPaused?' gold':' gold + Awakening Stone');
   $('depthsDangerEnemy').textContent='Rune Channeler · '+dungeonEnemyPreview(huntEnemies.cacheGuardian).health+' HP · Elite';
   $('depthsForkSpoils').textContent='Unbanked · '+formatDepthsSpoils(depthsSpoils(depthsRun));
   $('depthsForkBank').textContent='Bank spoils & leave';
@@ -1581,7 +1584,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=depthsSideForRoom(currentRoom)?(currentRoom==='depthsTrial'?'Challenge won! Claim the Awakening Seal.':'Treasury secured. Your extra loot is unbanked.'):currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction(result.rareDrop?rareHunts[result.rareDrop].name+' found!':result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.rareDrop?[{icon:'◆',text:rareHunts[result.rareDrop].name+' · Added to Inventory · Equip when ready'}]:[]),...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
+      showTransaction(result.rareDrop?rareHunts[result.rareDrop].name+' found!':result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.rareDrop?[{icon:'◆',text:rareHunts[result.rareDrop].name+' · Added to Inventory · Equip when ready'}]:[]),...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?(essencesPaused?'Open the glowing cache to claim its gold':'Open the glowing cache to claim its gold and stone'):'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -1716,7 +1719,7 @@ function updateCombatPanel(){
     notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
   }else if(enemy?.elite&&!encounter&&!chamberCleared){
     notice.hidden=false;notice.dataset.cue='watch';
-    notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Thornblade Duelist · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
+    notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?(essencesPaused?'Thornblade Duelist · Dodge and counter to claim 50 gold.':'Thornblade Duelist · 210 HP · Win and claim 1 guaranteed Awakening Stone.'):'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+(essencesPaused?' gold.':' gold + a stone.'));
   }else notice.dataset.cue='';
   if(enemy?.id==='depthsGuardian'&&!encounter&&!chamberCleared){notice.hidden=false;notice.textContent='VAULT GUARDIAN · 3 phases: stagger its armour, dodge and counter its blades, then interrupt or dodge its magic.';}
   if(enemy?.tactic&&(currentRoom!=='millCellar'||!!encounter)&&!hunting.recoveryUntil&&!chamberCleared&&!(enemy.id==='moonbackStag'&&encounter)){notice.hidden=false;notice.textContent=enemy.tactic;}
@@ -1726,10 +1729,10 @@ function updateCombatPanel(){
   $('combatChapter').textContent=currentRoom==='millCellar'?'GUARDIAN · FORGOTTEN CELLAR':stag?'RARE · MOONWOOD':enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
   $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
-  if(enemy.id==='millCustodian')$('combatReward').textContent='Defeat the custodian to unseal the millkeeper’s chest: 125 gold and 1 Shield Awakening Stone. Combat XP and salvaged plating are kept on victory.';
-  else if(enemy.id==='sealGuardian')$('combatReward').textContent='Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
+  if(enemy.id==='millCustodian')$('combatReward').textContent=essencesPaused?'Defeat the custodian to unseal the millkeeper’s 125 gold. Victory also earns combat XP and salvaged plating.':'Defeat the custodian to unseal the millkeeper’s chest: 125 gold and 1 Shield Awakening Stone. Combat XP and salvaged plating are kept on victory.';
+  else if(enemy.id==='sealGuardian')$('combatReward').textContent=essencesPaused?'Win, then claim 50 gold from the seal.':'Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
   else if(stag)$('combatReward').textContent='Victory · Forest deer +1 and combat XP. A 10% chance at the Veilweaver Cloak. One victory per sighting.';
-  else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
+  else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+(essencesPaused?' gold.':' gold + an Awakening Stone. Your collected cache rewards are yours to keep.');
   const approach=$('approachBeetle');
   approach.hidden=(!beetle&&!stag&&!enemy.archetype&&stage<0)||!!encounter||now<respawn;
   approach.textContent='Approach '+enemy.name+' · 1 AP / attack';
@@ -4994,10 +4997,10 @@ function openWatchLandmark(item){
  }
  const beacon=item.type==='watchBeacon',cave=currentRoom==='starfall',flag=beacon?'watchBeacon':cave?'grottoCache':'meadowCache';
  if(adventure[flag]){openWatchDialog(beacon?'The beacon is burning.':'You already opened this cache.',beacon?'The Mill Bridge is open permanently. Use the western bridge to walk straight back to Millbrook.':'This discovery stays recorded. Explore the other paths for more discoveries.');return;}
- if(cave&&!adventure.watchBoar){openWatchDialog('The cache is sealed.','Defeat the Thorn Boar in the thicket to break this seal. Inside: 35 gold and a Sword Awakening Stone.');return;}
- openWatchDialog(beacon?'Bring Beaconwatch back to life.':cave?'A treasure beneath the roots.':'A forgotten roadside cache.',beacon?'Light the beacon and lower the old Mill Bridge. You can then walk directly between Beaconwatch and Millbrook.':cave?'Claim 35 gold and 1 Sword Awakening Stone. Your discovery is saved permanently.':'Claim 15 gold. This is a one-time discovery reward.',beacon?'Light beacon':'Open cache',async()=>{
+ if(cave&&!adventure.watchBoar){openWatchDialog('The cache is sealed.',(essencesPaused?'Defeat the Thorn Boar in the thicket to claim the 35 gold inside.':'Defeat the Thorn Boar in the thicket to break this seal. Inside: 35 gold and a Sword Awakening Stone.'));return;}
+ openWatchDialog(beacon?'Bring Beaconwatch back to life.':cave?'A treasure beneath the roots.':'A forgotten roadside cache.',beacon?'Light the beacon and lower the old Mill Bridge. You can then walk directly between Beaconwatch and Millbrook.':cave?(essencesPaused?'Claim 35 gold. Your discovery is saved permanently.':'Claim 35 gold and 1 Sword Awakening Stone. Your discovery is saved permanently.'):'Claim 15 gold. This is a one-time discovery reward.',beacon?'Light beacon':'Open cache',async()=>{
   const before=credits;await serverGameplay('watchFind',{id:item.type});worldLabelKey='';updateExplorationNav();savePlayerState();
-  showTransaction(beacon?'Beacon restored':cave?'Starfall treasure found':'Roadside cache opened',[{icon:beacon?'✦':'◆',text:beacon?'Mill Bridge unlocked · Walk back to Millbrook':cave?'+1 Sword Awakening Stone':'A discovery worth exploring for'}],credits-before);
+  showTransaction(beacon?'Beacon restored':cave?'Starfall treasure found':'Roadside cache opened',[{icon:beacon?'✦':'◆',text:beacon?'Mill Bridge unlocked · Walk back to Millbrook':cave?(essencesPaused?'Cache opened':'+1 Sword Awakening Stone'):'A discovery worth exploring for'}],credits-before);
  });
 }
 
@@ -5032,7 +5035,7 @@ function finishInteraction(){
   if(item.type==='cellarCrack'){visitMillCellar('millCellarEnter');return;}
   if(item.type==='cellarStairs'){visitMillCellar('millCellarLeave');return;}
   if(item.type==='cellarChest'){openMillCellarChest();return;}
-  if(item.type==='cellarJournal'){note('Millkeeper’s journal: The custodian guards our emergency gold and a Shield Awakening Stone. Hide behind the stone pillars when it throws a cog.');return;}
+  if(item.type==='cellarJournal'){note((essencesPaused?'Millkeeper’s journal: The custodian guards our emergency gold. Hide behind the stone pillars when it throws a cog.':'Millkeeper’s journal: The custodian guards our emergency gold and a Shield Awakening Stone. Hide behind the stone pillars when it throws a cog.'));return;}
   if(item.type==='millRaidMerchant'){
     window.millRaidClient?.merchant();
   }else if(item.type==='millRaidBarricade'){
@@ -5148,9 +5151,9 @@ function finishInteraction(){
   }else if(item.type==='mothAltar'){
     if(!adventure.shrine){
       adventure.shrine=true;
-      recordAdventure('Moth Shrine discovered. Bond or change your Gems here.');
+      recordAdventure(essencesPaused?'Moth Shrine discovered.':'Moth Shrine discovered. Bond or change your Gems here.');
     }
-    openEssences();
+    if(essencesPaused)note('Moth Shrine discovered.');else openEssences();
   }else if(item.type==='moonwell'){
     if(!adventure.shortcut){
       adventure.shortcut=true;
@@ -5962,7 +5965,7 @@ function applyServerGameplay(state){
    const rank=familiarBond(familiarState,id);
    if(rank.rank>familiarBond(previousFamiliar,id).rank)showTransaction((familiarState.names[id]??familiars[id].name)+' · '+rank.name,[{icon:'✦',text:familiarTraining[id].tricks[rank.rank-2]}]);
   }
-  magicState=state.magic?normalizeMagic(state.magic):null;
+  magicState=!essencesPaused&&state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
   if(player.inCombat&&hunting.encounter?.arenaVersion===1&&!step&&!route.length){const p=arenaPlayer(hunting.encounter);if(p.x!==player.cx||p.y!==player.cy)route=walkingPath({x:player.cx,y:player.cy},p)??[];}
   if(state.depthsRun?.rewardChests?.[currentRoom]?.id!==depthsRun?.rewardChests?.[currentRoom]?.id&&state.depthsRun?.rewardChests?.[currentRoom])depthsExploring=true;
@@ -6545,6 +6548,7 @@ function switchMode(next){
 }
 let gemDraft=[],viewedEssence=null,essenceBusy=false,essenceSlot='q';
 function openEssences(gem=null,slot='q'){
+  if(essencesPaused)return;
   if(unavailable())return;
   if(!window.playerCloud?.gameplay){note('Connect to the game server to manage Essences.');return;}
   essenceSlot=slot;
@@ -6645,9 +6649,12 @@ function equippedEssenceStatus(now,slot='q'){
   const lowMana=manaAvailable(playerVitals,combatNow())<currentCombatBuild().mana;
   return {power,remaining,fullHealth,lowMana,canCast:!!power&&!!(player.inCombat&&hunting.encounter||window.millRaidClient?.active||vaultCoopState)&&!remaining&&!fullHealth&&!lowMana&&!needsLearningPoints()};
 }
+if(essencesPaused){
+  document.documentElement.classList.add('essences-paused');
+}
 function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
-  bar.hidden=!magicState?.picks.length||editing;
+  bar.hidden=essencesPaused||!magicState?.picks.length||editing;
   if(bar.hidden)return;
   const activeGems=['q','e'].map(slot=>equippedEssenceStatus(now,slot).power?.gem);
   const gems=bondedEssences(magicState.picks);
@@ -6692,6 +6699,7 @@ function updateEssenceHotbar(now=Date.now()){
   }
 }
 function castEquippedEssence(slot='q'){
+  if(essencesPaused)return;
   if(window.millRaidClient?.active){window.millRaidClient.power(slot);return;}
   if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
@@ -6708,7 +6716,7 @@ function currentActivityPrompt(){
     return {label:'FOOD FOR THE ROAD',title:playerVitals.hunger===0?'You’re exhausted':'You’re hungry',text:'Tower Bread restores 25 hunger. Open your bag to eat a ration.',action:'rationBag'};
   if(currentRoom==='millCellar'&&!player.inCombat){
     if(!adventure.millCellarCleared)return {label:'HIDDEN DISCOVERY',title:'The millkeeper’s sealed chest',text:'A Clockwork Custodian protects the supplies. Watch its floor warnings; the stone pillars block thrown cogs. The stairs stay open before combat.',action:'cellarGuardian'};
-    if(!adventure.millCellarClaimed)return {label:'SECRET UNCOVERED',title:'The chest’s seal is broken',text:'Collect 125 gold and a Shield Awakening Stone. Your reward is saved when you open the chest.',action:'cellarChest'};
+    if(!adventure.millCellarClaimed)return {label:'SECRET UNCOVERED',title:'The chest’s seal is broken',text:essencesPaused?'Open the chest to collect 125 gold.':'Collect 125 gold and a Shield Awakening Stone. Your reward is saved when you open the chest.',action:'cellarChest'};
     return null;
   }
   if(currentRoom===wildlifeRoom)return null;
@@ -6888,13 +6896,13 @@ function updateAdventurePanel(){
     reedwater:'Follow the stone bridge across the river. Willowbank lies beyond the eastern path.',
     willowbank:'Follow the pale inland trail or timber riverside walk north to Millbrook. Look for an old latch on the far bank.',
     millbrook:'The river trader buys fish. Rest on the bench to restore your hearts, or return along the riverside path.'+(adventure.millCellarFound?' Discovery recorded: the forgotten cellar lies behind the mill’s loose bricks. '+(adventure.millCellarClaimed?'Millkeeper’s supplies recovered.':adventure.millCellarCleared?'The custodian is defeated; its chest is unsealed.':'The old custodian still guards its sealed chest.') :''),
-    millCellar:adventure.millCellarClaimed?'Discovery complete: the millkeeper’s emergency supplies have been recovered. Take the western stairs back to Millbrook.':adventure.millCellarCleared?'The custodian is quiet. Open the millkeeper’s chest for 125 gold and a Shield Awakening Stone.':'Discovery: a forgotten storeroom beneath the watermill. The custodian guards an emergency supply chest. The western stairs return to Millbrook.',
+    millCellar:adventure.millCellarClaimed?'Discovery complete: the millkeeper’s emergency supplies have been recovered. Take the western stairs back to Millbrook.':adventure.millCellarCleared?(essencesPaused?'The custodian is quiet. Open the millkeeper’s chest for 125 gold.':'The custodian is quiet. Open the millkeeper’s chest for 125 gold and a Shield Awakening Stone.'):'Discovery: a forgotten storeroom beneath the watermill. The custodian guards an emergency supply chest. The western stairs return to Millbrook.',
     logging:!woodcutting.axeOwned?'Meet the woodcutter for a free basic axe. Then chop the marked tree, or set a timed offline shift.':'Chop timber to gain Woodcutting XP. Each timber sells for 4 gold at the Trading Post.',
     clearing:'A Wild Boar guards this clearing. Approach to hunt. Rest in the Tower to refill your hearts.',
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
     creek:adventure.bridge?'Tap the button to walk across the stepping stones.':'Tap the button to light the way and walk across. There’s a spare lantern if you need one.',
-    shrine:'Bond your first Gems or change your combination at the altar.',
+    shrine:essencesPaused?'A quiet altar in the grove.':'Bond your first Gems or change your combination at the altar.',
     ruins:depthsDiscovered?'Use the Moonwell portal to enter the dungeon.':'Defeat the Stoneback Beetle to open the Moonwell portal.',
     roots:'Follow the roots back to Lantern Trail.',
     pond:fishingSession?({casting:'Casting your line…',waiting:'Watch the float. Your character will reel automatically.',twitch:'A nibble! Keep watching the float…',bite:'Bite! Reel now for +5 Patience XP. Your character will also reel automatically.',landing:'Reeling in your catch…'}[fishingMoments.phase(fishingSession,performance.now())]):fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
@@ -8542,7 +8550,7 @@ async function visitMillCellar(action){
 }
 async function openMillCellarChest(){
  if(adventure.millCellarClaimed){note('You have recovered the millkeeper’s supplies. This chest stays open.');return;}
- try{await serverGameplay('millCellarChest');updateAdventurePanel();showTransaction('Millkeeper’s supplies',[{icon:'◆',text:'+1 Shield Awakening Stone · Use in Essences'}],125);}
+ try{await serverGameplay('millCellarChest');updateAdventurePanel();showTransaction('Millkeeper’s supplies',essencesPaused?[]:[{icon:'◆',text:'+1 Shield Awakening Stone · Use in Essences'}],125);}
  catch(error){note(error.message);}
 }
 
@@ -8551,4 +8559,4 @@ window.towerRobberyHooks={gift:state=>window.towerApplySupperInventory(state),pe
 
 function currentCombatBuild(){return window.combatBuild({combatGear,wardrobe,magic:magicState,hunting});}
 window.towerBuildHooks={state:()=>({...currentGoalState(),wardrobe,magic:magicState,hunting}),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences()};
-window.towerPreparationHooks={state:()=>({...currentGoalState(),health,vitals:playerVitals,wardrobe,magic:magicState,hunting}),now:()=>combatNow(),locked:()=>unavailable()||!!woodSession||!!fishingSession||!!miningCut||!!homeBedRest||!!campRest,atEntrance:()=>currentRoom==='ruins'&&depthsDiscovered&&!depthsRun,change:(name,body)=>serverGameplay(name,body),enter:()=>enterMoonwellDepths(true),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences(),questions:()=>window.towerLearning?.open()};
+window.towerPreparationHooks={state:()=>({...currentGoalState(),health,vitals:playerVitals,wardrobe,magic:magicState,hunting,essencesPaused}),now:()=>combatNow(),locked:()=>unavailable()||!!woodSession||!!fishingSession||!!miningCut||!!homeBedRest||!!campRest,atEntrance:()=>currentRoom==='ruins'&&depthsDiscovered&&!depthsRun,change:(name,body)=>serverGameplay(name,body),enter:()=>enterMoonwellDepths(true),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences(),questions:()=>window.towerLearning?.open()};

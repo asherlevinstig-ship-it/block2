@@ -26,7 +26,7 @@ export function loadoutIssues(s,p){
  if(p.armour){if(p.armour==='stonebackVest'?!g.stonebackVestOwned:!g.ownedArmour?.includes(p.armour))issues.push('You do not own '+armourProfile(p.armour).name+'.');else if(p.armour!=='stonebackVest'&&!canUseArmour(s.stats,p.armour))issues.push('Your stats do not meet '+armourProfile(p.armour).name+' requirements.');}
  if(p.upgrade&&!g.swordUpgrades?.includes(p.upgrade))issues.push('You do not own this sword fitting.');
  if(p.charm&&!g.moonwellCharmOwned)issues.push('You do not own a Moonwell Charm.');
- for(const slot of ['q','e']){const power=essencePower(p.powers[slot]);if(power&&(!magic.unlocked.includes(power.id)||!bondedEssences(magic.picks).includes(power.gem)))issues.push(slot.toUpperCase()+': '+power.name+' needs its bonded Gem and awakened power.');}
+ if(!s.essencesPaused)for(const slot of ['q','e']){const power=essencePower(p.powers[slot]);if(power&&(!magic.unlocked.includes(power.id)||!bondedEssences(magic.picks).includes(power.gem)))issues.push(slot.toUpperCase()+': '+power.name+' needs its bonded Gem and awakened power.');}
  return issues;
 }
 export function applyCombatLoadout(s,id){
@@ -36,7 +36,7 @@ export function applyCombatLoadout(s,id){
  if(g.stonebackVestOwned!==undefined)g.stonebackVestEquipped=p.armour==='stonebackVest';
  if(p.upgrade)g.activeSwordUpgrade=p.upgrade;else delete g.activeSwordUpgrade;
  if(g.moonwellCharmOwned!==undefined)g.moonwellCharmEquipped=p.charm;
- s.combatGear=g;s.wardrobe={...s.wardrobe,active:p.outfit};s.avatar=outfitAppearance(s.wardrobe,s.avatar);s.magic={...normalizeMagic(s.magic),slots:{...p.powers}};
+ s.combatGear=g;s.wardrobe={...s.wardrobe,active:p.outfit};s.avatar=outfitAppearance(s.wardrobe,s.avatar);if(!s.essencesPaused)s.magic={...normalizeMagic(s.magic),slots:{...p.powers}};
  return p;
 }
 export function removeCombatLoadout(s,id){idle(s);if(!loadoutSlots.includes(id))throw new Error('Choose a loadout slot.');s.loadouts=normalizeLoadouts(s.loadouts).filter(p=>p.id!==id);}
@@ -47,8 +47,9 @@ export function dungeonReadiness(s,now=Date.now()){
  if(health<80)advice.push({tone:'warning',text:'Low health for three chambers. Rest or use a meal before travelling.',action:'equipment'});
  if(ap<reserve)advice.push({tone:'warning',text:ap+' AP available. Suggested reserve: '+reserve+' AP for a full solo run.',action:'questions'});
  if(powers.some(p=>p.power)&&mana<build.mana*2)advice.push({tone:'warning',text:'Mana is low. Let it recover before relying on repeated abilities.'});
- if(!powers.every(p=>p.power))advice.push({tone:'warning',text:'An ability slot is empty. Equip awakened abilities, or rely on weapons and dodging.',action:'abilities'});
- if(!powers.some(p=>p.power?.gem==='storm'))advice.push({tone:'info',text:attrs.attackInterval<=650?'No Storm ability equipped. Your fast weapon can interrupt charged spells with three hits.':'No Storm interrupt equipped. Use a quick weapon for three-hit interrupts, or dodge the charged attack.',action:'abilities'});
+ if(!s.essencesPaused&&!powers.every(p=>p.power))advice.push({tone:'warning',text:'An ability slot is empty. Equip awakened abilities, or rely on weapons and dodging.',action:'abilities'});
+ if(s.essencesPaused)advice.push({tone:'info',text:'Use three quick weapon hits to interrupt charged spells, or dodge the attack.'});
+ else if(!powers.some(p=>p.power?.gem==='storm'))advice.push({tone:'info',text:attrs.attackInterval<=650?'No Storm ability equipped. Your fast weapon can interrupt charged spells with three hits.':'No Storm interrupt equipped. Use a quick weapon for three-hit interrupts, or dodge the charged attack.',action:'abilities'});
  if((s.vitals?.hunger??100)<=20)advice.push({tone:'warning',text:'Low hunger slows stamina recovery. Pack and eat some food.',action:'equipment'});
  return {health,mana,ap,reserve,weapon:weapon?.name??'None equipped',armour:armour?.name??'No armour',build:build.name,powers,advice,canEnter:!!weapon&&health>0&&ap>0,status:!weapon?'Equip a weapon':advice.some(a=>a.tone==='warning')?'Prepare or take the risk':'Ready to explore'};
 }

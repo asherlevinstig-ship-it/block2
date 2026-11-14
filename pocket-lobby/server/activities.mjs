@@ -83,7 +83,7 @@ function result(state,event,now,random=Math.random){
   if(event.outcome==='victory'){
     useHunger(state,2);
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
-    if(state.location!==depthsCacheRoom&&state.location!=='depthsTrial'&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
+    if(!state.essencesPaused&&state.location!==depthsCacheRoom&&state.location!=='depthsTrial'&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
     rewards.xp={};
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries()){
       const before=state.stats[key];state.stats[key]=Math.min(MAX_SKILL_XP,before+enemy.xp[i]);rewards.xp[key]=state.stats[key]-before;

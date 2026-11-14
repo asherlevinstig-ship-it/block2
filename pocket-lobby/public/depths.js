@@ -84,20 +84,25 @@ export function inspectDepthsFind(state,item,now=Date.now(),choice){
   if(item.type==='sideTreasure'&&!depthsRun.sideWins?.includes('treasure'))throw new Error('Defeat the Ironhide Guardian first.');
   if(item.type==='sideSeal'){
     if(!depthsRun.sideWins?.includes('trial'))throw new Error('Defeat the Thornblade Duelist first.');
-    const magic=normalizeMagic(state.magic),stone=awardAwakeningStone(magic);
-    if(!stone)throw new Error('Make room for an Awakening Stone before claiming the seal.');
-    state.magic=magic;depthsRun.sideStone=stone;
+    if(state.essencesPaused){
+      if(state.credits+50>100000000)throw new Error('Make room in your wallet before claiming the reward.');
+      state.credits+=50;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+50);
+    }else{
+      const magic=normalizeMagic(state.magic),stone=awardAwakeningStone(magic);
+      if(!stone)throw new Error('Make room for an Awakening Stone before claiming the seal.');
+      state.magic=magic;depthsRun.sideStone=stone;
+    }
   }
   if(item.type==='essenceCache'){
     if(!depthsRun.cacheGuardDefeated)throw new Error('Defeat the Rune Channeler to break the seal.');
     if(state.credits+essenceCacheGold>100000000)throw new Error('Make room in your wallet before opening the cache.');
-    const magic=normalizeMagic(state.magic);
-    const stone=awardAwakeningStone(magic);
-    if(!stone)throw new Error('Make room for an Awakening Stone before opening the cache.');
-    state.magic=magic;
+    if(!state.essencesPaused){
+      const magic=normalizeMagic(state.magic),stone=awardAwakeningStone(magic);
+      if(!stone)throw new Error('Make room for an Awakening Stone before opening the cache.');
+      state.magic=magic;depthsRun.cacheStone=stone;
+    }
     state.credits+=essenceCacheGold;
     state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+essenceCacheGold);
-    depthsRun.cacheStone=stone;
   }
   if(find.healing){
     if(state.health>=playerMaxHealth(state,now))throw new Error('Your hearts are already full. The flask is here if you need it later.');

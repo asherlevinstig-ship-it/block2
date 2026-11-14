@@ -87,3 +87,5 @@
 .world-label.creek-crossing-label{z-index:2;border-color:#a6d8bd;background:#163b3d;color:#e4f6d5}
 
 .world-label.moonwell-portal-label{z-index:2;border-color:#a6baf6;background:#202d51;color:#eef6ff}
+
+.essences-paused :is(#openEssences,#essenceHotbar,#preparationAbilities,#buildEssences,#buildAbilities,.combat-tactic-slots,#coopQ,#coopE,.coop-ally){display:none!important}
