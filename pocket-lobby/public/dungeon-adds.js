@@ -8,7 +8,7 @@ export const addKinds={
  wisp:{id:'addWisp',name:'Rune Wisp',prop:'depthsSeer',health:30,damage:8,shellArmor:0,interval:3700,archetype:'caster',move:{id:'addBolt',name:'Wisp Bolt',tell:1400,recovery:800,shape:'bolt',reach:7,width:.42,damage:0,blockable:true}}
 };
 const effects=['burn','chilledUntil','weakenedUntil','weakenPercent','interruptResistUntil','castHits','castDeadline','stagger','staggerUntil','staggerWeakUntil','staggerResistUntil','exposedUntil'];
-const heroFields=['stamina','staminaAt','dodgeUntil','nextDodgeAt','nextPlayerAt','nextFleeAt','magicWard','magicWardUntil','usedEssences','counterUntil','counterPercent','autoDodgeUntil'];
+const heroFields=['bloodShield','bloodShieldUntil','stamina','staminaAt','dodgeUntil','nextDodgeAt','nextPlayerAt','nextFleeAt','magicWard','magicWardUntil','usedEssences','counterUntil','counterPercent','autoDodgeUntil'];
 export function initializeAdds(e,now,foxBond=false){
  if(e.brainVersion!==2||e.arenaRoom==='depthsGate')return e;
  return {...e,addsVersion:1,...(foxBond?{foxBond:true}:{}),adds:[],addWaves:[],addKills:0,manualTarget:false,addWaveAt:e.enemy==='depthsGuardian'?0:now+3500,combatTarget:'leader'};

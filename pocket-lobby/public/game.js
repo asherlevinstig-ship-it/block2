@@ -1560,6 +1560,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
   if(result.weakened)combatMessage+=(combatMessage?' ':'')+'Shadow prevented '+result.weakened+' damage.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
+  if(result.bloodPriceBroken)combatMessage+=' Blood Price shattered'+(result.staggered?' and staggered nearby creatures.':'.');
+  else if(result.bloodPriceBlocked)combatMessage+=' Blood Price absorbed '+result.bloodPriceBlocked+' damage.';
   if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
   if(result.outOfRange)combatMessage='Move closer to strike. Your weapon reaches 2 tiles.';
@@ -4031,6 +4033,11 @@ function draw(time){
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
     if(undead){const [ux,uy]=point(player.x+1.25,player.y+1.25);drawUndeadAlly(ctx,ux,uy,undead,time,reducedMotion.matches,{attackAge:combatNow()-(undead.lastStrikeAt??0),flipped:player.direction==='left'});}
+    if(hunting.encounter?.bloodShieldUntil>combatNow()&&hunting.encounter.bloodShield>0){
+      ctx.save();ctx.strokeStyle='#ff748f';ctx.lineWidth=1.4;
+      ctx.beginPath();ctx.ellipse(x,y-15,15,21,0,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='#ff748f';ctx.fillRect(x-12,y+5,24*hunting.encounter.bloodShield/40,2);ctx.restore();
+    }
     const familiar=scoutAnimationActive(time)?null:drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
     renderedActors.push({id:'self',name:avatar.name,activity:reading?'Reading':'',wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
@@ -6432,6 +6439,10 @@ async function castStyleAbility(id,body){
     }
     if(id==='patientCast'){
       note('Patient Cast ready · Your next manual cast has an empowered bobber.');
+      refreshStyleAbilityBar();return;
+    }
+    if(id==='bloodPrice'){
+      note('Blood Price · 15 HP sacrificed for a six-second shield.');
       refreshStyleAbilityBar();return;
     }
     if(id==='stoneguard'){

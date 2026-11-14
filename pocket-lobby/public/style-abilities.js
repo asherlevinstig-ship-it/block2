@@ -31,7 +31,9 @@ export function activePreyTrail(state,now){
  return state.location===preyTrail.room&&trail?.until>now&&!trail.cleared?trail:null;
 }
 export const sanctuaryRules={radius:2,duration:8000,capacity:30};
+export const bloodPriceRules={health:15,shield:30,duration:6000,radius:2,stagger:1500};
 export const styleAbilities={
+ bloodPrice:{name:'Blood Price',icon:'◆',cooldown:45000,description:'Spend 15 HP and 1 AP for a 30-damage shield lasting six seconds. If creatures break it, nearby enemies stagger. Works in hunts and solo dungeons.',requirements:{evil:3,vitality:4}},
  bindBeast:{name:'Bind Beast',icon:'❧',cooldown:90000,description:'Bind a living wild boar, beetle or stag below half health within two tiles. It ends that fight without kill rewards and helps you in later creature fights for 30–60 seconds. Costs 1 AP.',requirements:{magicKnowledge:5,hunting:3}},
  sanctuary:{name:'Sanctuary',icon:'✧',cooldown:45000,description:'Place an eight-second ward at your feet in the co-op Vault. Allies within two tiles, including you, share a pool that absorbs up to 30 damage. Costs 1 AP.',requirements:{magicKnowledge:4,kindness:3}},
  packTactics:{name:'Pack Tactics',icon:'🐾',cost:0,passive:true,cooldown:24000,description:'After a perfect dodge against a creature, your equipped familiar distracts it, extending your counterattack window by 1.5 seconds. Works in hunts and solo dungeons.',requirements:{familiarConnection:3,agility:3}},
@@ -92,5 +94,5 @@ export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen','lightFingers','cutpurse','lockbreaker','packTactics','sanctuary','bindBeast'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
+   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen','lightFingers','cutpurse','lockbreaker','packTactics','sanctuary','bindBeast','bloodPrice'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
 }

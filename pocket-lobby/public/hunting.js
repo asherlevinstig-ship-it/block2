@@ -276,6 +276,10 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
+    if(Number.isSafeInteger(input.encounter.bloodShield)&&input.encounter.bloodShield>0){
+      result.encounter.bloodShield=Math.min(40,input.encounter.bloodShield);
+      result.encounter.bloodShieldUntil=time(input.encounter.bloodShieldUntil);
+    }
     if(input.encounter.stoneguardUntil!==undefined){
       result.encounter.stoneguardUntil=time(input.encounter.stoneguardUntil);
       if(![30,40,50].includes(input.encounter.stoneguardReduction))throw new Error('Invalid Stoneguard protection.');
@@ -431,6 +435,17 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.stoneguardBlocked=Math.floor(result.taken*(encounter.stoneguardReduction??30)/100);
       result.taken-=result.stoneguardBlocked;
       result.absorbed=(result.absorbed??0)+result.stoneguardBlocked;
+    }
+    if(result.taken&&encounter.bloodShield>0&&now<encounter.bloodShieldUntil){
+      result.bloodPriceBlocked=Math.min(result.taken,encounter.bloodShield);
+      result.taken-=result.bloodPriceBlocked;
+      result.absorbed=(result.absorbed??0)+result.bloodPriceBlocked;
+      result.encounter.bloodShield=encounter.bloodShield-result.bloodPriceBlocked;
+      if(!result.encounter.bloodShield){
+        delete result.encounter.bloodShield;
+        delete result.encounter.bloodShieldUntil;
+        result.bloodPriceBroken=true;
+      }
     }
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}

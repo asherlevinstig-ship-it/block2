@@ -1,7 +1,7 @@
 import {moonbackSite} from '../public/moonback.js';
 import {huntEnemy} from '../public/hunting.js';
 import {activeRaised,raisedProfile,raisableBeasts} from '../public/necromancy.js';
-import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
+import {bloodPriceRules,styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
@@ -84,6 +84,18 @@ export function styleAbilityAction(state,action,body,now){
   if(abilities.patientCastReady)throw invalid('Patient Cast is already ready for your next manual cast.');
   abilities.patientCastReady=true;abilities.readyAt[id]=now+styleAbilities[id].cooldown;
   state.styleAbilities=abilities;return true;
+ }
+ if(id==='bloodPrice'){
+  if(!encounter)throw invalid('Use Blood Price during a hunt or solo dungeon fight.');
+  if(state.health<=bloodPriceRules.health)throw invalid('You need more than 15 HP to use Blood Price.');
+  requireActionPoint(state);
+  state.health-=bloodPriceRules.health;
+  encounter.bloodShield=bloodPriceRules.shield+(abilityMastery(state,id).stage-1)*5;
+  encounter.bloodShieldUntil=now+bloodPriceRules.duration;
+  abilities.readyAt[id]=now+styleAbilities[id].cooldown;
+  state.styleAbilities=abilities;
+  spendActionPoint(state,now);
+  return true;
  }
  if(id==='stoneguard'){
   requireActionPoint(state);

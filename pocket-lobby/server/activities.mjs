@@ -38,7 +38,7 @@ import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuratio
 import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
-import {activePreyTrail,preyTrail,ambushPrey,ambushPosition,styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
+import {bloodPriceRules,activePreyTrail,preyTrail,ambushPrey,ambushPosition,styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
 import {moonbackRules,moonbackSighting} from '../public/moonback.js';
 import {veilCloakId} from '../public/wardrobe.js';
 
@@ -104,6 +104,28 @@ function result(state,event,now,random=Math.random){
     }
   }
   if(event.counter){summary.counters++;summary.counterBonus+=event.counterBonus??0;}
+  if(event.bloodPriceBroken&&event.encounter){
+    const next=event.encounter,player=next.arenaPlayer??state.position;
+    const nearby=tile=>player&&Math.hypot(tile.x-player.x,tile.y-player.y)<=bloodPriceRules.radius;
+    const until=now+bloodPriceRules.stagger;
+    if(next.arenaVersion!==1||nearby(arenaEnemy(next))){
+      const tell=enemyAttack(next,enemy).tell;
+      next.staggerUntil=Math.max(next.staggerUntil??0,until);
+      next.nextBoarAt=Math.max(next.nextBoarAt,next.staggerUntil+tell);
+      event.staggered=true;
+    }
+    for(const add of next.adds??[]){
+      if(add.spawnAt>now||!nearby(add))continue;
+      add.staggerUntil=Math.max(add.staggerUntil??0,until);
+      add.attackAt=Math.max(add.attackAt,add.staggerUntil+addKinds[add.kind].move.tell);
+      add.thinkAt=Math.max(add.thinkAt,add.staggerUntil);
+      event.staggered=true;
+    }
+    awardAbilityUse(state,'bloodPrice');
+    event.power='Blood Price';
+    event.powerColor='#ff748f';
+    event.powerForm='shield';
+  }
   if(event.staggered)summary.staggers++;
   if(event.weakSpot){summary.weakSpotHits++;summary.staggerBonus+=event.staggerBonus??0;}
   if(event.stoneguardBlocked&&state.styleAbilities?.stoneguard&&!state.styleAbilities.stoneguard.credited){

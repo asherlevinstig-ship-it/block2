@@ -176,3 +176,22 @@ test('Pack Tactics extends a perfect dodge counter once for an equipped familiar
  Object.assign(state.hunting.encounter,{nextPlayerAt:next+500,dodgeUntil:next+100});
  assert(advanceServerCombat(state,next,()=>.99).every(event=>!event.packTactics));
 });
+
+test('Blood Price buys a persistent shield that staggers on depletion and cannot sacrifice lethal HP',async()=>{
+ const {startCombatEncounter,advanceServerCombat}=await import('../server/activities.mjs');
+ const {huntEnemies}=await import('../public/hunting.js');
+ const state=make({location:'clearing',health:15,styleAbilities:{learned:['bloodPrice']}});
+ startCombatEncounter(state,huntEnemies.boar,10000);
+ assert.throws(()=>act(state,'abilityCast',{id:'bloodPrice'},10100),/15 HP/);
+ state.health=60;
+ act(state,'abilityCast',{id:'bloodPrice'},10100);
+ assert.equal(state.health,45);assert.equal(state.actionPoints.value,4);
+ assert.equal(normalizeState(state).hunting.encounter.bloodShield,30);
+ const at=state.hunting.encounter.nextBoarAt;
+ state.hunting.encounter.nextPlayerAt=at+1000;
+ state.hunting.encounter.bloodShield=1;
+ const hit=advanceServerCombat(state,at,()=>.99).find(e=>e.bloodPriceBroken);
+ assert(hit.staggered);assert.equal(hit.bloodPriceBlocked,1);
+ assert(state.hunting.encounter.staggerUntil>at);
+ assert.equal(state.hunting.encounter.bloodShield,undefined);
+});
