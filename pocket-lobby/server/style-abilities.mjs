@@ -1,25 +1,9 @@
 import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints} from '../public/style-abilities.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
-import {arenaPlayer,arenaEnemy,dungeonWalkable,dungeonRooms} from '../public/dungeon-arena.js';
-import {moonwood} from '../public/moonwood.js';
+import {shadowstepTiles} from '../public/shadowstep-tiles.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 
 const invalid=message=>Object.assign(new Error(message),{status:400});
-const distance=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
-function canBlink(from,to,walkable){
- if(!from||!Number.isInteger(to?.x)||!Number.isInteger(to?.y)||distance(from,to)<1||distance(from,to)>4||!walkable(to))return false;
- const queue=[{...from,n:0}],seen=new Set([from.x+','+from.y]);
- for(const spot of queue){
-  if(spot.x===to.x&&spot.y===to.y)return true;
-  if(spot.n===4)continue;
-  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-   const x=spot.x+dx,y=spot.y+dy,key=x+','+y;
-   if(!seen.has(key)&&walkable({x,y})){seen.add(key);queue.push({x,y,n:spot.n+1});}
-  }
- }
- return false;
-}
-
 export function styleAbilityAction(state,action,body,now){
  if(!['abilityDecision','abilityCast'].includes(action))return false;
  if(state.characterCreated===false||state.health<=0||state.controlMode==='auto'||state.plan||state.report||state.vaultCoop||
@@ -47,17 +31,7 @@ export function styleAbilityAction(state,action,body,now){
  }else{
   const room=state.location,to=body.tile;
   if(encounter&&encounter.arenaVersion!==1)throw invalid('Shadowstep requires an arena with combat movement.');
-  const scenery=moonwood.layouts[room]?.scenery??[];
-  const boxes=roomBoxes(room,state.homeFurniture);
-  const from=encounter?arenaPlayer(encounter):state.position;
-  const occupied=encounter?[arenaEnemy(encounter),...(encounter.adds??[])]:[];
-  const walkable=p=>{
-   if(moonwood.blocked(room,p.x,p.y,state.adventure,state.depthsRun))return false;
-   if(occupied.some(foe=>foe.x===p.x&&foe.y===p.y))return false;
-   if(dungeonRooms.includes(room))return dungeonWalkable(room,p,scenery,encounter?.vaultMechanism??state.depthsRun?.vaultMechanism);
-   return validRoomTile(room,p.x,p.y,boxes,state.adventure)&&dungeonWalkable(room,p,scenery);
-  };
-  if(!canBlink(from,to,walkable))throw invalid('Choose a reachable floor tile up to four steps away.');
+  if(!shadowstepTiles(state).some(tile=>tile.x===to?.x&&tile.y===to?.y))throw invalid('Choose a reachable floor tile up to four steps away.');
   state.position={x:to.x,y:to.y};
   abilities.lastBlinkAt=now;
   if(encounter){

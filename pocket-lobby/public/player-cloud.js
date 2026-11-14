@@ -562,7 +562,7 @@
       const {autoWalkPosition}=await import('./auto-walk.js');
       const playerVitals=await import('./player-vitals.js');window.towerActionPoints=await import('./action-points.js');const familiars=await import('./familiars.js');const wildlife=await import('./wildlife.js');
       const autoFeedback=await import('./auto-feedback.js');
-      Object.assign(window,await import('./shop-licences.js'),await import('./style-abilities.js'),await import('./activity-skills.js'),await import('./public-requests.js'),await import('./home-chest.js'),{vaultBagCount:(await import('./vault.js')).vaultBagCount});
+      Object.assign(window,await import('./shop-licences.js'),await import('./style-abilities.js'),await import('./shadowstep-tiles.js'),await import('./ability-fx.js'),await import('./activity-skills.js'),await import('./public-requests.js'),await import('./home-chest.js'),{vaultBagCount:(await import('./vault.js')).vaultBagCount});
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
       const essences=await import('./essences.js');

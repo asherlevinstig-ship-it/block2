@@ -3864,6 +3864,7 @@ function draw(time){
     surface(10.06,3.06,.88,.88,.5,'#f5cf7d12','#dfbb76');
     ctx.restore();
   }
+  if(shadowstepTargeting&&window.drawShadowstepTargets)window.drawShadowstepTargets(ctx,point,shadowstepTargets(),hover,time,reducedMotion.matches);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(roomMoonTrails.length||trackedMoonTrail)for(const door of hudRoomExits(currentRoom)){
     if(!door.tile)continue;
@@ -4042,6 +4043,10 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  if(abilityBursts.length){
+    abilityBursts=abilityBursts.filter(effect=>time-effect.started<920);
+    window.drawAbilityBursts?.(ctx,point,abilityBursts,currentRoom,time,reducedMotion.matches);
+  }
   if(moonSightActive(familiarState,currentRoom,combatNow()))drawMoonSight(time);
   if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawWoodEffects(time);
@@ -5317,7 +5322,7 @@ function advanceAnimation(time){
   if(time-lastVitalsPaint>=250){updateVitalsHud();updateVeilHud();updateOutfitPowersHud();lastVitalsPaint=time;}
   updateBedRestPanel(time);
   if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
-  if(serverActionBusy){draw(time);return;}
+  if(serverActionBusy||abilityTransition){draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);updateWildlifeGuide();
   if(trackedMoonTrail&&!openMoonTrail(trackedMoonTrail))setExplorationDestination(null);
@@ -6088,7 +6093,18 @@ function applyServerGameplay(state){
   Object.assign(huntingLoot,state.huntingLoot);
   updateEssenceHotbar();updateUpgradeGoalHud();if($('hudMapDialog').open)previewMapRoute();
 }
-let shadowstepTargeting=false,styleAbilityKey='';
+let shadowstepTargeting=false,styleAbilityKey='',abilityTransition=false,abilityBursts=[];
+let shadowstepPreview={key:'',tiles:[]};
+function shadowstepTargets(){
+  const position={x:player.cx,y:player.cy};
+  const encounter=hunting.encounter;
+  const key=JSON.stringify([currentRoom,position,encounter?.arenaPlayer,encounter?.arenaEnemy,encounter?.adds,depthsRun?.vaultMechanism,adventure.bridge,adventure.willowbankShortcut,homeFurniture]);
+  if(shadowstepPreview.key!==key){
+    const tiles=window.shadowstepTiles({location:currentRoom,position,hunting,depthsRun,adventure,homeFurniture}).filter(tile=>!blocked(tile.x,tile.y));
+    shadowstepPreview={key,tiles};
+  }
+  return shadowstepPreview.tiles;
+}
 function refreshStyleAbilityBar(){
   const bar=$('styleAbilityBar'),state=window.playerCloud?.initial;
   if(!bar||!state||!window.styleAbilities)return;
@@ -6150,20 +6166,38 @@ function openStyleAbilities(mode){
   if(!dialog.open)dialog.showModal();
 }
 function aimShadowstep(){
+  if(abilityTransition||serverActionBusy||editing)return;
   shadowstepTargeting=!shadowstepTargeting;
+  if(shadowstepTargeting){
+    shadowstepPreview.key='';
+    if(!shadowstepTargets().length){shadowstepTargeting=false;note('No reachable Shadowstep tiles here.');return;}
+    route=[];step=null;interaction=null;target=null;
+    player.x=player.cx;player.y=player.cy;
+  }
   note(shadowstepTargeting?'Shadowstep · Select a floor tile within four steps. Esc cancels.':'Shadowstep cancelled.');
   refreshStyleAbilityBar();
 }
 async function castStyleAbility(id,body){
-  const dialog=$('styleAbilityDialog');
+  if(abilityTransition||serverActionBusy)return;
+  const dialog=$('styleAbilityDialog'),room=currentRoom,from={x:player.cx,y:player.cy};
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
     if(dialog.open)dialog.close();
-    if(id==='waypoint')enterRoom(state.location,state.position);
+    abilityBursts.push({id,room,tile:from,phase:'departure',started:performance.now()});
+    if(id==='waypoint'){
+      if(!reducedMotion.matches){
+        abilityTransition=true;
+        $('gameShell').inert=true;
+        try{await new Promise(resolve=>setTimeout(resolve,420));}
+        finally{abilityTransition=false;$('gameShell').inert=false;}
+      }
+      enterRoom(state.location,state.position);
+    }
     else{
       player.seat=null;
       player.x=player.cx=state.position.x;player.y=player.cy=state.position.y;
     }
+    abilityBursts.push({id,room:state.location,tile:state.position,phase:'arrival',started:performance.now(),...(id==='shadowstep'?{from}:{})});
     note(window.styleAbilities[id].name+' · 1 AP');
   }catch(error){
     if(dialog.open)$('styleAbilityStatus').textContent=error.message;
@@ -8110,7 +8144,11 @@ canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
   if(shadowstepTargeting){
-    if(tile){shadowstepTargeting=false;castStyleAbility('shadowstep',{tile:{x:tile.x,y:tile.y}});}
+    if(!tile||!shadowstepTargets().some(target=>target.x===tile.x&&target.y===tile.y)){
+      note('Choose a highlighted tile. Esc cancels.');
+      return;
+    }
+    shadowstepTargeting=false;castStyleAbility('shadowstep',{tile:{x:tile.x,y:tile.y}});
     return;
   }
   if(!editing&&item?.type==='remotePlayer'){window.towerRobbery?.open(item.peer.id);return;}
