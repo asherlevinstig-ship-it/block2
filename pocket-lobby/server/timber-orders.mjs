@@ -1,3 +1,4 @@
+import {awardTradingXp} from './activity-xp.mjs';
 import {GOLD_CAP} from '../public/bank.js';
 
 const invalid=message=>Object.assign(new Error(message),{status:400});
@@ -89,6 +90,7 @@ export async function changeTimberOrder(db,row,state,body,now){
       remaining-=quantity;ready+=quantity;
       state.woodcutting.timber-=quantity;state.credits+=gold;
       state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+gold);
+      awardTradingXp(state,quantity);
       receipt={kind:'fill',quantity,gold};
     }else if(body.kind==='cancel'){
       if(!remaining)throw invalid('This order has no unfilled timber to cancel.');

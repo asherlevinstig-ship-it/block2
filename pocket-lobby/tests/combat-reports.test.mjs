@@ -25,8 +25,8 @@ test('combat recap totals span polling and saved state, with exact rewards and s
  assert.equal(other.summary.automaticCasts,2);assert.equal(other.summary.prevented,15);
  assert.equal(other.summary.startedAt,1000);assert.equal(other.summary.partial,false);
  assert.deepEqual(other.rewards.loot,{boar:1});assert.deepEqual(other.rewards.stones,{shield:1});
- assert.deepEqual(other.rewards.xp,{strengthXp:15,agilityXp:10,vitalityXp:15});
- assert.equal(other.rewards.mastery.length,2);assert.equal(away.credits,100);
+ assert.deepEqual(other.rewards.xp,{strengthXp:15,agilityXp:10,vitalityXp:15,huntingXp:10});
+ assert.equal(away.stats.huntingXp,10);assert.equal(other.rewards.mastery.length,2);assert.equal(away.credits,100);
  advanceServerCombat(away,24000,()=>.5);assert.equal(away.combatReports.length,1);assert.equal(away.huntingLoot.boar,1);
 });
 

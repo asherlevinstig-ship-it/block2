@@ -1,3 +1,4 @@
+import {awardTradingXp} from './activity-xp.mjs';
 import {availableActionPoints} from '../public/action-points.js';
 import {openRewardChest,chestEquipmentComparison} from '../public/dungeon-chests.js';
 import {addClothingToOutfit,outfitAppearance} from '../public/wardrobe.js';
@@ -379,7 +380,8 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
       else state.huntingLoot[product.id]-=product.quantity;
       if(state.location==='market'&&product.id!=='timber'&&product.id!==moonwellShard.id)recordQuest(state.quest,'marketSale',product.quantity);
     }
-    state.tradeReceipt={id:body.id,quantity,gold};
+    const tradingXp=awardTradingXp(state,quantity);
+    state.tradeReceipt={id:body.id,quantity,gold,tradingXp};
     return;
   }
   if(action==='enchant'){available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw it before enchanting.');enchantWeapon(state,body.id,body.level);return;}

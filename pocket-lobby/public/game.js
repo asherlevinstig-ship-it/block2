@@ -1034,7 +1034,7 @@ function renderCombatRecap(report){
   const list=$('combatRecapRewards');list.replaceChildren();
   const row=text=>{const item=document.createElement('li');item.textContent=text;list.append(item);};
   for(const [id,count] of Object.entries(rewards.loot??{}))row('Inventory · '+(tradeCatalog[id]?.name??id)+' ×'+count);
-  const xp=Object.entries(rewards.xp??{}).filter(([,value])=>value>0).map(([key,value])=>'+'+value+' '+({strengthXp:'Strength',agilityXp:'Agility',vitalityXp:'Vitality',leadershipXp:'Leadership'}[key]??key));
+  const xp=Object.entries(rewards.xp??{}).filter(([,value])=>value>0).map(([key,value])=>'+'+value+' '+({strengthXp:'Strength',agilityXp:'Agility',vitalityXp:'Vitality',leadershipXp:'Leadership',huntingXp:'Hunting'}[key]??key));
   if(xp.length)row('Combat XP · '+xp.join(' · '));
   for(const [form,count] of Object.entries(rewards.stones??{}))row('Inventory · '+stoneForms[form].name+' Awakening Stone ×'+count);
   for(const award of rewards.mastery??[])row(essenceGems[award.gem].name+' Mastery · +'+award.xp+' XP'+(award.leveled?' · Level '+award.level+'!':''));
@@ -1579,7 +1579,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.outcome==='victory'){
     const [strength,agility,vitality]=enemy.xp;
     if(!authoritative){playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;}
-    const xpReceipt={icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'};
+    const xpReceipt={icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'+(result.huntingXp?' · +'+result.huntingXp+' Hunting XP':'')};
     const stoneReceipt=result.stone?[{icon:'◆',text:stoneForms[result.stone].name+' Awakening Stone · +1'}]:[];
     const masteryReceipt=(result.mastery??[]).map(award=>({icon:'◆',text:essenceGems[award.gem].name+' · +'+award.xp+' Mastery XP'}));
     if(depthsRun){
@@ -5927,6 +5927,14 @@ function updatePlayerStats(){
     $('attribute-'+id+'-progress').max=target;$('attribute-'+id+'-progress').value=towardNext;
     $('attribute-'+id+'-progress').setAttribute('aria-label',name+' level '+rank+', '+towardNext+' of '+target+' XP toward the next level');
   }
+  const skillGrid=$('activitySkillGrid');
+  if(skillGrid&&window.activitySkills){
+    const state={stats:playerStats,woodcutting,mining};
+    skillGrid.innerHTML=Object.entries(window.activitySkills).map(([id,skill])=>{
+      const {level,progress,target}=window.activitySkillProgress(state,id);
+      return '<section class="attribute-card"><span class="attribute-icon" aria-hidden="true">'+skill.icon+'</span><div><h3>'+skill.name+'</h3><p>'+skill.training+'</p><p>Ability affinity · '+skill.affinity+'</p></div><b class="attribute-level">'+level+'</b><progress max="'+target+'" value="'+progress+'" aria-label="'+skill.name+' level '+level+' progress"></progress><small>'+progress+' / '+target+' XP</small></section>';
+    }).join('');
+  }
   const stealingGear=window.towerEquipmentStats?.(wardrobe)??{stealth:0,luck:0};$('attribute-stealth-equipment').textContent='Pickpocket gear · +'+stealingGear.stealth+' Stealth · +'+stealingGear.luck+' Luck';
   $('attributeName').textContent=avatar.name;
   const {level,progress:xp,target}=skillProgress(playerStats.patienceXp);
@@ -6414,7 +6422,7 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
       const firstSale=unlockFirstUpgrade(item.name,receipt.quantity,receipt.gold);
       savePlayerState();
       $(statusId).textContent='Sold '+receipt.quantity+' '+item.name+' for '+receipt.gold+' gold.';
-      showTransaction('Trade completed',[{text:'−'+receipt.quantity+' '+item.name,icon:item.icon}],receipt.gold);
+      showTransaction('Trade completed',[{text:'−'+receipt.quantity+' '+item.name,icon:item.icon},...(receipt.tradingXp?[{text:'+'+receipt.tradingXp+' Trading XP',icon:'◈'}]:[])],receipt.gold);
       if(firstSale)openUpgradeChoice();
     }).catch(error=>{$(statusId).textContent=error.message;});
     return;

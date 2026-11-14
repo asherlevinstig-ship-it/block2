@@ -13,7 +13,7 @@ test('offline and incremental hunting use identical fights, health gates, sales,
  pulse(away,G+300000,true);
  for(const key of ['health','stats','huntingLoot','credits','quest','history'])assert.deepEqual(live[key],away[key],key);
  assert.equal(away.report.hunts.wins,1);assert.equal(away.report.hunts.started,1);assert.equal(away.report.hunts.loot.boar,1);
- assert.equal(away.report.xp,40);assert.equal(away.huntingLoot.boar,1);assert.equal(away.health,100);assert.equal(away.quest.boars,1);
+ assert.equal(away.report.xp,50);assert.equal(away.huntingLoot.boar,1);assert.equal(away.health,100);assert.equal(away.quest.boars,1);
  assert.equal(away.report.reason,'queue-complete');assert.equal(away.activityLog.length,1);assert.equal(away.combatReports,undefined);
  assert.match(away.report.entries[0].note,/minimum 60/);
  const copy=structuredClone(away);pulse(away,G+600000,true);assert.deepEqual(away.stats,copy.stats);assert.deepEqual(away.huntingLoot,copy.huntingLoot);
@@ -49,7 +49,7 @@ test('queued hunts flee even with spell tactics off and stop on escape or defeat
 test('repeat cycles honor boar respawns and aggregate rewards across hunts separated by rest',()=>{
  const s=initial({}, {steps:[{type:'huntBoars',amount:1},{type:'rest'},{type:'sellMeat',amount:0}],repeats:3});
  pulse(s,G+600000,true);
- assert.equal(s.report.hunts.wins,3);assert.equal(s.report.hunts.started,3);assert.equal(s.report.xp,120);assert.equal(s.report.goldEarned,90);assert.equal(s.credits,190);assert.equal(s.huntingLoot.boar,0);
+ assert.equal(s.report.hunts.wins,3);assert.equal(s.report.hunts.started,3);assert.equal(s.report.xp,150);assert.equal(s.report.goldEarned,90);assert.equal(s.credits,190);assert.equal(s.huntingLoot.boar,0);
  assert.ok(s.report.hunts.recent[1].at-s.report.hunts.recent[0].at>=30000);
 });
 

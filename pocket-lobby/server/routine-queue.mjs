@@ -1,3 +1,4 @@
+import {awardTradingXp} from './activity-xp.mjs';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {rollFishingReward} from '../public/fishing.js';
 import {anglerQualityBonus} from '../public/rare-loot.js';
@@ -61,6 +62,7 @@ export function completeTimberMarketTrip(state,at,matches){
  totals.visits++;totals.quantity+=quantity;totals.gold+=gold;totals.sales+=matches.length;
  state.woodcutting.timber-=quantity;
  state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;
+ awardTradingXp(state,quantity);
  p.stepCount=quantity;delete p.timberMarketTrip;
  if(quantity)autoBankGold(state,p,at);
  nextStep(p,at,quantity?'Sold '+quantity+' timber to players for '+gold+' gold':'No timber sold at your price · Kept your timber');
@@ -89,6 +91,7 @@ export function completeOreSale(state,at){
  const quantity=Math.min(Math.max(0,stock-keep),Math.floor((100000000-state.credits)/ore.price)),gold=quantity*ore.price;
  state.huntingLoot[id]=stock-quantity;state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);
  p.goldEarned+=gold;p.oreSales??={};const sale=p.oreSales[id]??={quantity:0,gold:0};sale.quantity+=quantity;sale.gold+=gold;
+ awardTradingXp(state,quantity);
  delete p.oreSaleTrip;p.stepCount=quantity;if(quantity)autoBankGold(state,p,at);
  nextStep(p,at,'Sold '+quantity+' '+ore.name+' for '+gold+' gold');
  if(stock>keep&&!quantity)finish(state,p,'wallet-full',at);
@@ -304,6 +307,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       for(const [id,count,price] of products){const quantity=Math.min(remaining,Math.max(0,count-protectedCount(id)));if(quantity){sales.push([id,quantity]);gold+=quantity*price;remaining-=quantity;}}
       if(state.credits+gold>100000000)return finish(state,p,'wallet-full',at);
       for(const [id,quantity] of sales){if(id==='timber')state.woodcutting.timber-=quantity;else if(type==='sellMeat'||type==='sellShells')state.huntingLoot[id]-=quantity;else state.fishStock[id]-=quantity;p.stepCount+=quantity;}
+      awardTradingXp(state,sales.reduce((sum,[,quantity])=>sum+quantity,0));
       if(type==='sellMeat'||type==='sellShells'){p.huntSales??={};const enemy=type==='sellMeat'?'boar':'beetle';p.huntSales[enemy]=(p.huntSales[enemy]??0)+gold;}
       state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;autoBankGold(state,p,at);
       if((type==='sellFish'||type==='sellMeat')&&gold){recordQuest(state.quest,'marketSale');if(!state.firstUpgrade.unlocked&&!state.firstUpgrade.complete)Object.assign(state.firstUpgrade,{unlocked:true,sale:{name:type==='sellMeat'?'Boar Meat':'Fish',quantity:p.stepCount,gold}});}

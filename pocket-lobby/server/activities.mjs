@@ -1,3 +1,4 @@
+import {awardHuntingXp} from './activity-xp.mjs';
 import {recordDungeonChest} from '../public/dungeon-chests.js';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {awardRareHunt,rareBootsPenalty} from '../public/rare-loot.js';
@@ -88,6 +89,8 @@ function result(state,event,now,random=Math.random){
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries()){
       const before=state.stats[key];state.stats[key]=Math.min(MAX_SKILL_XP,before+enemy.xp[i]);rewards.xp[key]=state.stats[key]-before;
     }
+    const huntingXp=awardHuntingXp(state,enemy.id);
+    if(huntingXp){event.huntingXp=huntingXp;rewards.xp.huntingXp=huntingXp;}
     rewards.mastery=event.mastery??[];
     if(event.stone)rewards.stones={[event.stone]:1};
     if(state.depthsRun){

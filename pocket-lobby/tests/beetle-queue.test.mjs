@@ -28,13 +28,13 @@ test('beetle queues preserve real damage and match offline rewards with live pol
  const live=initial(),offline=structuredClone(live);
  for(let now=G;now<=G+300000;now+=500){settleActivities(live,now,()=>.5);pulse(live,now);}pulse(offline,G+300000,true);
  for(const key of ['health','stats','credits','huntingLoot','hunting'])assert.deepEqual(live[key],offline[key],key);
- assert.equal(offline.report.hunts.byEnemy.beetle.wins,1);assert.equal(offline.report.hunts.byEnemy.beetle.xp,70);assert.equal(offline.report.hunts.loot.stonebackShell,1);assert.equal(offline.credits,145);assert.equal(offline.report.huntSales.beetle,45);assert.equal(offline.health,100);
+ assert.equal(offline.report.hunts.byEnemy.beetle.wins,1);assert.equal(offline.report.hunts.byEnemy.beetle.xp,85);assert.equal(offline.report.hunts.loot.stonebackShell,1);assert.equal(offline.credits,145);assert.equal(offline.stats.huntingXp,15);assert.equal(offline.stats.tradingXp,2);assert.equal(offline.report.huntSales.beetle,45);assert.equal(offline.health,100);
  assert.equal(offline.report.hunts.byEnemy.beetle.duration,6450);assert.equal(offline.combatReports,undefined);
  const copy=structuredClone(offline);pulse(offline,G+600000,true);assert.deepEqual(offline.stats,copy.stats);assert.equal(offline.credits,145);
 });
 test('mixed hunts retain separate outcomes, sales and creature-specific respawn clocks',()=>{
  const s=initial({}, {steps:[{type:'huntBoars',amount:1},{type:'rest'},...steps,{type:'sellMeat',amount:0}],repeats:2});pulse(s,G+1000000);
- assert.equal(s.report.hunts.byEnemy.boar.wins,2);assert.equal(s.report.hunts.byEnemy.beetle.wins,2);assert.equal(s.report.huntSales.boar,60);assert.equal(s.report.huntSales.beetle,90);assert.equal(s.credits,250);assert.equal(s.report.xp,220);
+ assert.equal(s.report.hunts.byEnemy.boar.wins,2);assert.equal(s.report.hunts.byEnemy.beetle.wins,2);assert.equal(s.report.huntSales.boar,60);assert.equal(s.report.huntSales.beetle,90);assert.equal(s.credits,250);assert.equal(s.report.xp,270);
  const cooldown=initial({hunting:{beetleRespawnAt:G+100000,respawnAt:G+900000}});pulse(cooldown,G+99000);assert.equal(cooldown.plan.activeHunt,undefined);pulse(cooldown,G+100000);assert.equal(cooldown.plan.activeHunt.enemy,'beetle');assert.equal(cooldown.location,'ruins');
 });
 test('shell sales keep a crafting reserve without touching meat or Moonwell Shards',()=>{

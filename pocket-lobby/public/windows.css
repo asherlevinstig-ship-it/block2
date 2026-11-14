@@ -550,3 +550,5 @@
 .town-contributions{margin:12px 0;padding:10px 12px;border:1px solid #536b7e;border-radius:8px;background:#13263a}.town-contributions h3{margin:0 0 5px;font-size:14px;color:#ffe1a0}.town-contributions p,.town-contributions ul{margin:0;font-size:12px;line-height:1.6}.town-contributions ul{padding-left:17px}
 .home-chest-form{display:grid;gap:10px}.home-chest-form label{display:grid;gap:4px}.home-chest-form select,.home-chest-form input,.home-chest-form button,#homeChestClose{width:100%;min-width:0;padding:8px}.home-chest-form p{margin:0}.home-chest-form p:empty{display:none}
 #homeChestPurposeRow[hidden]{display:none}
+
+.activity-skill-details{margin-top:18px}.activity-skill-details summary{color:#f1dfb7;font-weight:750;cursor:pointer}.activity-skill-details .attribute-grid{margin-top:10px}
