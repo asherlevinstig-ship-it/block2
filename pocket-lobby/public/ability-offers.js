@@ -1,4 +1,4 @@
-export function renderAbilityOffers({contents,status,state,catalog,offers,slots,drawCharacter,decide,done,reduced,doc=document}){
+export function renderAbilityOffers({contents,status,state,catalog,offers,slots,mastery,practice,drawCharacter,decide,done,reduced,doc=document}){
  const dialog=contents.closest('dialog');
  let frame=0,holding=null,submitting=false,selected=offers[0],closed=false;
  const create=(tag,text,parent=contents,cls='')=>{
@@ -14,6 +14,19 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   create('strong',ability?.name??'Open slot',slot);
  }
  create('p',learned.length+' of '+slots+' slots filled · Accepted abilities are permanent.',contents,'offer-commitment');
+ for(const id of learned){
+  const progress=mastery(state,id),card=create('section',undefined,contents,'ability-mastery-card');
+  create('strong',catalog[id].name+' · Mastery '+progress.stage+' / 3',card);
+  create('p',progress.benefit,card);
+  create('small',practice[id],card);
+  if(progress.next){
+   const meter=create('progress',undefined,card);meter.max=progress.next.uses;meter.value=progress.uses;
+   meter.setAttribute('aria-label',catalog[id].name+' successful uses');
+   const needed=Object.entries(progress.next.requirements).map(([stat,rank])=>(stat==='familiarConnection'?'Familiar Connection':stat[0].toUpperCase()+stat.slice(1))+' '+rank).join(' · ');
+   create('p',progress.uses+' / '+progress.next.uses+' successful uses · '+needed,card);
+   create('small','Next · '+progress.nextBenefit,card);
+  }else create('small','Fully mastered',card);
+ }
  if(!offers.length){create('p','No ability offers are waiting.');return ()=>{};}
  const choices=create('nav',undefined,contents,'offer-choices');choices.setAttribute('aria-label','Available ability offers');
  const stage=create('div',undefined,contents,'offer-stage');

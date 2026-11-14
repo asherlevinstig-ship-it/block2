@@ -1,3 +1,5 @@
+import {awardAbilityUse} from './ability-mastery.mjs';
+import {abilityMastery} from '../public/ability-mastery.js';
 import {mealRecipes} from '../public/cooking.js';
 import {waystationRoom,waystationSites} from '../public/waystation.js';
 import {styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
@@ -52,11 +54,14 @@ export async function changeHearth(env,row,body,now=Date.now()){
  if(!host||!ready(host)||!host.meals?.[invite.meal]||!host.styleAbilities?.learned?.includes('shareHearth')||(host.styleAbilities.readyAt?.shareHearth??0)>now)throw fail('The host has moved, is busy, or no longer has the meal.');
  const response=await room.fetch(new Request('https://room.internal/hearth-target',{method:'POST',body:JSON.stringify({playerId:id,targetPlayerId:invite.sender,room:waystationRoom})}));
  if(!response.ok)throw fail('Both players must stay beside the fire.');
+ const recovery=20+(abilityMastery(host,'shareHearth').stage-1)*10;
+ const helped=[host,state].some(player=>player.health<playerMaxHealth(player,now));
  host.meals[invite.meal]--;
  for(const player of [host,state]){
   player.styleAbilities=normalizeStyleAbilities(player.styleAbilities);
-  player.styleAbilities.hearth={nextAt:now+1000,ticks:5};
+  player.styleAbilities.hearth={nextAt:now+1000,ticks:5,perTick:recovery/5};
  }
+ if(helped)awardAbilityUse(host,'shareHearth');
  host.styleAbilities.readyAt.shareHearth=now+styleAbilities.shareHearth.cooldown;
  const [saved]=await db.batch([
   db.prepare(`WITH eligible AS MATERIALIZED (SELECT COUNT(*) n FROM tower_players WHERE (player_id=? AND revision=?) OR (player_id=? AND revision=?))
@@ -73,7 +78,7 @@ export function settleHearth(state,now){
  const buff=state.styleAbilities?.hearth;
  if(!buff||now<buff.nextAt)return false;
  const ticks=Math.min(buff.ticks,1+Math.floor((now-buff.nextAt)/1000));
- if(state.health>0&&!state.hunting?.recoveryUntil)state.health=Math.min(playerMaxHealth(state,now),state.health+ticks*4);
+ if(state.health>0&&!state.hunting?.recoveryUntil)state.health=Math.min(playerMaxHealth(state,now),state.health+ticks*(buff.perTick??4));
  buff.ticks-=ticks;buff.nextAt+=ticks*1000;
  if(!buff.ticks)delete state.styleAbilities.hearth;
  return true;

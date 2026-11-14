@@ -1,5 +1,7 @@
 import {stallCatalog,stallLimits} from '../public/market-stall-catalog.js';
-import {normalizeStyleAbilities,styleAbilities} from '../public/style-abilities.js';
+import {awardAbilityUse} from './ability-mastery.mjs';
+import {abilityMastery} from '../public/ability-mastery.js';
+import {normalizeStyleAbilities} from '../public/style-abilities.js';
 import {GOLD_CAP} from '../public/bank.js';
 import {VAULT_CAP,vaultBagCount} from '../public/vault.js';
 import {transferStorageItem} from './vault.mjs';
@@ -50,8 +52,9 @@ export async function changeMarketStall(db,row,state,body,now=Date.now()){
     const stats=await db.prepare(`SELECT COUNT(*) trades,COALESCE(SUM(quantity),0) volume,
       SUM(quantity*price)*1.0/SUM(quantity) average,MIN(price) low,MAX(price) high
       FROM tower_market_sales WHERE item=? AND sold_at>=? AND sold_at<=?`).bind(listing.item,now-7*86400000,now).first();
-    abilities.readyAt.appraise=now+styleAbilities.appraise.cooldown;
+    abilities.readyAt.appraise=now+abilityMastery(state,'appraise').cooldown;
     state.styleAbilities=abilities;
+    if(stats.trades>=3)awardAbilityUse(state,'appraise',listing.listing_id);
     const receipt={kind,item:listing.item,price:listing.price,trades:stats.trades,volume:stats.volume,
       ...(stats.trades>=3?{average:stats.average,low:stats.low,high:stats.high}:{})};
     const [saved]=await db.batch([

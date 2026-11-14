@@ -1,4 +1,6 @@
 import {recordShopPurchase} from './shop-licences.mjs';
+import {awardAbilityUse} from './ability-mastery.mjs';
+import {activeScoutClue} from '../public/style-abilities.js';
 import {styleAbilityAction} from './style-abilities.mjs';
 import {awardTradingXp} from './activity-xp.mjs';
 import {availableActionPoints} from '../public/action-points.js';
@@ -111,6 +113,8 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     location(state,[site.room]);
     if(!p||!validRoomTile(site.room,p.x,p.y,roomBoxes(site.room),state.adventure)
       ||Math.abs(p.x-site.x)+Math.abs(p.y-site.y)!==1)throw new Error('Travel beside the clue to examine it.');
+    const scouted=activeScoutClue(state,now);
+    if(scouted===site)awardAbilityUse(state,'scoutAhead',body.id);
     if(body.id==='keeperMarker')state.adventure.keeperMarkerRead=true;
     if(body.id==='keeperCrate'&&state.adventure.keeperMarkerRead)state.adventure.keeperRouteFound=true;
     return;

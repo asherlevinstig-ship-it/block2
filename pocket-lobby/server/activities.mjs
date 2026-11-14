@@ -1,3 +1,5 @@
+import {awardAbilityUse} from './ability-mastery.mjs';
+import {abilityMastery} from '../public/ability-mastery.js';
 import {settleHearth} from './hearth.mjs';
 import {awardHuntingXp} from './activity-xp.mjs';
 import {recordDungeonChest} from '../public/dungeon-chests.js';
@@ -110,7 +112,7 @@ function result(state,event,now,random=Math.random){
     else{
       if(enemy.id==='crystalGuardian'&&state.combatId){const rare=awardRareHunt(state,enemy.id,random,now);if(rare)event.rareDrop=rewards.rareEquipment=rare.id;}
       if(enemy.id==='dusktusk'){
-        if(state.styleAbilities?.preyTrail)state.styleAbilities.preyTrail.cleared=true;
+        if(state.styleAbilities?.preyTrail){awardAbilityUse(state,'trackPrey');state.styleAbilities.preyTrail.cleared=true;}
       }else if(enemy.id==='moonbackStag'){
         state.hunting.moonbackSighting=encounter.moonbackId;
         if(!state.wardrobe.owned.includes(veilCloakId)&&random()<moonbackRules.cloakChance){
@@ -263,9 +265,10 @@ export function activityAction(state,action,body,now,random){
     if(sighting&&enemy.id==='moonbackStag')Object.assign(state.hunting.encounter,{moonbackRoom:sighting.room,moonbackId:sighting.id});
     if(body.ambush===true){
       state.hunting.encounter.nextPlayerAt=now;
-      const event=huntingTurn(state.hunting.encounter,state.health,state.stats,'attack',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments,1.5);
+      const event=huntingTurn(state.hunting.encounter,state.health,state.stats,'attack',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments,1.5+(abilityMastery(state,'ambush').stage-1)*.15);
       const abilities=normalizeStyleAbilities(state.styleAbilities);
       abilities.readyAt.ambush=now+styleAbilities.ambush.cooldown;state.styleAbilities=abilities;
+      awardAbilityUse(state,'ambush');
       event.power='Ambush';event.powerColor='#ffd48b';event.powerForm='sword';event.effect='strikes for '+event.damage+' damage';
       state.combatReceipt={id:crypto.randomUUID(),events:[result(state,event,now,random)]};
     }

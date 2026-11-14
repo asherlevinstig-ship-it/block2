@@ -1,4 +1,6 @@
 import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
+import {abilityMastery} from '../public/ability-mastery.js';
+import {awardAbilityUse} from './ability-mastery.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {shadowstepTiles} from '../public/shadowstep-tiles.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
@@ -39,7 +41,7 @@ export function styleAbilityAction(state,action,body,now){
  }
  if(id==='trackPrey'){
   if(state.location!==preyTrail.room||encounter||state.depthsRun)throw invalid('Use Track Prey in Bramble Clearing outside combat.');
-  abilities.preyTrail={until:now+preyTrail.duration,step:0,cleared:false};
+  abilities.preyTrail={until:now+(180000+(abilityMastery(state,id).stage-1)*60000),step:0,cleared:false};
   abilities.readyAt[id]=now+styleAbilities[id].cooldown;
   state.styleAbilities=abilities;
   return true;
@@ -69,7 +71,8 @@ export function styleAbilityAction(state,action,body,now){
   }
  }
  spendActionPoint(state,now);
- abilities.readyAt[id]=now+styleAbilities[id].cooldown;
+ abilities.readyAt[id]=now+abilityMastery(state,id).cooldown;
  state.styleAbilities=abilities;
+ if(id==='waypoint'||id==='shadowstep'&&encounter)awardAbilityUse(state,id);
  return true;
 }

@@ -16,7 +16,10 @@ export function scoutAheadSite(state){
 export function activeScoutClue(state,now){
  const last=state.styleAbilities?.scout;
  const site=scoutAheadSite(state);
- return site&&last?.room===site.room&&now<last.at+scoutClueSeconds*1000?site:null;
+ const uses=state.styleAbilities?.mastery?.scoutAhead?.uses??0;
+ const rank=Math.min(skillLevel(state.stats?.explorationXp),skillLevel(state.stats?.familiarConnectionXp));
+ const seconds=uses>=2&&rank>=5?120:uses>=1&&rank>=3?75:scoutClueSeconds;
+ return site&&last?.room===site.room&&now<last.at+seconds*1000?site:null;
 }
 export const preyTrail={room:'clearing',tracks:[{x:3,y:5},{x:5,y:7},{x:8,y:6}],site:{x:9,y:5},duration:180000};
 export function activePreyTrail(state,now){
@@ -51,7 +54,12 @@ export function normalizeStyleAbilities(input){
  const scouting=learned.includes('scoutAhead')&&['willowbank','waystation'].includes(scout?.room)&&Number.isSafeInteger(scout.at)&&scout.at>0;
  const hearth=input?.hearth;
  const warming=Number.isSafeInteger(hearth?.nextAt)&&hearth.nextAt>0&&Number.isInteger(hearth.ticks)&&hearth.ticks>0&&hearth.ticks<=5;
- return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
+ const mastery=Object.fromEntries(learned.filter(id=>input?.mastery?.[id]).map(id=>{
+  const value=input.mastery[id];
+  return [id,{uses:Number.isSafeInteger(value.uses)?Math.max(0,Math.min(1000000,value.uses)):0,
+   seen:[...new Set((Array.isArray(value.seen)?value.seen:[]).filter(key=>typeof key==='string'&&key.length<=100))].slice(-60)}];
+ }));
+ return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);

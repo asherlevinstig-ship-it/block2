@@ -6163,7 +6163,8 @@ function renderHearth(){
   contents.replaceChildren();
   const text=value=>{const p=document.createElement('p');p.textContent=value;contents.append(p);};
   const button=(label,body)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.onclick=()=>refreshHearth(body);contents.append(el);};
-  text('Share one cooked meal and recover up to 20 HP each over 5 seconds.');
+  const recovery=20+((window.abilityMastery?.(window.playerCloud.initial,'shareHearth')?.stage??1)-1)*10;
+  text('Share one cooked meal and recover up to '+recovery+' HP each over 5 seconds.');
   for(const invite of hearthBoard?.incoming??[]){
     text(invite.from+' invites you to share '+invite.meal+'.');
     button('Accept meal',{kind:'accept',id:invite.id});button('Decline',{kind:'decline',id:invite.id});
@@ -6301,7 +6302,7 @@ function openStyleAbilities(mode){
     if(!places.length)add(contents,'p','Discover a waypoint landmark by visiting it first.');
   }else{
     clearAbilityOffer=window.renderAbilityOffers({
-      contents,status,state,catalog:window.styleAbilities,offers:window.styleAbilityOffers(state),slots:window.abilitySlots,
+      contents,status,state,mastery:window.abilityMastery,practice:window.masteryPractice,catalog:window.styleAbilities,offers:window.styleAbilityOffers(state),slots:window.abilitySlots,
       drawCharacter:(ink,x,y,time)=>{
         ink.save();ink.translate(x,y);ink.scale(1.6,1.6);
         sprite(ink,0,0,avatar,{time,vest:armourSelection(combatGear)});
