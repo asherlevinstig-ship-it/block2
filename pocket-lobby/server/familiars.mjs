@@ -1,7 +1,8 @@
+import {awardFamiliarCareXp} from './activity-xp.mjs';
 import {awardFamiliarBond,recordOwlScout} from './familiar-progression.mjs';
 import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,owlCallFor,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
-import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS,secondChanceBlock,familiarBond,familiarCooldown} from '../public/familiars.js';
+import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,FAMILIAR_CARE_MS,MOON_SIGHT_MS,secondChanceBlock,familiarBond,familiarCooldown} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
 import {isFishingRoom} from '../public/region-catalog.js';
 import {moonwood} from '../public/moonwood.js';
@@ -10,7 +11,7 @@ import {dungeonRooms} from '../public/dungeon-arena.js';
 const invalidUse=message=>Object.assign(new Error(message),{status:400});
 
 export function familiarAction(state,action,body,now,random=Math.random){
- if(!['familiarRecruit','familiarTame','familiarForage','familiarRename','familiarEquip','familiarUse'].includes(action))return false;
+ if(!['familiarRecruit','familiarTame','familiarForage','familiarRename','familiarCare','familiarEquip','familiarUse'].includes(action))return false;
  const current=normalizeFamiliars(state.familiars),id=body.id;
  if(action==='familiarUse'){
   if(current.equipped==='fox')throw new Error('Select an add during combat to use Cinder Pounce.');
@@ -72,12 +73,21 @@ export function familiarAction(state,action,body,now,random=Math.random){
     state.familiars=current;
     return true;
    }
-   if(stage==='feed')current.forage[animal.kind].count--;
+   if(stage==='feed'){current.forage[animal.kind].count--;awardFamiliarCareXp(state,3,5);}
    if(stage==='bond'){
     current.owned.push(animal.kind);
+    awardFamiliarCareXp(state,10,0);
     if(!current.equipped)current.equipped=animal.kind;
     for(const other of Object.keys(current.trust))if(wildAnimal(other,now)?.kind===animal.kind)delete current.trust[other];
    }else current.trust[id]={step:trust.step+1,lastRest:animal.rest};
+  }else if(action==='familiarCare'){
+   if(!current.owned.includes(id))throw invalidUse('Befriend this familiar before caring for it.');
+   if(now<(current.careReadyAt?.[id]??0))throw invalidUse('This familiar is resting. Check back when it is ready.');
+   current.careReadyAt={...current.careReadyAt,[id]:now+FAMILIAR_CARE_MS};
+   state.familiars=current;
+   awardFamiliarBond(state,id,5,{requireEquipped:false});
+   awardFamiliarCareXp(state,10,5);
+   return true;
   }else if(action==='familiarRename'){
    if(!current.owned.includes(id))throw new Error('Befriend this familiar before naming it.');
    const name=normalizeFamiliarName(body.name);

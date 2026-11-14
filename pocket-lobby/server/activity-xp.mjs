@@ -3,6 +3,7 @@ import {MAX_SKILL_XP} from '../public/skill-curve.js';
 const huntingXpByEnemy=new Map([['boar',10],['beetle',15],['thornBoar',20],['moonbackStag',25]]);
 
 function award(state,key,xp){
+  state.stats??={};
   if(!xp)return 0;
   const before=state.stats[key]??0;
   state.stats[key]=Math.min(MAX_SKILL_XP,before+xp);
@@ -11,3 +12,14 @@ function award(state,key,xp){
 
 export const awardHuntingXp=(state,enemy)=>award(state,'huntingXp',huntingXpByEnemy.get(enemy)??0);
 export const awardTradingXp=(state,quantity)=>award(state,'tradingXp',quantity*2);
+
+export function awardExplorationXp(state,previous,room=null){
+  const known=new Set(previous??[]);
+  const discoveries=(state.adventure?.discovered??[]).filter(id=>!known.has(id)&&(room===null||room===id));
+  return award(state,'explorationXp',new Set(discoveries).size*15);
+}
+
+export function awardFamiliarCareXp(state,connection,kindness){
+  award(state,'familiarConnectionXp',connection);
+  award(state,'kindnessXp',kindness);
+}

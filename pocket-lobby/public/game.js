@@ -1837,6 +1837,19 @@ function renderFamiliars(renaming=null,focusRename=null){
   button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});if(!equipped)familiarReaction={id,pose:'bond',at:performance.now()};$('familiarStatus').textContent=equipped?'Familiar unequipped.':name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
   actions.append(button);
   if(owned&&renaming!==id){
+   const care=document.createElement('button');care.type='button';care.textContent='Care for '+name;
+   const waiting=(familiarState.careReadyAt?.[id]??0)-combatNow();
+   if(waiting>0){care.disabled=true;care.textContent='Resting · '+Math.ceil(waiting/60000)+' min';}
+   care.onclick=async()=>{
+    care.disabled=true;
+    try{
+     await serverGameplay('familiarCare',{id});
+     if(equipped)familiarReaction={id,pose:'bond',at:performance.now()};
+     $('familiarStatus').textContent='+10 Familiar Connection XP · +5 Kindness XP';
+     renderFamiliars();
+    }catch(error){$('familiarStatus').textContent=error.message;renderFamiliars();}
+   };
+   actions.append(care);
    const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';
    rename.setAttribute('aria-label','Rename '+name);rename.onclick=()=>{$('familiarStatus').textContent='';renderFamiliars(id);};actions.append(rename);
    if(focusRename===id)queueMicrotask(()=>rename.focus());
@@ -5978,6 +5991,13 @@ function renderProgress(){
   }
   $('progressMilestonesEmpty').hidden=completed.children.length>0;
 }
+window.towerSyncExplorationXp=xp=>{
+  if(xp<=(playerStats.explorationXp??0))return;
+  const earned=xp-(playerStats.explorationXp??0);
+  playerStats.explorationXp=xp;
+  updatePlayerStats();
+  showTransaction('Exploration',[{icon:'⌖',text:'+'+earned+' Exploration XP'}]);
+};
 function updatePlayerStats(){
   updateUpgradeGoalHud();
   health=Math.min(health,maxHealth());

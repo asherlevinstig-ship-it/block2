@@ -43,6 +43,7 @@ import {configureExplorerLesson} from './exploration-plan.mjs';
 import {migrateHomeSafe} from '../public/home-safe.js';
 import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
+import {awardExplorationXp} from './activity-xp.mjs';
 import {changeShopLicence,shopLicenceBoard,shopSaleStatements} from './shop-licences.mjs';
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
@@ -175,6 +176,7 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     }
     if(activities)settleActivities(state,now);
     const before=JSON.parse(row.state_json);
+    awardExplorationXp(state,before.adventure?.discovered);
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(initial===JSON.stringify(state)&&!migrated)return row;
     const operation="settle:"+crypto.randomUUID();
@@ -227,7 +229,7 @@ export async function handlePlayerApi(request,env){
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location===overlookRoom){legacy.location=waystationRoom;legacy.position={x:10,y:3};}
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
-      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0,huntingXp:0,tradingXp:0,evil:0},adventure:{...legacy.adventure,...Object.fromEntries([...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,equipmentEffects:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0,huntingXp:0,tradingXp:0,explorationXp:0,familiarConnectionXp:0,kindnessXp:0,evil:0},adventure:{...legacy.adventure,...Object.fromEntries([...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,equipmentEffects:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -600,7 +602,14 @@ export async function handlePlayerApi(request,env){
       default:return json({error:"Not found."},404);
     }
     enablePhysicalWork(state,env);
-    const oldRoom=JSON.parse(row.state_json).location;
+    const beforeSave=JSON.parse(row.state_json);
+    const oldRoom=beforeSave.location;
+    if(path==='/api/player/save'){
+      const prior=beforeSave.adventure?.discovered??[];
+      const arrived=state.location!==oldRoom&&state.adventure.discovered.includes(state.location);
+      state.adventure.discovered=[...new Set([...prior,...(arrived?[state.location]:[])])];
+      if(arrived)awardExplorationXp(state,prior,state.location);
+    }else awardExplorationXp(state,beforeSave.adventure?.discovered);
     if(['/api/player/save','/api/player/gameplay/factionHall','/api/player/plan/start'].includes(path)&&state.location!==oldRoom){
       spendActionPoint(state,Date.now());
       if(state.plan&&!availableActionPoints(state.actionPoints)){stopForActionPoints(state,Date.now());finishRoutineReport(state,Date.now());}

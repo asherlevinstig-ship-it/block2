@@ -20,6 +20,7 @@ export const familiarCooldown=(state,id)=>id==='fox'&&familiarBond(state,id).ran
 export const OTTER_WAIT=.85, FOX_STAGGER=8, MOON_SIGHT_MS=15000;
 export const isFamiliar=id=>typeof id==='string'&&Object.hasOwn(familiars,id);
 export const FAMILIAR_NAME_MAX=20;
+export const FAMILIAR_CARE_MS=30*60*1000;
 export function normalizeFamiliarName(value){
  if(typeof value!=='string'||/[\p{Cc}\u202a-\u202e\u2066-\u2069]/u.test(value))return null;
  const name=value.trim().replace(/\s+/gu,' ');
@@ -37,7 +38,8 @@ export function normalizeFamiliars(input){
   const xp=Math.min(BOND_CAP,clock(input?.bondXp?.[id]));if(xp)bondXp[id]=xp;
  }
  const scouted=owned.includes('owl')?[...new Set((Array.isArray(input?.scouted)?input.scouted:[]).filter(room=>typeof room==='string'&&/^[a-zA-Z]{1,32}$/.test(room)))].slice(0,32):[];
- return {owned,equipped,readyAt,sight,names,bondXp,scouted,trust:normalizeTrust(input?.trust),forage:normalizeForage(input?.forage)};
+ const careReadyAt=Object.fromEntries(owned.filter(id=>clock(input?.careReadyAt?.[id])).map(id=>[id,clock(input.careReadyAt[id])]));
+ return {owned,equipped,readyAt,sight,names,bondXp,scouted,...(Object.keys(careReadyAt).length?{careReadyAt}:{}),trust:normalizeTrust(input?.trust),forage:normalizeForage(input?.forage)};
 }
 export function familiarFishingTime(state,duration){
  const familiar=state.familiars;

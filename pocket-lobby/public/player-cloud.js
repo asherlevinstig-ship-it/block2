@@ -90,6 +90,7 @@
         retryJob=null;
         try{
           packet=await request('save',{...job,revision:packet.revision});
+          window.towerSyncExplorationXp?.(packet.state.stats?.explorationXp??0);
           setStatus(pending?'Saving…':'Server saved');
           if(!pending)backup(null);
         }catch(error){
