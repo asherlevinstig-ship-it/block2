@@ -1,3 +1,5 @@
+import {recordEquipmentEffect,normalizeEquipmentEffects} from '../public/equipment-effects.js';
+import {rollFishingReward} from '../public/fishing.js';
 import {anglerQualityBonus} from '../public/rare-loot.js';
 import {playerMaxHealth,mealPatience,normalizeMealBuff} from '../public/food-buffs.js';
 import {normalizeRobbery} from '../public/robbery-rules.js';
@@ -116,7 +118,7 @@ export function normalizeState(input={}){
     ...(input.loadouts!==undefined?{loadouts:normalizeLoadouts(input.loadouts)}:{}),
     ...(input.vaultCoop?{vaultCoop:{id:input.vaultCoop.id}}:{}),
     controlMode:input.controlMode??'play',...(input.autoSwitch===true?{autoSwitch:true}:{}),...(['required','complete'].includes(input.autoLesson)?{autoLesson:input.autoLesson}:{}),...(input.autoConfigured===true?{autoConfigured:true}:{}),...(input.pendingCharacterRules?{pendingCharacterRules:normalizeCharacterRules(input.pendingCharacterRules)}:{}),bank:normalizeBank(input.bank),
-    ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,stealthXp:stats.stealthXp,leadershipXp:stats.leadershipXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,...(input.equipmentEffects!==undefined?{equipmentEffects:normalizeEquipmentEffects(input.equipmentEffects)}:{}),vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,stealthXp:stats.stealthXp,leadershipXp:stats.leadershipXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     mining:normalizeMining(input.mining),woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     outfitMagic:normalizeOutfitMagic(input.outfitMagic),wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
@@ -223,8 +225,8 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   }
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=skillLevel(state.stats.patienceXp);
-    const fish=rollFishingCatch(level+mealPatience(state,plan.nextCatchAt),plan.rod,random,state.stats.luckXp,false,anglerQualityBonus(state));
-    state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
+    const reward=rollFishingReward(level+mealPatience(state,plan.nextCatchAt),plan.rod,random,state.stats.luckXp,false,anglerQualityBonus(state));const {fish,cloakBoosted}=reward;
+    state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);if(cloakBoosted)recordEquipmentEffect(state,'angler',1,plan.nextCatchAt,'angler:auto:'+(plan.nextCatchAt),'pond');
     state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");
     state.fishingGear.bait--;state.stats.patienceXp=Math.min(MAX_SKILL_XP,state.stats.patienceXp+10);

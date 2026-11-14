@@ -1,3 +1,4 @@
+import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {rareBootsPenalty,awardRareHunt} from '../public/rare-loot.js';
 import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
 import {validVaultMechanism,vaultMechanisms} from '../public/vault-mechanisms.js';
@@ -65,7 +66,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
  const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,observedAt:now,
-  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
+  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
  s.routineLastSeen=now;
@@ -92,7 +93,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   if(r.vaultMechanism)s.depthsRun.vaultMechanism=r.vaultMechanism;
   delete s.vaultCoop;
   for(const [key,xp] of Object.entries({strengthXp:75,agilityXp:55,vitalityXp:75}))s.stats[key]=Math.min(MAX_SKILL_XP,s.stats[key]+xp);
-  awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);awardRareHunt(s,'depthsGuardian',random);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
+  awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);awardRareHunt(s,'depthsGuardian',random,now);if(s.equipmentEffects?.at(-1)?.perk==='luck'&&s.equipmentEffects.at(-1).at===now)m.perk=s.equipmentEffects.at(-1);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
  }
  if(kind==='mechanism'){
   if(r.leader!==id||r.status!=='waiting'||r.vaultMechanism||s.depthsRun.vaultMechanism)throw invalid('Only the waiting party leader can choose one Vault mechanism.');
@@ -141,7 +142,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='taunt'){if(now<(m.tauntReadyAt??0))throw invalid('Wait for Taunt to recover.');r.taunt=id;r.tauntUntil=now+6000;m.tauntReadyAt=now+8000;m.support++;text='Taunted! The next attack will focus you; the current warning stays locked.';}
  if(kind==='dodge'){if(now<m.nextDodgeAt)throw invalid('Wait for Dodge to recover.');m.dodgeUntil=now+350;m.nextDodgeAt=now+1300;text='Dodge started. Time it just before impact.';}
- if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(target)target.hp-=hit;else r.hp-=hit;if(m.weapon==='vampiricSword'&&(target?target.hp:r.hp)===0)m.hp=Math.min(playerMaxHealth(m,now),m.hp+4);m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
+ if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(target)target.hp-=hit;else r.hp-=hit;if(m.weapon==='vampiricSword'&&(target?target.hp:r.hp)===0){const heal=Math.min(4,playerMaxHealth(m,now)-m.hp);m.hp+=heal;if(heal){recordEquipmentEffect(s,'vampire',heal,now,'vampire:coop:'+r.id+':'+(target?.id??'leader'));m.perk=s.equipmentEffects.at(-1);}}m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
  m.lastFeedback=text;if(kind!=='dodge')spendActionPoint(s,now);syncPlayer(s,r,id,now);return {text,hit:damage};
 }
 export async function readVaultParty(db,id,playerId,now=Date.now()){

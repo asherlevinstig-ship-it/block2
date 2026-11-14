@@ -1,3 +1,4 @@
+import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {prospectorBonus} from '../public/rare-loot.js';
 import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit,miningFind} from '../public/mining.js';
 import {quarryForge,barProducts,forgeCraftReason,pickaxeIngredients} from '../public/forge.js';
@@ -11,7 +12,8 @@ import {startCombatEncounter} from './activities.mjs';
 const invalid=message=>Object.assign(new Error(message),{status:400});
 export function awardOreStrike(state,node,cut,now,broken=false){
  const ore=oreProducts[node.ore],before=state.mining.xp;
- const base=node.yield??1,bonus=Math.min(miningBonusOre(state.mining,cut.id)+prospectorBonus(state,cut.id),Math.max(0,1000000-(state.huntingLoot[node.ore]??0)-base)),amount=base+bonus;
+ const base=node.yield??1,space=Math.max(0,1000000-(state.huntingLoot[node.ore]??0)-base),runic=Math.min(miningBonusOre(state.mining,cut.id),space),prospector=Math.min(prospectorBonus(state,cut.id),space-runic),bonus=runic+prospector,amount=base+bonus;
+ if(prospector)recordEquipmentEffect(state,'prospector',prospector,now,'prospector:'+cut.id,depositRoom(node));
  state.huntingLoot[node.ore]=(state.huntingLoot[node.ore]??0)+amount;
  state.mining.xp=Math.min(MAX_SKILL_XP,before+ore.xp*base);useHunger(state);
  const find=broken?miningFind(cut.id,state.stats?.luckXp??0):null;
@@ -20,7 +22,7 @@ export function awardOreStrike(state,node,cut,now,broken=false){
   state.huntingLoot[awarded]=(state.huntingLoot[awarded]??0)+1;
   if(state.plan){state.plan.miningFinds??={};state.plan.miningFinds[awarded]=(state.plan.miningFinds[awarded]??0)+1;}
  }
- state.miningReceipt={id:cut.id,ore:node.ore,amount,bonus,room:depositRoom(node),xp:state.mining.xp-before,at:now,node:node.id,broken,find:awarded};
+ state.miningReceipt={id:cut.id,ore:node.ore,amount,bonus,prospector,runic,room:depositRoom(node),xp:state.mining.xp-before,at:now,node:node.id,broken,find:awarded};
  return state.miningReceipt.xp;
 }
 export async function writeOreStrike(db,row,state,operation,now,{node,revision,hits,readyAt}){

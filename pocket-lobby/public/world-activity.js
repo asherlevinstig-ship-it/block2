@@ -1,3 +1,5 @@
+import {equipmentPerks} from './equipment-effects.js';
+export {equipmentPerks} from './equipment-effects.js';
 import {rareHunts,ownsRareItem} from './rare-loot.js';
 import {mealRecipes} from './cooking.js';
 import {fishProducts} from './fishing.js';
@@ -11,7 +13,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const timberGold=same?(p.timberSales?.gold??0)-(b.timberSales?.gold??0):0;
  const mined=after.miningReceipt;
  if(mined?.id&&mined.id!==before.miningReceipt?.id){
-  add('ore:'+mined.id,mined.bonus?'catch':'timber','+'+(mined.amount??1)+' '+oreProducts[mined.ore].name+(mined.bonus?' · Runic surge':''),mined.amount??1,mined.at,mined.room??'quarry');
+  add('ore:'+mined.id,mined.bonus?'catch':'timber','+'+(mined.amount??1)+' '+oreProducts[mined.ore].name+(mined.runic?' · Runic surge':mined.bonus?' · Bonus ore':''),mined.amount??1,mined.at,mined.room??'quarry');
   if(events.at(-1)?.id==='ore:'+mined.id)events.at(-1).mining={node:mined.node,at:mined.at,broken:mined.broken===true,find:mined.find,bonus:mined.bonus??0};
   if(miningFinds[mined.find])add('find:'+mined.id,'catch','Discovered '+miningFinds[mined.find].name+'!',1,mined.at,mined.room??'quarry');
  }
@@ -38,9 +40,11 @@ export function worldActivityEvents(before,after,now=Date.now()){
  if(after.combatReceipt?.id!==before.combatReceipt?.id)for(const e of after.combatReceipt?.events??[]){
   const key='combat:'+after.combatId+':'+e.at+':'+e.action,eventRoom=before.hunting?.encounter?before.location:room;
   if(e.taken>0)add(key+':hurt','damage','−'+e.taken+' HP',e.taken,e.at,eventRoom);
-  if(e.healed>0)add(key+':heal','heal','+'+e.healed+' HP',e.healed,e.at,eventRoom);
+  if(e.healed>0&&!e.lifeSteal)add(key+':heal','heal','+'+e.healed+' HP',e.healed,e.at,eventRoom);
   if(e.dodged)add(key+':dodge','dodge',e.perfectDodge?'Perfect dodge':'Dodge',0,e.at,eventRoom);
  }
+ const seenPerks=new Set((before.equipmentEffects??[]).map(e=>e.id));
+ for(const e of after.equipmentEffects??[]){if(seenPerks.has(e.id)||!equipmentPerks[e.perk])continue;const label=e.perk==='vampire'?'+'+e.amount+' HP · Vampiric Sword':e.perk==='angler'?'Better catch · Angler’s Cloak':e.perk==='prospector'?'+'+e.amount+' bonus ore · Prospector’s Gloves':'Lucky Boots · Rare drop!';add('perk:'+e.id,'perk',label,e.amount,e.at,e.room);if(events.at(-1)?.id==='perk:'+e.id)events.at(-1).perk=e.perk;}
  for(const [key,role] of [['lastAttempt','thief'],['lastReceived','victim']]){
   const r=after.robbery?.[key];if(r?.id&&r.id!==before.robbery?.[key]?.id)add('robbery:'+role+':'+r.id,r.gold?(role==='thief'?'gold':'loss'):'push',r.gold?(role==='thief'?'+'+r.gold+' stolen gold':'−'+r.gold+' gold · Pickpocketed'):(role==='thief'?'Spotted! Steal failed':'Caught a pickpocket'),r.gold,r.at,r.room);
  }

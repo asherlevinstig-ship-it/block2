@@ -202,7 +202,7 @@ export class SharedRoom{
     meta.activityRevision=revision;
     if(state.robbery?.lastReceived?.at>Date.now()-5000)this.send(ws,{type:'robbery',receipt:state.robbery.lastReceived,revision});
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
-    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
+    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge','perk'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
     const leaving=state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules';
     recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});

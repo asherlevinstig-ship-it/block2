@@ -1,3 +1,5 @@
+import {recordEquipmentEffect} from '../public/equipment-effects.js';
+import {rollFishingReward} from '../public/fishing.js';
 import {rareHunts,normalizeRareHunts,ownsRareItem} from '../public/rare-loot.js';
 import {anglerQualityBonus} from '../public/rare-loot.js';
 import {mealBuffs,playerMaxHealth,mealPatience} from '../public/food-buffs.js';
@@ -272,8 +274,9 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     const before=state.stats.patienceXp;
     const shoalReeled=cast.shoalId!==undefined&&cast.shoalReeled===true;
-    const fish=state.location===moonfinPool.room&&cast.room===moonfinPool.room&&rollMoonfin(cast.bonus,random)
-      ?'moonfin':rollFishingCatch(skillLevel(before)+mealPatience(state,now),cast.rod,random,state.stats.luckXp,shoalReeled,anglerQualityBonus(state));
+    const reward=state.location===moonfinPool.room&&cast.room===moonfinPool.room&&rollMoonfin(cast.bonus,random)
+      ?{fish:'moonfin',cloakBoosted:false}:rollFishingReward(skillLevel(before)+mealPatience(state,now),cast.rod,random,state.stats.luckXp,shoalReeled,anglerQualityBonus(state));
+    const {fish,cloakBoosted}=reward;
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     const otterHelp=cast.otterHelp===true&&state.familiars?.equipped==='otter';
     const baitSaved=otterHelp&&familiarBond(state.familiars,'otter').rank>=3;
@@ -285,6 +288,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     recordQuest(state.quest,'fish');
     const {id,started,castEnds,biteAt,landAt,water}=cast;
     state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,at:now,cast:{id,started,castEnds,biteAt,landAt,...(water?{water}:{})},spot:state.position,...(shoalReeled?{shoalReeled:true}:{}),...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
+    if(cloakBoosted)recordEquipmentEffect(state,'angler',1,now,'angler:'+cast.id);
     delete state.fishingCast;
     return;
   }
@@ -381,6 +385,7 @@ export function protectFishingState(previous,next){
   if(previous.miningCut&&next.location===previous.location&&next.position?.x===previous.position?.x&&next.position?.y===previous.position?.y)next.miningCut=previous.miningCut;
   else delete next.miningCut;
   if(previous.miningReceipt)next.miningReceipt=previous.miningReceipt;
+  if(previous.equipmentEffects)next.equipmentEffects=previous.equipmentEffects;else delete next.equipmentEffects;
   next.bank=previous.bank;
   if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
   if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;

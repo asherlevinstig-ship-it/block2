@@ -1,3 +1,4 @@
+import {recordEquipmentEffect} from './equipment-effects.js';
 export const rareHunts={
  vampiricSword:{name:'Vampiric Sword',kind:'weapon',enemy:'depthsGuardian',source:'Vault Guardian · Sunken Vault',room:'ruins',perk:'Recover 4 HP per enemy killed while wielded.',cost:'18 base damage; slower than a Duelist’s Blade.'},
  anglersCloak:{name:'Angler’s Cloak',kind:'clothing',enemy:'cacheGuardian',source:'Rune Channeler · Sealed Alcove',room:'ruins',perk:'+5 percentage points Fine fish; +1 point Rare fish while worn.',cost:'Uses your top slot, replacing other cloaks or mage robes.'},
@@ -26,11 +27,13 @@ export function rareHuntProgress(state,id){
  const p=normalizeRareHunts(state.dungeonLoot?.rares)?.progress[id]??{kills:0,misses:0},owned=ownsRareItem(state,id);
  return {...p,owned,remaining:owned?0:8-p.misses,chance:rareHuntChance(state)};
 }
-export function awardRareHunt(state,enemy,random=Math.random){
+export function awardRareHunt(state,enemy,random=Math.random,now=Date.now()){
  const id=Object.keys(rareHunts).find(id=>rareHunts[id].enemy===enemy);if(!id||ownsRareItem(state,id))return null;
  const r=state.dungeonLoot.rares=normalizeRareHunts(state.dungeonLoot.rares)??{target:null,progress:{}},p=rareHuntProgress(state,id);
  const next=r.progress[id]={kills:Math.min(100000000,p.kills+1),misses:p.misses+1},guaranteed=next.misses>=8;
- if(!guaranteed&&random()>=rareHuntChance(state))return null;
+ const roll=guaranteed?null:random();
+ if(!guaranteed&&roll>=rareHuntChance(state))return null;
+ if(!guaranteed&&roll>=rareHuntRules.chance)recordEquipmentEffect(state,'luck',1,now,'luck:'+id+':'+next.kills);
  const kind=rareHunts[id].kind;
  if(kind==='weapon')state.combatGear.ownedWeapons.push(id);
  else if(kind==='armour'){state.combatGear.ownedArmour??=[];state.combatGear.ownedArmour.push(id);}

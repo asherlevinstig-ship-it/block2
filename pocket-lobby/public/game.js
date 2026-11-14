@@ -595,14 +595,15 @@ const remotePeers=new Map();let lastRobberyNotice=null;
 const worldActivityTracker=typeof createWorldActivityTracker==='function'?createWorldActivityTracker(savedPlayerState):null;
 const worldFloats=[],worldFloatSeen=new Set();
 function addWorldFloat(actor,event){
- if(!event||event.room!==currentRoom||!['gold','loss','push','catch','timber','damage','heal','dodge'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
+ if(!event||event.room!==currentRoom||!['gold','loss','push','catch','timber','damage','heal','dodge','perk'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
  if(actor!=='self'&&!remotePeers.has(actor))return;
  const key=actor+':'+event.id;if(worldFloatSeen.has(key))return;worldFloatSeen.add(key);if(worldFloatSeen.size>500)worldFloatSeen.delete(worldFloatSeen.values().next().value);
- const existing=worldFloats.filter(f=>f.actor===actor);if(existing.length>=4){existing[0].node.remove();worldFloats.splice(worldFloats.indexOf(existing[0]),1);}
- if(worldFloats.length>=80){worldFloats.shift().node.remove();}
+ const existing=worldFloats.filter(f=>f.actor===actor);if(existing.length>=4){existing[0].node.remove();existing[0].fx?.remove();worldFloats.splice(worldFloats.indexOf(existing[0]),1);}
+ if(worldFloats.length>=80){const oldest=worldFloats.shift();oldest.node.remove();oldest.fx?.remove();}
  const node=document.createElement('span');node.className='world-float';node.dataset.kind=event.kind;node.textContent=event.label;$('worldFloats').append(node);
+ let fx=null;if(event.kind==='perk'&&equipmentPerks[event.perk]){node.dataset.perk=event.perk;fx=document.createElement('span');fx.className='world-perk-burst';fx.dataset.perk=event.perk;fx.setAttribute('aria-hidden','true');fx.style.setProperty('--perk-color',equipmentPerks[event.perk].color);const symbol=document.createElement('b');symbol.textContent=equipmentPerks[event.perk].symbol;fx.append(symbol);for(let n=0;n<4;n++){const spark=document.createElement('i');spark.style.setProperty('--spark',n);fx.append(spark);}$('worldFloats').append(fx);}
  const peer=remotePeers.get(actor);
- worldFloats.push({actor,room:currentRoom,node,started:performance.now(),lane:existing.length%4,anchor:peer?{rx:peer.rx,ry:peer.ry,seat:peer.seat}:null});
+ worldFloats.push({actor,room:currentRoom,node,fx,started:performance.now(),lane:existing.length%4,anchor:peer?{rx:peer.rx,ry:peer.ry,seat:peer.seat}:null});
  if(event.kind==='damage'&&remotePeers.has(actor))remotePeers.get(actor).hurtUntil=performance.now()+250;
 }
 function receiveWorldActivity(actor,events){
@@ -617,8 +618,9 @@ function updateWorldFloats(time){
  const bounds=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
  for(let i=worldFloats.length-1;i>=0;i--){
   const f=worldFloats[i],age=time-f.started,peer=f.actor==='self'?player:remotePeers.get(f.actor)??f.anchor;
-  if(age>1800||f.room!==currentRoom||!peer){f.node.remove();worldFloats.splice(i,1);continue;}
+  if(age>1800||f.room!==currentRoom||!peer){f.node.remove();f.fx?.remove();worldFloats.splice(i,1);continue;}
   const [x,y]=peer.seat?seatAnchor(peer.seat):point((f.actor==='self'?player.x:peer.rx)+.5,(f.actor==='self'?player.y:peer.ry)+.5);
+  if(f.fx){f.fx.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale)+'px';f.fx.style.top=Math.round(bounds.y+((y-20-cy)*zoom+cy)*bounds.scale)+'px';if(age>950){f.fx.remove();f.fx=null;}}
   f.node.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale+(f.lane%2?12:-12))+'px';
   f.node.style.top=Math.round(bounds.y+((y-52-cy)*zoom+cy)*bounds.scale-f.lane*18-(reducedMotion.matches?0:age/55))+'px';
   f.node.style.opacity=String(Math.min(1,(1800-age)/500));

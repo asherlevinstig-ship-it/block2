@@ -1,3 +1,4 @@
+import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {awardRareHunt,rareBootsPenalty} from '../public/rare-loot.js';
 import {playerMaxHealth} from '../public/food-buffs.js';
 import {chooseVaultMechanism} from '../public/vault-mechanisms.js';
@@ -74,7 +75,7 @@ function result(state,event,now,random=Math.random){
   if(event.weakSpot){summary.weakSpotHits++;summary.staggerBonus+=event.staggerBonus??0;}
   summary.prevented+=(event.weakened??0)+(event.warded??0)+(event.absorbed??0);
   if(event.encounter)event.encounter.summary=summary;
-  if((event.addKill||event.outcome==='victory')&&state.combatGear.equippedWeapon==='vampiricSword'&&event.health>0){const heal=Math.min(4,playerMaxHealth(state,now)-event.health);event.health+=heal;event.healed=(event.healed??0)+heal;event.lifeSteal=heal;}
+  if((event.addKill||event.outcome==='victory')&&state.combatGear.equippedWeapon==='vampiricSword'&&event.health>0){const heal=Math.min(4,playerMaxHealth(state,now)-event.health);event.health+=heal;event.healed=(event.healed??0)+heal;event.lifeSteal=heal;if(heal)recordEquipmentEffect(state,'vampire',heal,now,'vampire:'+state.combatId+':'+now+':'+(event.targetId??'leader'));}
   const rewards={};
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=queueBossAdds(event.encounter,now);event.encounter=state.hunting.encounter;state.health=event.health;
@@ -90,7 +91,7 @@ function result(state,event,now,random=Math.random){
     if(event.stone)rewards.stones={[event.stone]:1};
     if(state.depthsRun){
       const cleared=clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
-      if(cleared&&state.combatId){const rare=awardRareHunt(state,enemy.id,random);if(rare)event.rareDrop=rewards.rareEquipment=rare.id;const drop=awardGuardianRelic(state,enemy.id,random);if(drop){event.clothingDrop=rewards.clothing=drop.item;event.guaranteedClothing=drop.guaranteed;}}
+      if(cleared&&state.combatId){const rare=awardRareHunt(state,enemy.id,random,now);if(rare)event.rareDrop=rewards.rareEquipment=rare.id;const drop=awardGuardianRelic(state,enemy.id,random);if(drop){event.clothingDrop=rewards.clothing=drop.item;event.guaranteedClothing=drop.guaranteed;}}
       if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){
         rewards.xp.leadershipXp=awardLeadership(state,'vaultClear');
         const drop=awardDungeonWeapon(state,now,random);
@@ -101,7 +102,7 @@ function result(state,event,now,random=Math.random){
       if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;
     }
     else{
-      if(enemy.id==='crystalGuardian'&&state.combatId){const rare=awardRareHunt(state,enemy.id,random);if(rare)event.rareDrop=rewards.rareEquipment=rare.id;}
+      if(enemy.id==='crystalGuardian'&&state.combatId){const rare=awardRareHunt(state,enemy.id,random,now);if(rare)event.rareDrop=rewards.rareEquipment=rare.id;}
       if(enemy.id==='moonbackStag'){
         state.hunting.moonbackSighting=encounter.moonbackId;
         if(!state.wardrobe.owned.includes(veilCloakId)&&random()<moonbackRules.cloakChance){

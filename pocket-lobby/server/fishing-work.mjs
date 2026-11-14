@@ -1,3 +1,5 @@
+import {recordEquipmentEffect} from '../public/equipment-effects.js';
+import {rollFishingReward} from '../public/fishing.js';
 import {anglerQualityBonus} from '../public/rare-loot.js';
 import {mealPatience} from '../public/food-buffs.js';
 import {autoTilePath} from './auto-motion.mjs';
@@ -60,7 +62,8 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    if(now<work.cast.landAt+900)return;
    if(motion?.room!==room||!sameTile(motion,work.spot)){delete work.cast;return;}
    const cast=work.cast;
-   const before=state.stats.patienceXp,fish=rollFishingCatch(skillLevel(before)+mealPatience(state,now),rod,random,state.stats.luckXp,false,anglerQualityBonus(state));
+   const before=state.stats.patienceXp,reward=rollFishingReward(skillLevel(before)+mealPatience(state,now),rod,random,state.stats.luckXp,false,anglerQualityBonus(state));
+   const {fish,cloakBoosted}=reward;
    if((state.fishStock[fish]??0)>=1000000){
      if(plan.kind==='queue')finishRoutineQueue(state,plan,'inventory-full',now);
      else finishPlan(state,'inventory-full',now);
@@ -71,6 +74,7 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    const xp=Math.min(10,MAX_SKILL_XP-before);state.stats.patienceXp+=xp;
    state.history.fishCaught=true;recordQuest(state.quest,'fish');awardFamiliarBond(state,'otter',1);
    state.fishingReceipt={room,castId:cast.id,fish,rod,before,xp,bonus:0,at:now,cast,spot:work.spot};
+   if(cloakBoosted)recordEquipmentEffect(state,'angler',1,now,'angler:'+cast.id,room);
    delete work.cast;
    work.readyAt=now+1100;
    if(plan.kind==='queue')completeRoutineFish(state,fish,xp,now);

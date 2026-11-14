@@ -14,7 +14,7 @@ export function initializeVaultCoop(api){
   if(result.state)api.apply(result.state);if(result.raid){const old=raid;raid=result.raid;if(old?.hp>raid.hp)popups.push({at:performance.now(),text:'−'+(old.hp-raid.hp),x:raid.origin?.x??6,y:raid.origin?.y??5});
    if(raid.lastAttack&&raid.lastAttack.at!==old?.lastAttack?.at)attackFx={...raid.lastAttack,time:performance.now(),attackShape:raid.lastAttack.shape,attackTile:raid.lastAttack.target};
    if(old?.phase!==raid.phase)attackFx=null;if(raid.status==='victory'&&old?.status!=='victory')api.victory();
-   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500});}
+   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500});}
   }
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
   render();
@@ -61,10 +61,10 @@ export function initializeVaultCoop(api){
   await send('tick');
  },250);
  function draw({ctx,point,surface,now,time,reduced}){
-  if(!active()||raid?.status!=='battle')return;const e=coopEncounter(raid);drawArenaTelegraph({ctx,point,surface,encounter:e,move:coopMove(raid),now,reduced});
+  if(!active()||!['battle','victory'].includes(raid?.status))return;const e=coopEncounter(raid);if(raid.status==='battle')drawArenaTelegraph({ctx,point,surface,encounter:e,move:coopMove(raid),now,reduced});
   for(const add of raid.adds)if(add.landsAt-now<=1400&&add.landsAt>=now)surface(add.target.x+.05,add.target.y+.05,.9,.9,1,'#bd93e955','#cfb1f1');
   if(attackFx&&time-attackFx.time<350){const age=Math.max(0,time-attackFx.time),center=attackFx.center==='target'?attackFx.target:attackFx.origin,[x,y]=point(center.x+.5,center.y+.5,1);ctx.save();ctx.globalAlpha=1-age/350;ctx.strokeStyle=raid.phase===3?'#d5b3ff':'#ffe0a4';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(x,y,12+age/5,6+age/10,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
-  popups=popups.filter(p=>time-p.at<1100);for(const p of popups){const [x,y]=point(p.x+.5,p.y+.5,85+(time-p.at)/35);ctx.save();ctx.globalAlpha=Math.max(0,1-(time-p.at)/1100);ctx.fillStyle='#ffddaa';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(p.text,x,y);ctx.restore();}
+  popups=popups.filter(p=>time-p.at<1100);for(const p of popups){const [x,y]=point(p.x+.5,p.y+.5,85+(time-p.at)/35);ctx.save();ctx.globalAlpha=Math.max(0,1-(time-p.at)/1100);if(p.perk){const [fx,fy]=point(p.x+.5,p.y+.5,20);ctx.strokeStyle=p.perk==='luck'?'#ffe49a':'#f48ca9';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(fx,fy,reduced?15:8+(time-p.at)/40,reduced?8:4+(time-p.at)/80,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=p.perk==='vampire'?'#ff9db5':'#ffddaa';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(p.text,x,y);ctx.restore();}
  }
  return {active,render,draw,view:()=>raid,lastAttack:()=>attackFx,targetPosition:()=>raid?.adds.find(a=>a.id===selected)??raid?.origin,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:id=>{selected=id;lastKey='';render();},power:slot=>send('power',slot),dispose:()=>clearInterval(timer)};
 }

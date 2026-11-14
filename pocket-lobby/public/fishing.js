@@ -55,14 +55,17 @@ export function pondShoalAt(now){
   return {id,name:bank.name,spots:bank.tiles.map(y=>({x:5,y})),water:{x:7.4,y:bank.y+.45},until:(id+1)*shoalStayMs};
 }
 
-function rollFishingCatch(level,rodId,random=Math.random,luckXp=0,shoalReeled=false,equipment={}){
+export function rollFishingReward(level,rodId,random=Math.random,luckXp=0,shoalReeled=false,equipment={}){
   const speciesRoll=random()*100,qualityRoll=random()*100;
   const species=speciesRoll<65?'silverfin':speciesRoll<95?'perch':'trout';
   const chances=fishingChances(level,rodId,luckXp,equipment);
   const fine=chances.fine+(shoalReeled?shoalFineBonus:0);
   const quality=qualityRoll<chances.rare?'rare':qualityRoll<chances.rare+fine?'fine':'common';
-  return quality==='common'?species:species+'_'+quality;
+  const base=fishingChances(level,rodId,luckXp),plain=qualityRoll<base.rare?'rare':qualityRoll<base.rare+base.fine+(shoalReeled?shoalFineBonus:0)?'fine':'common';
+  return {fish:quality==='common'?species:species+'_'+quality,cloakBoosted:quality!==plain};
 }
+
+function rollFishingCatch(...args){return rollFishingReward(...args).fish;}
 
 function normalizeFishingGear(input){
   if(input===undefined)return {ownedRods:['reed'],equippedRod:'reed',bait:10};
