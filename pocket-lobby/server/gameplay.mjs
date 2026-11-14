@@ -14,6 +14,7 @@ import {familiarAction} from './familiars.mjs';
 import {familiarFishingTime,familiarBond} from '../public/familiars.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {watchAction} from './watch-expedition.mjs';
+import {keeperFlags,keeperSites} from '../public/lantern-keepers.js';
 import {watchFlags,willowbankFlags,willowbankLatch,willowbankNook} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
@@ -99,6 +100,16 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
   if(action==='campRest'){startTrailCampRest(state,camp,now);return;}
   if(action==='campStand'){stopTrailCampRest(state);return;}
   if(cellarAction(state,action))return;
+  if(action==='keeperClue'){
+    if(!Object.hasOwn(keeperSites,body.id))throw new Error('Choose a Lantern Keeper clue.');
+    const site=keeperSites[body.id],p=state.position;
+    location(state,[site.room]);
+    if(!p||!validRoomTile(site.room,p.x,p.y,roomBoxes(site.room),state.adventure)
+      ||Math.abs(p.x-site.x)+Math.abs(p.y-site.y)!==1)throw new Error('Travel beside the clue to examine it.');
+    if(body.id==='keeperMarker')state.adventure.keeperMarkerRead=true;
+    if(body.id==='keeperCrate'&&state.adventure.keeperMarkerRead)state.adventure.keeperRouteFound=true;
+    return;
+  }
   if(action==='willowbankExplore'){
     location(state,['willowbank']);
     const latch=body.site==='latch';
@@ -417,7 +428,7 @@ export function protectFishingState(previous,next){
   if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
   if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;
   next.familiars=previous.familiars;
-  next.adventure={...next.adventure};for(const key of [...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
+  next.adventure={...next.adventure};for(const key of [...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;

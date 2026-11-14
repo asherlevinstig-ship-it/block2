@@ -1,3 +1,4 @@
+import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
 import {waystationRoom} from '../public/waystation.js';
 import {readWaystation,useWaystation} from './waystation.mjs';
 import {readGift,sendGift} from './gifts.mjs';
@@ -206,8 +207,9 @@ export async function handlePlayerApi(request,env){
       delete legacy.loadouts;delete legacy.chestItems;delete legacy.chestPurposes;delete legacy.publicRequests;
       delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
+      if(legacy.location===overlookRoom){legacy.location=waystationRoom;legacy.position={x:10,y:3};}
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
-      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...watchFlags,...willowbankFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,equipmentEffects:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,equipmentEffects:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -425,6 +427,7 @@ export async function handlePlayerApi(request,env){
           return saved.results[0]?json(packet(saved.results[0])):json({error:'Another tab saved first. Reload your character.'},409);
         }
       case "/api/player/save":
+        if(body.state?.location===overlookRoom&&(!state.adventure.keeperRouteFound||![waystationRoom,overlookRoom].includes(state.location)))throw new Error('Choose the hidden path from the Waystation after reading both clues.');
         if(body.state?.location&&body.state.location!==state.location)requireActionPoint(state);
         if((state.location==='trail'&&body.state?.location==='pond'||state.location==='pond'&&body.state?.location==='trail')&&!(await readPublicRequests(env.TOWER_DB)).open)throw new Error('Choose the Glass Creek route until Silverfin Bridge is complete.');
         if(body.state?.location==='millCellar'&&(state.location!=='millCellar'||!state.adventure.millCellarFound))throw new Error('Choose the loose bricks at the watermill to enter the cellar.');

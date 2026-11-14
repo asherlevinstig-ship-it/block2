@@ -2806,6 +2806,7 @@ function dimensions(item) {
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
 function object(item,highlight=false,time=0,weather=null) {
+  if(Object.hasOwn(keeperSites,item.type)){drawKeeperClue(item,worldDrawing);return;}
   if(['waystationFire','waystationSupplies','waystationAwning','waystationSign'].includes(item.type)){
     drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced:reducedMotion.matches,weather},waystationBoard);
     return;
@@ -3411,7 +3412,7 @@ const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
   Willowmere:[...willowmereRooms,'millCellar'],
   Beaconwatch:watchRooms,
-  Northreach:[waystationRoom],
+  Northreach:[waystationRoom,overlookRoom],
   Moonwood:['trail',wildlifeRoom,'logging','quarry','crystaldeep','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null,trackedMoonTrail=null,roomMoonTrails=[],trailListKey='';
@@ -3584,6 +3585,11 @@ function updateWorldLabels(){
   }
   if(currentRoom==='millbrook'){const crack=roomFurniture().find(item=>item.type==='cellarCrack');if(crack&&(adventure.millCellarFound||Math.hypot(player.x-crack.x,player.y-crack.y)<3))add(adventure.millCellarFound?'Mill cellar':'Loose bricks',...point(crack.x+.5,crack.y+.5,35),'npc',()=>use(crack));}
   if(currentRoom==='millCellar')for(const item of roomFurniture()){const label={cellarStairs:'Back to Millbrook',cellarChest:adventure.millCellarClaimed?'Opened chest':adventure.millCellarCleared?'Millkeeper’s chest':'Sealed chest',cellarJournal:'Millkeeper’s journal'}[item.type];if(label)add(label,...point(item.x+.5,item.y+.5,(moonwood.heights[item.type]??20)+9),'npc',()=>use(item));}
+  for(const [type,clue] of Object.entries(keeperSites)){
+    if(clue.room!==currentRoom)continue;
+    const item=roomFurniture().find(item=>item.type===type);
+    if(item)add(clue.label,...point(clue.x+.5,clue.y+.5,38),'npc',()=>use(item));
+  }
   if(currentRoom===waystationRoom){
     const sign=roomFurniture().find(item=>item.type==='waystationSign');
     add('Restoration sign',...point(sign.x+.5,sign.y+.5,42),'npc',()=>use(sign));
@@ -4036,6 +4042,31 @@ function updateLoungeDressGuide(){
 $('loungeDressWardrobe').onclick=openLoungeWardrobe;
 $('loungeWardrobeContinue').onclick=continueToLounge;
 $('loungeDressGuideAction').onclick=()=>isSmartlyDressed(wardrobe)?continueToLounge():openLoungeWardrobe();
+async function examineKeeperClue(id){
+  const clue=keeperSites[id];
+  if(!clue||clue.room!==currentRoom||unavailable())return;
+  const alreadyFound=adventure.keeperRouteFound;
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('keeperClue',{id});
+    else{
+      if(id==='keeperMarker')adventure.keeperMarkerRead=true;
+      if(id==='keeperCrate'&&adventure.keeperMarkerRead)adventure.keeperRouteFound=true;
+      savePlayerState();
+    }
+    worldLabelKey='';
+    updateExplorationNav();
+    $('keeperClueTitle').textContent=clue.label;
+    $('keeperClueStory').textContent=keeperClueText(id,adventure);
+    const destination=id==='keeperMarker'?'waystation':id==='keeperCrate'?(adventure.keeperRouteFound?overlookRoom:'willowbank'):null;
+    const follow=$('keeperClueFollow');
+    follow.hidden=!destination;
+    follow.textContent=destination?'Follow route to '+explorationName(destination):'';
+    follow.onclick=()=>{$('keeperClueDialog').close();setExplorationDestination(destination);navigateHud(destination);};
+    $('keeperClueDialog').showModal();
+    if(!alreadyFound&&adventure.keeperRouteFound)note('Hidden path discovered · Keepers’ Overlook');
+  }catch(error){note(error.message);}
+}
+$('keeperClueClose').onclick=()=>$('keeperClueDialog').close();
 let waystationBoard=null,waystationSite='fire',waystationBusy=false;
 function receiveWaystation(board){
   if(!board||board.revision<(waystationBoard?.revision??0))return;
@@ -4484,11 +4515,11 @@ function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
 function updateExplorationNav(){
   bounds=null;
   const next=nextExplorationDoor();
-  const outside=currentRoom===waystationRoom||explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='millCellar'||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
+  const outside=explorationRegions.Northreach.includes(currentRoom)||explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='millCellar'||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
   const nav=$('explorationNav');
   nav.hidden=!!depthsRun||(!outside&&!trackedDestination);
   if(nav.hidden)return;
-  $('explorationRegion').textContent=currentRoom===waystationRoom?'NORTHREACH':watchRooms.includes(currentRoom)?'BEACONWATCH':(currentRoom==='millCellar'||willowmereRooms.includes(currentRoom))?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
+  $('explorationRegion').textContent=explorationRegions.Northreach.includes(currentRoom)?'NORTHREACH':watchRooms.includes(currentRoom)?'BEACONWATCH':(currentRoom==='millCellar'||willowmereRooms.includes(currentRoom))?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
   let guidance=currentRoom===waystationRoom?'Choose a project to help restore the outpost.':watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':currentRoom==='starfall'&&adventure.grottoCache?'Treasure recovered. Follow the root tunnel back to Thornwood.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
   if(currentRoom===wildlifeRoom)guidance='Click an animal or choose a habitat to start taming.';
@@ -4882,6 +4913,10 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(Object.hasOwn(keeperSites,item.type)){
+    examineKeeperClue(item.type);
+    return;
+  }
   if(item.type==='waystationSign'){
     $('waystationCreditsDialog').showModal();renderWaystationCredits();refreshWaystation();
     return;
@@ -5568,7 +5603,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={[waystationRoom]:[285,1215],crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={[overlookRoom]:[445,1280],[waystationRoom]:[285,1215],crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));

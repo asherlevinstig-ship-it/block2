@@ -1,3 +1,4 @@
+import {overlookRoom,overlookArea} from './lantern-keepers.js';
 import {waystationRoom,waystationArea} from './waystation.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchRooms,watchAreas,watchWater,watchDimensions,willowmereRooms,willowmereAreas,willowbankView,willowbankBarrier,riverDimensions,riverWater,riverBridge} from './region-catalog.js';
@@ -10,8 +11,8 @@ import {cellarFloor} from './mill-cellar.js';
 export * from './mining.js';
 export * from './forge.js';
 export {factionRegistrar,factionHall,factionHallLayout,furnitureCatalog,catalogFurnitureSize};
-export const socialRooms={[waystationRoom]:[12,10],crystaldeep:[12,10],quarry:[12,10],[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,id==='willowbank'?[willowbankView.cols,willowbankView.rows]:[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
-const layouts={[waystationRoom]:waystationArea.authored,[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
+export const socialRooms={[overlookRoom]:[12,10],[waystationRoom]:[12,10],crystaldeep:[12,10],quarry:[12,10],[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,id==='willowbank'?[willowbankView.cols,willowbankView.rows]:[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
+const layouts={[overlookRoom]:overlookArea.authored,[waystationRoom]:waystationArea.authored,[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
   tailor:[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]],
   furnishings:[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1],['silverfinTank',2,7],['moonCrystal',7,3]],
   hub:[['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],['plant',1,1],['plant',16,1],['sofa',2,10],['bench',2,12],['sofa',13,8,2]],

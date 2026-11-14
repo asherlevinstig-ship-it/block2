@@ -1,3 +1,4 @@
+import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
 import {waystationRoom} from '../public/waystation.js';
 import {recordEquipmentEffect,normalizeEquipmentEffects} from '../public/equipment-effects.js';
 import {rollFishingReward} from '../public/fishing.js';
@@ -66,7 +67,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["crystaldeep","quarry","millCellar",wildlifeRoom,waystationRoom,...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","bakery","factionHall","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
+const locations=new Set(["crystaldeep","quarry","millCellar",wildlifeRoom,overlookRoom,waystationRoom,...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","bakery","factionHall","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
 function normalizeFirstUpgrade(input){
   if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');
@@ -97,9 +98,10 @@ export function normalizeState(input={}){
   if(Object.keys(fishStock).some(id=>!fishProducts[id]))throw new Error("Unknown fish.");
   const a=input.adventure??{};
   const adventure={};
-  for(const id of [...watchFlags,...willowbankFlags,...cellarFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
+  for(const id of [...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
   if(input.location==='millCellar'&&!adventure.millCellarFound)throw new Error('Invalid undiscovered cellar location.');
-  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["millCellar",wildlifeRoom,waystationRoom,...watchRooms,...willowmereRooms,"crystaldeep","quarry","trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["millCellar",wildlifeRoom,overlookRoom,waystationRoom,...watchRooms,...willowmereRooms,"crystaldeep","quarry","trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
+  if(!adventure.keeperRouteFound)adventure.discovered=adventure.discovered.filter(id=>id!==overlookRoom);
   if(!adventure.millCellarFound)adventure.discovered=adventure.discovered.filter(id=>id!=='millCellar');
   adventure.millCellarCleared=adventure.millCellarFound&&adventure.millCellarCleared;
   adventure.millCellarClaimed=adventure.millCellarCleared&&adventure.millCellarClaimed;

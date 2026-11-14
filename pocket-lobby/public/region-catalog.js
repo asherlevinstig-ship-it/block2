@@ -1,6 +1,7 @@
 export * from './waystation-travelers.js';
 export * from './willowbank-wildlife.js';
 export * from './waystation.js';
+export * from './lantern-keepers.js';
 export * from './outdoor-weather.js';
 export {watchAreas,watchRooms,watchMapPositions,watchDimensions,watchFlags,watchGuidance,watchWater,watchInteractLabel} from './watch-expedition.js';
 export const willowbankView={width:680,height:425,cols:18,rows:16,originX:309,originY:100};
@@ -29,7 +30,7 @@ export const willowmereAreas={
    ['fishingPost',6,2],['fishingPost',6,5],['fishingPost',6,8],['riverBench',8,11],
    ['riverLantern',2,12],['riverLantern',10,12],['riverLantern',4,1],['riverLantern',10,2],
    ['riverFlowers',4,3],['riverFlowers',2,10],['riverFlowers',13,0],['riverFlowers',12,11],
-   ['riverRock',8,9],['riverRock',5,12],['riverRock',12,4],
+   ['riverRock',8,9],['keeperMarker',4,12],['riverRock',5,12],['riverRock',12,4],
    ['riverReeds',14,0],['riverReeds',14,8],['riverReeds',14,13],
    ['willowLatch',willowbankLatch.x,willowbankLatch.y],['willowNook',willowbankNook.x,willowbankNook.y]
   ]

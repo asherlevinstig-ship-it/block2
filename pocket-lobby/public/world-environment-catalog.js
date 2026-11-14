@@ -28,7 +28,7 @@ export const roomEnvironments={
  logging:{theme:'forest',position:.60,hue:-6},clearing:{theme:'forest',position:.70},wildlifeReserve:{theme:'forest',position:.65,hue:-12},
  grove:{theme:'forest',position:.76,hue:14},shrine:{theme:'forest',position:.65,hue:19},ruins:{theme:'forest',position:.86,hue:12},roots:{theme:'cavern',position:.52,hue:-18},thornwood:{theme:'forest',hue:18,brightness:.65},
  quarry:{theme:'quarry',position:.77},crystaldeep:{theme:'cavern',position:.74},
- ambermead:{theme:'watch',position:.52,hue:-10},beaconwatch:{theme:'watch',position:.82},waystation:{theme:'watch',position:.18,hue:-14},starfall:{theme:'watch',position:.70,hue:16},
+ ambermead:{theme:'watch',position:.52,hue:-10},beaconwatch:{theme:'watch',position:.82},keepersOverlook:{theme:'watch',position:.35,hue:4},waystation:{theme:'watch',position:.18,hue:-14},starfall:{theme:'watch',position:.70,hue:16},
  ...group(['millCellar','depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'],'dungeon'),
  millCellar:{theme:'dungeon',position:.55,hue:-12},depthsGate:{theme:'dungeon',position:.75,hue:-7},
  depthsGallery:{theme:'dungeon',position:.63,hue:-12},depthsCache:{theme:'dungeon',position:.85,hue:10},depthsTreasury:{theme:'dungeon',position:.78,hue:-18},

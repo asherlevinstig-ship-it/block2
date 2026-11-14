@@ -9,7 +9,7 @@ export const waystationArea={
  palette:['#425562','#5b6d73','#b6a189'],
  authored:[...Object.values(waystationSites).map(({type,x,y})=>[type,x,y]),
  ['riverCypress',2,1],['riverCypress',9,1],['riverCypress',10,8],['riverRock',2,3],['riverRock',7,1],
- ['riverCrates',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8],['waystationSign',2,5],['waystationAwning',8,7]]
+ ['keeperCrate',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8],['waystationSign',2,5],['waystationAwning',8,7]]
 };
 
 export function drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced,weather},board){
