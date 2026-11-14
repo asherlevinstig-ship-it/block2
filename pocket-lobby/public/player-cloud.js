@@ -41,7 +41,7 @@
     });
     const data=await response.json();combatClock.sample(data.serverTime,sentAt);
     if(data.state?.autoDisconnected&&path!=='reconnect'&&!path.startsWith('learning/'))suspendForPoints(data);
-    if(response.status===409&&robberyRetry<2&&(data.lastOperation?.startsWith('robbed:')||data.lastOperation?.startsWith('supper:'))&&data.characterKey===packet?.characterKey){packet=data;if(data.lastOperation.startsWith('supper:'))window.towerApplySupperInventory?.(data.state);else window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
+    if(response.status===409&&robberyRetry<2&&(data.lastOperation?.startsWith('robbed:')||data.lastOperation?.startsWith('supper:')||data.lastOperation?.startsWith('gifted:'))&&data.characterKey===packet?.characterKey){packet=data;if(!data.lastOperation.startsWith('robbed:'))window.towerApplySupperInventory?.(data.state);else window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -101,6 +101,24 @@
     if(sending||presenceBusy||gameplayBusy||acting){if(attempt<20)setTimeout(()=>refreshRobbery(attempt+1),300);return;}
     try{const data=await request('state');if(data.characterKey===packet.characterKey&&data.revision>=packet.revision){packet=data;window.towerApplyRobberyState?.(data.state);}}catch{}
   }
+  async function refreshGift(attempt=0){
+    if(pausedForPoints||conflicted)return;
+    if(sending||pending||presenceBusy||gameplayBusy||acting){
+      if(attempt<12)setTimeout(()=>refreshGift(attempt+1),300);
+      return;
+    }
+    const before=packet;
+    try{
+      const next=await request('state');
+      if(packet!==before||sending||gameplayBusy||acting){
+        if(attempt<12)setTimeout(()=>refreshGift(attempt+1),300);
+        return;
+      }
+      if(next.characterKey===before.characterKey&&next.revision>=before.revision&&next.lastOperation?.startsWith('gifted:')){
+        packet=next;window.towerApplySupperInventory?.(next.state);
+      }
+    }catch{}
+  }
   async function flush(){
     if(pausedForPoints)throw Object.assign(new Error('You are disconnected at home. Choose Return to game to reconnect.'),{status:403});
     await drain();
@@ -129,6 +147,7 @@
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
           throw error;
         }
+        if(path==='gift'&&error.status===undefined&&attempt<2)continue;
         if(path==='factions'&&body.action==='donate'&&error.status===undefined&&attempt<2)continue;
         if(path==='testing/reset'){if(error.status===undefined&&attempt<2)continue;conflict('Reload to confirm whether your character reset.');throw error;}
         if(path==='commissions/carpenter'){
@@ -530,7 +549,7 @@
           packet=body?await request('silverfin-supper',{...body,revision:latest.revision,operation:crypto.randomUUID()}):latest;
           return packet;
         }finally{gameplayBusy=false;}
-      },readSilverfinWatch:async()=>(await request('silverfin-watch')).watch,readPublicRequests:()=>request("public-requests"),deliverPublicRequest:async id=>{await flush();return action("public-requests",{id});},readMillRaid:()=>request('mill-raid'),vaultCoop:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('vault-coop',body);}finally{gameplayBusy=false;}},millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
+      },readSilverfinWatch:async()=>(await request('silverfin-watch')).watch,gift:async body=>{await flush();if(gameplayBusy)throw new Error('Wait for your current action.');gameplayBusy=true;try{return await action('gift',body);}finally{gameplayBusy=false;}},refreshGift,readPublicRequests:()=>request("public-requests"),deliverPublicRequest:async id=>{await flush();return action("public-requests",{id});},readMillRaid:()=>request('mill-raid'),vaultCoop:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('vault-coop',body);}finally{gameplayBusy=false;}},millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;

@@ -115,6 +115,12 @@ export class SharedRoom{
   }
   fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{
     const path=new URL(request.url).pathname;
+    if(path==='/gift-notice'&&request.method==='POST'){
+      const {recipient,receipt}=await request.json();
+      for(const [ws,peer] of this.sessions)if(peer.playerId===recipient)this.send(ws,{type:'gift',receipt});
+      return json({ok:true});
+    }
+    if(path==='/gift-target'&&request.method==='POST')return this.robberyTarget(await request.json(),true);
     if(path==='/robbery-target'&&request.method==='POST')return this.robberyTarget(await request.json());
     if(path==='/trail-camp'&&request.method==='POST'){
       const camp=await request.json();
@@ -124,10 +130,11 @@ export class SharedRoom{
     if(path==='/raid'&&request.method==='POST'){const {raid,playerId,receipt,cast}=await request.json();const peer=[...this.sessions.values()].find(m=>m.playerId===playerId);const cue=peer?{player:peer.id,hit:receipt?.hit??0,cast}:null;for(const ws of this.sessions.keys())this.send(ws,{type:'millRaid',raid,cue});return json({ok:true});}
     return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);
   });}
-  robberyTarget({playerId,target,room}){
+  robberyTarget({playerId,target,room},gift=false){
     const now=Date.now(),peers=new Map([...this.sessions.values()].filter(p=>!p.serverAuto).map(p=>[p.playerId,p]));
-    for(const [id,p] of this.autoPeers)if(p.until>now)peers.set(id,p);
+    if(!gift)for(const [id,p] of this.autoPeers)if(p.until>now)peers.set(id,p);
     const actor=peers.get(playerId),other=[...peers.values()].find(p=>p.id===target&&p.playerId!==playerId);
+    if(gift&&(actor?.auto||other?.auto))return json({error:'Choose a player in Play mode.'},400);
     if(!actor||!other||actor.room!==room||other.room!==room||room==='home'||room==='factionHall'||other.veilUntil>now||actor.veilUntil>now)return json({error:'Choose a visible player in the same public area.'},400);
     const a=actor.walk?autoWalkPosition(actor.walk,now):actor,b=other.walk?autoWalkPosition(other.walk,now):other;
     const from={x:Math.round(a.x),y:Math.round(a.y)},to={x:Math.round(b.x),y:Math.round(b.y)};

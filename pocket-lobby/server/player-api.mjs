@@ -1,3 +1,4 @@
+import {readGift,sendGift} from './gifts.mjs';
 import {contributeSilverfinSupper,giftSilverfinSupper,readSilverfinSupper} from './silverfin-supper.mjs';
 import {readSilverfinWatch,silverfinContribution} from './silverfin-watch.mjs';
 import {readPublicRequests,deliverPublicRequest} from './public-requests.mjs';
@@ -278,6 +279,14 @@ export async function handlePlayerApi(request,env){
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
     const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
+    if(path==='/api/player/gift'){
+      const previous=await readGift(env.TOWER_DB,id,body.operation);
+      if(previous)return json({...packet(row),gift:previous});
+      if(row.revision!==body.revision)return json({error:'Your character changed. Check your bag and try again.',...packet(row)},409);
+      const result=await sendGift(env,row,body);
+      if(result.stub)await result.stub.fetch(new Request('https://room.internal/gift-notice',{method:'POST',body:JSON.stringify({recipient:result.recipient,receipt:result.receipt})})).catch(()=>{});
+      return json({...packet(result.updated),gift:result.receipt});
+    }
     if(row.last_request===body.operation){
       if(path==='/api/player/public-requests')return json({...packet(row),board:await readPublicRequests(env.TOWER_DB)});
       if(path==='/api/player/robbery')return json({...packet(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
