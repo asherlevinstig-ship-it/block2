@@ -9,6 +9,7 @@ export function saveAutoSettings(state,input,now){
   if(state.plan&&state.plan.source!=='rules'||state.report&&state.report.source!=='rules')throw Object.assign(new Error('Read your job-board report and finish that shift before saving Auto Mode.'),{status:409});
   if(state.hunting?.encounter&&state.plan?.source!=='rules')throw Object.assign(new Error('Choose Auto settings after finishing your manual fight.'),{status:409});
   const rules=normalizeCharacterRules(input);
+  if(input?.useAbilities===undefined&&state.characterRules?.useAbilities===true)rules.useAbilities=true;
   if(rules.activity==='exploring'&&!state.quest.accepted)throw new Error('Travel to the Tower Warden before exploring on Auto.');
   if(rules.strategy==='routine'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked(state))throw new Error('Choose boar hunts first. Defeat a Stoneback Beetle yourself in the Ruins before scheduling idle beetle hunts.');
   if(input?.combat===undefined)rules.combat=normalizeCharacterRules(state.pendingCharacterRules??state.characterRules).combat;

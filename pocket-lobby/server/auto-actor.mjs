@@ -44,6 +44,7 @@ export class AutoActor{
   const motion=this.actor.motion;
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
   if(peer){
+   peer.stoneguardUntil=state.styleAbilities?.stoneguard?.until??0;
    peer.mining=motion.moving?null:miningPose(state);
    peer.walk=this.actor.walk??null;
    peer.fishingSpot=!!state.plan?.fishingWork?.spot&&!state.plan?.foodTrip&&!state.plan?.mealStockTrip;

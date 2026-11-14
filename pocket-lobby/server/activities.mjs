@@ -45,6 +45,16 @@ function idle(state){
   if(state.plan||state.report||state.fishingCast||state.hunting.encounter||state.hunting.recoveryUntil||state.health<=0)throw new Error('Invalid activity while working, fishing, fighting or recovering.');
 }
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
+export function applyAmbushOpening(state,enemy,now,random=Math.random){
+  state.hunting.encounter.nextPlayerAt=now;
+  const event=huntingTurn(state.hunting.encounter,state.health,state.stats,'attack',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments,1.5+(abilityMastery(state,'ambush').stage-1)*.15);
+  const abilities=normalizeStyleAbilities(state.styleAbilities);
+  abilities.readyAt.ambush=now+styleAbilities.ambush.cooldown;state.styleAbilities=abilities;
+  awardAbilityUse(state,'ambush');
+  event.power='Ambush';event.powerColor='#ffd48b';event.powerForm='sword';event.effect='strikes for '+event.damage+' damage';
+  event.automatic=state.plan?.source==='rules';
+  state.combatReceipt={id:crypto.randomUUID(),events:[result(state,event,now,random)]};
+}
 export function startCombatEncounter(state,enemy,now){
   delete state.timberCut;delete state.miningCut;
   if(state.outfitMagic)state.outfitMagic.veilUntil=0;
@@ -62,7 +72,7 @@ export function startCombatEncounter(state,enemy,now){
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt||state.plan?.miningWork)state.hunting.encounter.tacticsAt=now;
 }
-const combatCostsPoint=event=>event.action==='attack'&&!event.outOfRange||['essence','outfitPower','familiar'].includes(event.action)||event.action==='flee'&&!!event.power;
+const combatCostsPoint=event=>event.action==='attack'&&!event.outOfRange||['essence','outfitPower','familiar','styleAbility'].includes(event.action)||event.action==='flee'&&!!event.power;
 function result(state,event,now,random=Math.random){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
   const room=state.location,heldBefore=state.depthsRun?depthsSpoils(state.depthsRun):null;
@@ -175,7 +185,13 @@ export function advanceServerCombat(state,now,random=Math.random){
     state.health=Math.min(state.health,playerMaxHealth(state,due));
     let event;
     if(automatic){
-      if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery,combatStamina(encounter,state.stats,due,state.combatGear.moonwellCharmEquipped));
+      if(tactic.action==='stoneguard'){
+        const abilities=normalizeStyleAbilities(state.styleAbilities),reduction=30+(abilityMastery(state,'stoneguard').stage-1)*10;
+        abilities.stoneguard={until:due+5000,reduction,credited:false};abilities.readyAt.stoneguard=due+60000;state.styleAbilities=abilities;
+        event={action:'styleAbility',outcome:'fighting',health:state.health,damage:0,taken:0,power:'Stoneguard',effect:'raises protective stone plates',powerColor:'#ead39f',powerForm:'shield',
+          encounter:{...encounter,stoneguardUntil:due+5000,stoneguardReduction:reduction}};
+      }
+      else if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery,combatStamina(encounter,state.stats,due,state.combatGear.moonwellCharmEquipped));
       else if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
       else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
       if(event){event.automatic=true;if(tactic.action==='move'&&event.encounter?.brainVersion===2)event.encounter.brainAutoStepAt=due+(event.encounter.buildRelics?.includes('guardianMantle')?1125:900);event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
@@ -269,15 +285,7 @@ export function activityAction(state,action,body,now,random){
     }
     startCombatEncounter(state,enemy,now);
     if(sighting&&enemy.id==='moonbackStag')Object.assign(state.hunting.encounter,{moonbackRoom:sighting.room,moonbackId:sighting.id});
-    if(body.ambush===true){
-      state.hunting.encounter.nextPlayerAt=now;
-      const event=huntingTurn(state.hunting.encounter,state.health,state.stats,'attack',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments,1.5+(abilityMastery(state,'ambush').stage-1)*.15);
-      const abilities=normalizeStyleAbilities(state.styleAbilities);
-      abilities.readyAt.ambush=now+styleAbilities.ambush.cooldown;state.styleAbilities=abilities;
-      awardAbilityUse(state,'ambush');
-      event.power='Ambush';event.powerColor='#ffd48b';event.powerForm='sword';event.effect='strikes for '+event.damage+' damage';
-      state.combatReceipt={id:crypto.randomUUID(),events:[result(state,event,now,random)]};
-    }
+    if(body.ambush===true)applyAmbushOpening(state,enemy,now,random);
     if(body.standGround===true&&index>=0)state.hunting.encounter.autoRetreatDisabled=true;
     const firstTactic=index>=0?nextCombatTactic(state):null;
     if(firstTactic?.action==='flee'){

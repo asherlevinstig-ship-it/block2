@@ -36,6 +36,7 @@ export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');
   if(input.simpleMode!==undefined&&!Object.hasOwn(simpleAutoModes,input.simpleMode))throw new Error('Choose a valid simple Auto activity.');
   if(input.simpleRisk!==undefined&&!Object.hasOwn(simpleAutoRisks,input.simpleRisk))throw new Error('Choose a valid Auto risk level.');
+  if(input.useAbilities!==undefined&&typeof input.useAbilities!=='boolean')throw new Error('Choose whether Auto uses learned abilities.');
   const {enabled=false,activity='rest',keepBait=5,timberTarget=100}=input;
   if(typeof enabled!=='boolean'||!['rest','fishing','woodcutting','exploring'].includes(activity)||!Number.isInteger(keepBait)||keepBait<0||keepBait>1000||!Number.isInteger(timberTarget)||timberTarget<1||timberTarget>1000000)throw new Error('Invalid character rules. Choose 0–1,000 bait to keep and a timber target from 1 to 1,000,000.');
   const strategy=input.strategy??'routine';if(!['routine','earnGold','gambling'].includes(strategy))throw new Error('Choose a valid Auto goal.');
@@ -51,7 +52,7 @@ export function normalizeCharacterRules(input={}){
   if(!Object.hasOwn(combatStyles,style)||typeof dodge!=='boolean'||typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
   if(strategy==='routine'&&queue?.enabled&&queue.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
-  return {...(input.simpleMode?{simpleMode:input.simpleMode,simpleRisk:input.simpleRisk??'safe'}:{}),...(input.simpleMode==='mining'?{mining:normalizeAutoMining(input.mining)}:{}),...(input.simpleMode==='woodcutting'?{timberMarket:normalizeTimberMarket(input.timberMarket)}:{}),enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
+  return {...(input.useAbilities!==undefined?{useAbilities:input.useAbilities}:{}),...(input.simpleMode?{simpleMode:input.simpleMode,simpleRisk:input.simpleRisk??'safe'}:{}),...(input.simpleMode==='mining'?{mining:normalizeAutoMining(input.mining)}:{}),...(input.simpleMode==='woodcutting'?{timberMarket:normalizeTimberMarket(input.timberMarket)}:{}),enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
 }
 export function describeCharacterRules(input){
   const r=normalizeCharacterRules(input);

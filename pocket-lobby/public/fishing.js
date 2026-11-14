@@ -87,7 +87,7 @@ export function sharedFishingPose(state,now=Date.now()){
  const cast=state.plan?.fishingWork?.cast??state.fishingCast;
  if(!cast||now>=cast.landAt+1100)return null;
  const {id,started,castEnds,biteAt,landAt,water}=cast;
- return {id,started,castEnds,biteAt,landAt,room:cast.room??state.location,spot:cast.spot??state.position,...(water?{water}:{})};
+ return {id,started,castEnds,biteAt,landAt,...(cast.patientCast?{patientCast:true}:{}),room:cast.room??state.location,spot:cast.spot??state.position,...(water?{water}:{})};
 }
 
 export function fishingView(pose,room,now,time){

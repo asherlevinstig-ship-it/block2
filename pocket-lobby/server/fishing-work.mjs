@@ -1,3 +1,4 @@
+import {autoPatientCast,finishAutoPatientCast} from './auto-abilities.mjs';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {rollFishingReward} from '../public/fishing.js';
 import {anglerQualityBonus} from '../public/rare-loot.js';
@@ -38,7 +39,8 @@ async function claimSpot(env,playerId,room,spots,usage){
 function castAt(state,rod,room,spot,at){
  const duration=exertionDuration(familiarFishingTime(state,60000*fishingCatalog.rods[rod].duration/4500),state.vitals);
  const biteAt=at+duration-2700;
- return {id:crypto.randomUUID(),room,rod,started:at,castEnds:at+450,biteAt,landAt:biteAt+1800,spot};
+ const patient=autoPatientCast(state,at);
+ return {id:crypto.randomUUID(),room,rod,started:at,castEnds:at+450,biteAt,landAt:biteAt+(patient?.window??1800),spot,...(patient?{patientCast:true}: {})};
 }
 
 function remainingCasts(state,plan){
@@ -71,9 +73,10 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    }
    state.fishStock[fish]=(state.fishStock[fish]??0)+1;
    state.fishingGear.bait--;useHunger(state);
-   const xp=Math.min(10,MAX_SKILL_XP-before);state.stats.patienceXp+=xp;
+   const bonus=finishAutoPatientCast(state,cast);
+   const xp=Math.min(10+bonus,MAX_SKILL_XP-before);state.stats.patienceXp+=xp;
    state.history.fishCaught=true;recordQuest(state.quest,'fish');awardFamiliarBond(state,'otter',1);
-   state.fishingReceipt={room,castId:cast.id,fish,rod,before,xp,bonus:0,at:now,cast,spot:work.spot};
+   state.fishingReceipt={room,castId:cast.id,fish,rod,before,xp,bonus,at:now,cast,spot:work.spot};
    if(cloakBoosted)recordEquipmentEffect(state,'angler',1,now,'angler:'+cast.id,room);
    delete work.cast;
    work.readyAt=now+1100;
@@ -103,7 +106,7 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    const deadline=Math.min(plan.endAt,leaseUntil-5000,now+duration*count+1100*(count-1));
    if(deadline>now+duration+1100)work.batchUntil=deadline;
  }
- plan.currentLabel='Fishing at Silverfin Pond';
+ plan.currentLabel=work.cast.patientCast?'Patient Cast · Fishing at Silverfin Pond':'Fishing at Silverfin Pond';
 }
 
 export async function settleFishingBatch(env,id,state,now,motion,{observed=false,stopping=false,random=Math.random}={}){

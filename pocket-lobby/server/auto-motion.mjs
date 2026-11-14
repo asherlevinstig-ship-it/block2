@@ -33,7 +33,7 @@ export function planAutoWalk(motion,state,now,canCross=true){
  if(!path.length&&door&&canCross)return planAutoWalk({...motion,room:door.to,...door.arrival},state,now,false);
  if(!path.length&&!door){
   const tree=state.plan?.treeWork?.tree??oreDeposits.find(node=>node.id===state.plan?.miningWork?.node);
-  const facing=tree?timberFacing({cx:motion.x,cy:motion.y},tree):state.plan?.fishingWork?.spot?{direction:'right',back:false}:{};
+  const facing=tree?timberFacing({cx:motion.x,cy:motion.y},tree):state.plan?.fishingWork?.spot?{direction:'right',back:false}:state.plan?.ambushApproach?{direction:'left',back:true}:{};
   return {motion:{...motion,...facing,moving:false,blocked:false},walk:null};
  }
  const tiles=[{x:motion.x,y:motion.y},...path];

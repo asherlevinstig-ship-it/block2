@@ -1,3 +1,4 @@
+import {autoPatientCast,finishAutoPatientCast,autoAmbushReady,autoAmbushArrived,autoAmbushTime} from './auto-abilities.mjs';
 import {recordShopPurchase} from './shop-licences.mjs';
 import {awardTradingXp} from './activity-xp.mjs';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
@@ -24,7 +25,7 @@ import {autoStoreVault} from './vault.mjs';
 import {autoBankGold} from './banking.mjs';
 import {chooseGoldTask,safeHuntPreview} from './gold-planner.mjs';
 import {resolveQueueGoal} from './upgrade-goals.mjs';
-import {startCombatEncounter,advanceServerCombat} from './activities.mjs';
+import {startCombatEncounter,advanceServerCombat,applyAmbushOpening} from './activities.mjs';
 import {huntEnemies,canUseWeapon,queueHuntEnemies,huntRespawnAt,beetleHuntUnlocked} from '../public/hunting.js';
 import {normalizeRoutineQueue,queueActions} from '../public/character-rules.js';
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
@@ -269,14 +270,16 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         if(p.simpleMode==='battle'&&p.stepCount>0&&p.cursorAt+interval+huntTimeBuffer>p.endAt){
           nextStep(p,p.cursorAt,'Session ending · Selling loot');changed=true;continue;
         }
-        state.location=enemy.room;state.position={x:5,y:5};
+        state.location=enemy.room;
+        p.ambushApproach=autoAmbushReady(state,enemy,p.cursorAt);
+        state.position={x:p.ambushApproach?7:5,y:5};
       }else if(type==='explore'){const stop=explorationStops[(p.exploreIndex??0)%explorationStops.length];interval=EXPLORE_STOP_MS;state.location=stop.room;state.position={x:stop.x,y:stop.y};}
       else if(type==='rest'){interval=state.health<playerMaxHealth(state,p.cursorAt)?homeRestDuration(state,QUEUE_ACTION_MS,p.cursorAt):p.simpleMode?60000:QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
       else{state.location=type==='buyBread'?'bakery':type==='buyBait'?'store':'market';state.position=type==='buyBread'?{x:5,y:4}:{x:5,y:5};}
       p.nextAt=p.cursorAt+interval;changed=true;
     }
     if(p.nextAt>until)break;
-    const at=p.nextAt;
+    let at=p.nextAt;
     if(Object.hasOwn(cookingQueueRecipes,type)){
       const id=cookingQueueRecipes[type],ready=cookingPlan(state,id,{automatic:true});if(ready.reason)return finish(state,p,ready.reason,at);
       const result=prepareMeal(state,id,{automatic:true});p.cookingXp=(p.cookingXp??0)+result.xp;p.cookedMeals??={};p.cookedMeals[id]=(p.cookedMeals[id]??0)+1;p.stepCount++;autoStoreVault(state,p,at);
@@ -288,7 +291,16 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))return finish(state,p,'weapon-required',at);
       const enemy=queueHuntEnemies[type];
       if(enemy.id==='beetle'&&!beetleHuntUnlocked(state))return finish(state,p,'beetle-trial-required',at);
+      if(p.ambushApproach&&autoAmbushReady(state,enemy,at)&&!autoAmbushArrived(state)){
+        p.currentLabel='Walking behind '+enemy.name+' for Ambush';
+        return changed;
+      }
+      const ambush=p.ambushApproach&&autoAmbushReady(state,enemy,at);
+      if(ambush)at=autoAmbushTime(state,at);
+      if(at+huntTimeBuffer>p.endAt)return finish(state,p,'away-cap',at);
+      delete p.ambushApproach;
       p.activeHunt={id:null,startedAt:at,enemy:enemy.id};startCombatEncounter(state,enemy,at);p.activeHunt.id=state.combatId;p.hunts.started++;
+      if(ambush)applyAmbushOpening(state,enemy,at,random);
       p.hunts.byEnemy??={};const record=p.hunts.byEnemy[enemy.id]??={started:0,wins:0,escapes:0,defeats:0,xp:0,loot:0,duration:0};record.started++;
       p.currentLabel='Fighting '+enemy.name;changed=true;continue;
     }else if(type==='fishing'){
@@ -296,7 +308,9 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       const reward=rollFishingReward(skillLevel(state.stats.patienceXp)+mealPatience(state,at),state.fishingGear.equippedRod,random,state.stats.luckXp,false,anglerQualityBonus(state));const {fish,cloakBoosted}=reward;
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
       state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);if(cloakBoosted)recordEquipmentEffect(state,'angler',1,at,'angler:auto:'+(at),'pond');state.fishingGear.bait--;
-      const xp=Math.min(10,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;
+      const patient=autoPatientCast(state,at);
+      const bonus=finishAutoPatientCast(state,patient);
+      const xp=Math.min(10+bonus,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;
       state.history.fishCaught=true;recordQuest(state.quest,'fish');p.catches[fish]=(p.catches[fish]??0)+1;p.stepCount++;awardFamiliarBond(state,'otter',1);autoStoreVault(state,p,at);
     }else if(type==='woodcutting'){
       if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}

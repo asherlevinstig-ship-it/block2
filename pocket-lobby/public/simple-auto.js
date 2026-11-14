@@ -39,11 +39,11 @@ export function simpleAutoRiskDetail(mode,risk='balanced'){
  if(mode==='random')return (risk==='safe'?'Gathering and peaceful exploration only. No combat.':'Mix gathering, exploration and '+(risk==='bold'?'the strongest suitable unlocked monsters.':'suitable boar hunts.'))+' '+p.batch+' items per gathering batch. Never gambles.'+(risk==='safe'?'':' '+combat);
  return (mode==='battle'&&risk==='safe'?'Prefer boars; try beetles only if no suitable boar fight is available. ':'')+combat;
 }
-export function simpleAutoRules(mode,{risk='balanced',enabled=true,reserveGold=0,bet,lossLimit,game='roulette',breadBudget=mode==='random'?30:0,food,timberMarket,mining}={}){
+export function simpleAutoRules(mode,{risk='balanced',enabled=true,reserveGold=0,bet,lossLimit,game='roulette',breadBudget=mode==='random'?30:0,food,timberMarket,mining,useAbilities=false}={}){
  if(!Object.hasOwn(simpleAutoModes,mode))throw new Error('Choose an Auto activity.');
  if(!Object.hasOwn(simpleAutoRisks,risk))throw new Error('Choose a valid Auto risk level.');
  if(mode==='rest')risk='safe';
  const profile=simpleAutoRisks[risk];if(!profile)throw new Error('Choose a valid Auto risk level.');
- return {...(breadBudget||food?{food:{...food,breadBudget}}:{}),...(mode==='mining'?{mining:normalizeAutoMining(mining)}:{}),...(mode==='woodcutting'?{timberMarket:normalizeTimberMarket(timberMarket)}:{}),simpleMode:mode,simpleRisk:risk,enabled,activity:'rest',strategy:mode==='gambling'?'gambling':'routine',keepBait:0,timberTarget:1000000,goldPolicy:{reserveGold,budget:100000,keepFish:0,keepTimber:0,keepMeat:0,keepShells:0,minHealth:profile.minHealth},gambling:{game,color:'red',bet:bet??profile.bet,lossLimit:lossLimit??profile.lossLimit,reserveGold,profitTarget:100000,maxRounds:1000},combat:{enabled:true,q:true,e:true,dodge:true,style:profile.style,fleeBelow:profile.fleeBelow}};
+ return {...(useAbilities?{useAbilities:true}:{}),...(breadBudget||food?{food:{...food,breadBudget}}:{}),...(mode==='mining'?{mining:normalizeAutoMining(mining)}:{}),...(mode==='woodcutting'?{timberMarket:normalizeTimberMarket(timberMarket)}:{}),simpleMode:mode,simpleRisk:risk,enabled,activity:'rest',strategy:mode==='gambling'?'gambling':'routine',keepBait:0,timberTarget:1000000,goldPolicy:{reserveGold,budget:100000,keepFish:0,keepTimber:0,keepMeat:0,keepShells:0,minHealth:profile.minHealth},gambling:{game,color:'red',bet:bet??profile.bet,lossLimit:lossLimit??profile.lossLimit,reserveGold,profitTarget:100000,maxRounds:1000},combat:{enabled:true,q:true,e:true,dodge:true,style:profile.style,fleeBelow:profile.fleeBelow}};
 }
 

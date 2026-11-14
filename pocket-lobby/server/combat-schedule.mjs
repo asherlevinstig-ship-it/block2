@@ -1,3 +1,4 @@
+import {autoStoneguardTactic} from './auto-abilities.mjs';
 import {addDueAt,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {arenaWarningAt} from '../public/dungeon-arena.js';
 import {enemyAttack} from '../public/hunting.js';
@@ -19,7 +20,8 @@ export function combatSchedule(state){
  const addsDue=addDueAt(encounter);
  const points=availableActionPoints(state.actionPoints);
  const coreDue=Math.min(addsDue,points?encounter.nextPlayerAt:Infinity,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
- const candidate=nextCombatTactic(state),tactic=points||candidate?.action==='move'||candidate?.action==='flee'||candidate?.action==='dodge'?candidate:null,automatic=!!tactic&&tactic.at<coreDue;
+ const normal=nextCombatTactic(state),guard=autoStoneguardTactic({...state,hunting:{...state.hunting,encounter}});
+ const candidate=guard&&(!normal||guard.at<normal.at)?guard:normal,tactic=points||candidate?.action==='move'||candidate?.action==='flee'||candidate?.action==='dodge'?candidate:null,automatic=!!tactic&&tactic.at<coreDue;
  const due=automatic?tactic.at:coreDue;
  const warningAt=arenaWarningAt(encounter,enemyAttack(encounter));
  return {encounter,addsDue,tactic,automatic,due,warningAt,at:Math.min(due,warningAt)};

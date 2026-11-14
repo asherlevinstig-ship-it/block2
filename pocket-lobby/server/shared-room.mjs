@@ -30,7 +30,7 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control
 const canMeditate=meta=>!meta.serverAuto&&!meta.auto&&!meta.seat&&!meta.activity&&!meta.fishing&&!meta.chopping&&!meta.mining;
 export function publicPeer(meta,now=Date.now()){
   const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
-  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
 }
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
@@ -252,11 +252,12 @@ export class SharedRoom{
     if(Number.isSafeInteger(pondCatchAt)&&room==='pond'&&state.location==='pond'&&state.fishingReceipt?.room==='pond'&&state.fishingReceipt.at===pondCatchAt)await fishingTogetherCatch(this,ws,meta,pondCatchAt);
     if(meta.room==='willowbank')meta.willowbankShortcut=state.adventure?.willowbankShortcut===true;
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
-    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge','perk'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
+    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge','perk','ability'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
     const leaving=state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules';
     recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});
     if(leaving){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
+    meta.stoneguardUntil=state.styleAbilities?.stoneguard?.until??0;
     meta.health=Math.max(0,Math.min(playerMaxHealth(state),state.health??100));meta.activity=sharedActivity(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
     const blinkAt=state.styleAbilities?.lastBlinkAt??0;
     if(blinkAt>(meta.lastBlinkAt??0)&&Date.now()-blinkAt<5000&&state.position){

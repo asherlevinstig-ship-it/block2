@@ -1,3 +1,4 @@
+import {setAutoAbilityMotion} from './auto-abilities.mjs';
 import {readHearth,changeHearth} from './hearth.mjs';
 import {pvpStrike,reportPvp,mostWanted} from './pvp.mjs';
 import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
@@ -139,6 +140,7 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     if(!row)return null;
     const state=readPlayerState(row,env);
     const now=Date.now();
+    setAutoAbilityMotion(state,motion,now);
     if(!idle&&state.plan?.fishingWork?.batchUntil)return row;
     const initial=JSON.stringify(state);enablePhysicalWork(state,env);
     if(autoHasNoPoints(state,now))settlePlan(state,now);
@@ -591,6 +593,7 @@ export async function handlePlayerApi(request,env){
         if(state.depthsRun||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Auto after finishing your current activity and leaving the dungeon.');
         if(state.miningCut)throw new Error('Choose Stop at the quarry before starting Auto.');
         const rules=simpleAutoRules(body.mode,body.options??{});
+        rules.useAbilities=body.options?.useAbilities??state.characterRules?.useAbilities??false;
         rules.goal=(state.pendingCharacterRules??state.characterRules)?.goal;
         await settleBeforeLeavingFishing(env,id,state,now);
         saveAutoSettings(state,rules,now);
