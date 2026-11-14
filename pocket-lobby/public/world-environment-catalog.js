@@ -17,6 +17,7 @@ const group=(rooms,theme,extra={})=>Object.fromEntries(rooms.map(room=>[room,{th
 // Every playable room is assigned explicitly. Related places share biome art,
 // with individual framing, colour and particle seeds instead of a generic sky.
 export const roomEnvironments={
+ library:{theme:'chamber',position:.45,hue:12},
  outside:{theme:'courtyard',position:.72,mobilePosition:.90},
  home:{theme:'chamber',position:.68},hub:{theme:'atrium',position:.60},factionHall:{theme:'atrium',position:.76,hue:7},
  lounge:{theme:'lounge',position:.72},

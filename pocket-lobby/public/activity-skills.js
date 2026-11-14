@@ -1,6 +1,7 @@
 import {skillProgress} from './skill-curve.js';
 
 export const activitySkills={
+  magicKnowledge:{name:'Magic Knowledge',icon:'✧',training:'Read skill books in the Tower Library.',affinity:'Magical understanding and future ability offers',xp:state=>state.stats?.magicKnowledgeXp},
   fishing:{name:'Fishing', icon:'≈', training:'Catch fish to train Patience.', affinity:'Focus and control', xp:state=>state.stats?.patienceXp},
   hunting:{name:'Hunting', icon:'➶', training:'Defeat wild beasts.', affinity:'Tracking and precision', xp:state=>state.stats?.huntingXp},
   trading:{name:'Trading', icon:'◈', training:'Earn 2 XP per item sold to merchants or through timber orders.', affinity:'Appraisal and bargaining', xp:state=>state.stats?.tradingXp},

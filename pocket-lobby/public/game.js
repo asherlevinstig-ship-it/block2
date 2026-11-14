@@ -2191,6 +2191,7 @@ const storeFurniture=[
 ];
 const tailorFurniture=[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const factionHallFurniture=factionHallLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
+const libraryFurniture=libraryLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const bakeryFurniture=bakeryLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1],['silverfinTank',2,7],['moonCrystal',7,3]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const marketFurniture=[
@@ -2251,6 +2252,7 @@ function roomFurniture(){
   if(currentRoom==='lounge')return initial;
   if(currentRoom==='tailor')return tailorFurniture;
   if(currentRoom==='furnishings')return furnishingsFurniture;
+  if(currentRoom==='library')return libraryFurniture;
   if(currentRoom==='bakery')return bakeryFurniture;
   if(currentRoom===factionHall)return factionHallFurniture;
   if(currentRoom==='store')return storeFurniture;
@@ -2280,6 +2282,7 @@ function setRoomFurniture(items){
 }
 const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:49,label:'EXIT'};
 const hubDoors=[
+  {to:'library',side:'right',tile:{x:6,y:0},start:5.55,end:7.45,height:51,label:'LIBRARY'},
   {to:'tailor',side:'left',tile:{x:0,y:2},start:1.2,end:3.2,height:51,label:'TAILOR'},
   {to:'furnishings',side:'right',tile:{x:9,y:0},start:8.1,end:10.2,height:51,label:'FURNITURE'},
   {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
@@ -2294,8 +2297,9 @@ const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
 const bakeryDoor={to:'bakery',side:'right',tile:{x:7,y:0},start:6.55,end:8.45,height:49,label:'BAKERY',arrival:{x:1,y:5}};
 const bakeryExit={...storeExit,to:'market',label:'MARKET',arrival:{x:7,y:1}};
-const roomDoors={[factionHall]:[storeExit],bakery:[bakeryExit],tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit,bakeryDoor],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={library:[{...storeExit,arrival:{x:6,y:1}}],[factionHall]:[storeExit],bakery:[bakeryExit],tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit,bakeryDoor],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
+  library:{number:'18',name:'The Tower Library',description:'Read skill books and deepen your Magic Knowledge.',badge:'LIBRARY',floor:'Tower rooms'},
   tailor:{number:'17',name:'The Gilded Thread',description:'Visit the tailor counter to preview and buy distinctive outfit sets and clothing pieces.',badge:'TAILOR',floor:'Tower shops'},
   furnishings:{number:'16',name:'Tower Furnishings',description:'Furniture, lighting and storage for your own corner of the Tower.',badge:'FURNITURE SHOP',floor:'Tower shops'},
   home:{number:'00',name:'Entry Room',description:'Your aim: become the richest and most powerful player in the game. Use the exit and meet the Tower Warden to get started.',badge:'ROOM NO. 00',floor:'Private room'},
@@ -2572,6 +2576,7 @@ function drawLobbyWindow(a,b){
   wall('right',a-.11,b+.11,26,29,'#bfad92');
 }
 const lobbyPortalColors={
+  library:['#24364d','#d6d0ff','#a9a0e5'],
   tailor:['#42304b','#ffd7ef','#d78fbd'],
   furnishings:['#2d3e35','#e4e9a0','#c3cd83'],
   home:['#3d2c42','#ffc78a','#f6ae6b'],store:['#152d4c','#91dcff','#55baff'],
@@ -2579,6 +2584,7 @@ const lobbyPortalColors={
   lounge:['#332752','#e8bdff','#c583ec'],outside:['#3a3048','#ffe0a1','#f2b06d']
 };
 const lobbyPortalIcons={
+  library:['1110111','1011101','1011101','1011101','1011101','1111111','0001000'],
   tailor:['0100010','1111111','1101011','0101010','0101010','0111110','0111110'],
   furnishings:['0111110','0100010','1100011','1100011','1111111','0100010','0100010'],
   home:['0001000','0011100','0111110','1111111','0101010','0110110','0110110'],
@@ -2697,7 +2703,7 @@ function drawGrandLobby(showDoors=true){
       wall(side,u-.04,u+.28,2,8,'#8d7769');
     }
   }
-  if(showDoors){drawLobbyWindow(6.3,7.7);drawLobbyWindow(10.7,11.9);}
+  if(showDoors){drawLobbyWindow(10.7,11.9);}
   else{drawLobbyWindow(6.55,8.6);drawLobbyWindow(9.25,11.3);}
   drawLobbyBanner('left',4.9);drawLobbyBanner('right',1.05);drawLobbyBanner('right',16.25);
   if(!showDoors){
@@ -2707,7 +2713,7 @@ function drawGrandLobby(showDoors=true){
   }
   if(showDoors)hubDoors.forEach(drawLobbyPortal);
   for(const u of [5.27,8.72,12.53])drawLobbySconce('left',u);
-  for(const u of [2.12,5.92,12.8,17.05])drawLobbySconce('right',u);
+  for(const u of [2.12,5.05,12.8,17.05])drawLobbySconce('right',u);
 }
 function drawChandelier(){
   const glow=ctx.createRadialGradient(240,74,5,240,74,53);
@@ -2838,6 +2844,18 @@ function drawFactionHall(){
   surface(3,3.25,3.9,4.8,.2,'#63445e','#dfb875');
   surface(3.2,3.46,3.5,4.37,.3,'#7a4f68','#bb8a65');
   drawDoor(storeExit);
+}
+function drawLibrary(){
+ block(0,0,10,10,-8,8,['#816c64','#3a354d','#2b2a40']);
+ for(let y=0;y<10;y++)for(let x=0;x<10;x++){surface(x,y,1,1,0,(x+y)%2?'#7a6259':'#876b5d','#5c4c4c');surface(x+.12,y+.8,.7,.025,.1,'#a28b6e');}
+ for(const side of ['left','right']){
+  wall(side,0,10,0,65,side==='left'?'#303d57':'#3b4865');wall(side,0,10,0,14,'#212b43');wall(side,0,10,14,16,'#b69a6b');wall(side,0,10,63,67,'#c6ac82');
+  for(const i of [1,3.3,6.4,9.6])wall(side,i,i+.08,17,63,'#867963');
+ }
+ drawLobbyWindow(3.2,5.5);drawLobbyBanner('right',6.3);
+ surface(2.5,3.6,5.4,4.9,.2,'#9e815b');surface(2.65,3.75,5.1,4.6,.3,'#34415f');surface(2.82,3.92,4.76,4.26,.4,'#435373');
+ for(const [x,y] of [[3,4.1],[6.9,7.8]]){surface(x,y,.4,.05,.5,'#c5ac75');surface(x,y,.05,.4,.5,'#c5ac75');}
+ drawDoor(storeExit);
 }
 function drawBakery(){
   block(0,0,10,10,-8,8,['#ae815f','#5b3e42','#49353e']);
@@ -3383,6 +3401,7 @@ function makeRoomLayer(drawLayer,layerView=standardView){
 }
 const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
+  library:makeRoomLayer(drawLibrary),
   tailor:makeRoomLayer(()=>{drawFishingStore('tailor');for(const [x,y,index] of [[7.7,.7,7],[.7,2,8],[.7,8,9]]){const [px,py]=point(x,y,24);sprite(ctx,px,py,{outfit:index,trousers:index-3,boots:index-3,hair:1},{time:0});}surface(3.3,5,3.4,3,.5,'#603d62','#c4a078');}),
   hub:makeRoomLayer(()=>drawGrandLobby(),hubView),
   hubIntro:makeRoomLayer(()=>drawGrandLobby(false),hubView),
@@ -3492,7 +3511,7 @@ function drawMoonwoodDetails(time){
   }
 }
 const explorationRegions={
-  'The Tower':['home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
+  'The Tower':['library','home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
   Willowmere:[...willowmereRooms,'millCellar'],
   Beaconwatch:watchRooms,
   Northreach:[waystationRoom,overlookRoom],
@@ -3689,6 +3708,7 @@ function updateWorldLabels(){
     sign.dataset.apCost='1';sign.title=label+' · Travel · 1 AP';sign.setAttribute('aria-label','Go to '+label+' · Travel · 1 AP');
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
+  if(currentRoom==='library')add('Read skill books',...point(5,1.5,47),'npc',()=>use(libraryFurniture[1]),'Magic Knowledge');
   if(currentRoom==='tailor')add('Tailor · Browse outfits',...point(4.5,2.5,39),'npc',()=>use(tailorFurniture[0]),'The Gilded Thread');
   if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>use(furnishingsFurniture.find(item=>item.type==='reception')),'Tower Furnishings');
   if(currentRoom==='home'&&!homeBedRest&&!editing){const stove=homeFurniture.find(i=>i.type==='stove');if(stove)add('Cook',...point(stove.x+.5,stove.y+.5,36),'npc',()=>use(stove),'Home kitchen');}
@@ -4198,7 +4218,7 @@ function note(message,duration=3000){
   noticeUntil=performance.now()+duration;
 }
 function setHint(){
-  const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Trade your spoils or visit the Bakery',bakery:'Speak to the baker · Use Market to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
+  const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Trade your spoils or visit the Bakery',library:'Click Read skill books to study · Use Lobby to leave',bakery:'Speak to the baker · Use Market to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
   const reward=depthsRun?.rewardChests?.[currentRoom];
   const message=reward&&!reward.opened?'Victory! Click the glowing reward chest to reveal your haul.':editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').dataset.kind=currentRoom==='home'&&!editing?'movement':'guide';
@@ -4826,7 +4846,7 @@ function showHudMap(destination=null){
     routes.append(button);
   };
   if(shops&&lobbyRoutesOpen()){
-    for(const [room,label] of [['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['bakery','Bakery'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
+    for(const [room,label] of [['library','Library'],['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['bakery','Bakery'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(mapPlaceName(door.to)+(worldMapVisibility().frontier.has(door.to)?' · Explore':''),()=>followHudDoor(door),door.to===next?.to);
   }
@@ -5324,6 +5344,8 @@ function finishInteraction(){
     note('The trader offers credits for fish and hunting spoils. Choose what to sell in the market panel.');
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
     note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
+  }else if(currentRoom==='library'&&['bookcase','table'].includes(item.type)){
+    window.towerLibrary?.open();
   }else if(currentRoom==='tailor'){
     openTailor();
   }else if(currentRoom==='furnishings'){
@@ -5856,7 +5878,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={[overlookRoom]:[445,1280],[waystationRoom]:[285,1215],crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={[overlookRoom]:[445,1280],[waystationRoom]:[285,1215],crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],library:[345,30],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -8551,6 +8573,7 @@ function updateRoomLabel(){
     outside:'Use the Moonwood steps to explore or the Tower door to return indoors.',
     store:'Buy bait and rods from Fishing supplies. Use Lobby to return.',
     market:'Trade your spoils or walk through the Bakery door for rations.',
+    library:'Click a bookshelf to read skill books and train Magic Knowledge. Use the Lobby door to return.',
     bakery:'Speak to the baker to buy rations. Use the Market door to return.'
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
@@ -9021,3 +9044,5 @@ window.towerRobberyHooks={pursue:(room,name)=>{setExplorationDestination(room);n
 function currentCombatBuild(){return window.combatBuild({combatGear,wardrobe,magic:magicState,hunting});}
 window.towerBuildHooks={state:()=>({...currentGoalState(),wardrobe,magic:magicState,hunting}),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences()};
 window.towerPreparationHooks={state:()=>({...currentGoalState(),health,vitals:playerVitals,wardrobe,magic:magicState,hunting,essencesPaused}),now:()=>combatNow(),locked:()=>unavailable()||!!woodSession||!!fishingSession||!!miningCut||!!homeBedRest||!!campRest,atEntrance:()=>currentRoom==='ruins'&&depthsDiscovered&&!depthsRun,change:(name,body)=>serverGameplay(name,body),enter:()=>enterMoonwellDepths(true),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences(),questions:()=>window.towerLearning?.open()};
+
+window.towerLibraryHooks={change:(action,body)=>serverGameplay(action,body),reward:receipt=>{showTransaction('Lesson complete',[{icon:'✧',text:'+'+receipt.xp+' Magic Knowledge XP'}]);updatePlayerStats();}};

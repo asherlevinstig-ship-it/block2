@@ -674,6 +674,7 @@
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         const {initializeBuildUI}=await import('./combat-build-ui.js');window.towerBuildUI=initializeBuildUI({doc:document,hooks:window.towerBuildHooks});
+        const {initializeLibrary}=await import('./library-ui.js');window.towerLibrary=initializeLibrary({cloud:window.playerCloud,hooks:window.towerLibraryHooks});
         const {initializeRobbery}=await import('./robbery-ui.js');window.towerRobbery=initializeRobbery({doc:document,cloud:window.playerCloud,hooks:window.towerRobberyHooks});
         const {initializeLearning}=await import('./learning-ui.js');
         window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,isTeacher:()=>verifiedTeacher,isPausedForPoints:()=>pausedForPoints,onAdventure:returnFromQuestions,change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});

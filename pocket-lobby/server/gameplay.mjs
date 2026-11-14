@@ -1,3 +1,4 @@
+import {libraryAction} from './library.mjs';
 import {recordShopPurchase} from './shop-licences.mjs';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
@@ -73,6 +74,7 @@ function location(state,rooms){
 const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
+  if(libraryAction(state,action,body,now))return;
   if(styleAbilityAction(state,action,body,now))return;
   if(action==='dungeonChestOpen'||action==='dungeonChestEquip'){
     available(state);
@@ -517,6 +519,7 @@ export function protectFishingState(previous,next){
   next.meals=previous.meals??{};
   next.magic=previous.magic;
   next.pvp=previous.pvp;
+  if(previous.library){next.library=structuredClone(previous.library);const r=next.library.reading;if(r&&(next.location!=='library'||next.position?.x!==r.x||next.position?.y!==r.y))delete next.library.reading;}else delete next.library;
   if(previous.publicRequests)next.publicRequests=previous.publicRequests;else delete next.publicRequests;
   next.depthsRun=previous.depthsRun??null;
   next.depthsDiscovered=previous.depthsDiscovered===true;

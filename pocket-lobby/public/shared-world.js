@@ -1,3 +1,5 @@
+import {libraryLayout} from './library.js';
+export {libraryLayout};
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
 import {waystationRoom,waystationArea} from './waystation.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
@@ -11,7 +13,7 @@ import {cellarFloor} from './mill-cellar.js';
 export * from './mining.js';
 export * from './forge.js';
 export {factionRegistrar,factionHall,factionHallLayout,furnitureCatalog,catalogFurnitureSize};
-export const socialRooms={[overlookRoom]:[12,10],[waystationRoom]:[12,10],crystaldeep:[12,10],quarry:[12,10],[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,id==='willowbank'?[willowbankView.cols,willowbankView.rows]:[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
+export const socialRooms={[overlookRoom]:[12,10],[waystationRoom]:[12,10],crystaldeep:[12,10],quarry:[12,10],[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,id==='willowbank'?[willowbankView.cols,willowbankView.rows]:[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],library:[10,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
 const layouts={[overlookRoom]:overlookArea.authored,[waystationRoom]:waystationArea.authored,[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
   tailor:[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]],
   furnishings:[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1],['silverfinTank',2,7],['moonCrystal',7,3]],
@@ -19,6 +21,7 @@ const layouts={[overlookRoom]:overlookArea.authored,[waystationRoom]:waystationA
   lounge:[['bar',.05,.25],['shelf',.02,.48],['plant',.3,8.7],['plant',8.9,.2],['sofa',5,1],['chair',8,3,1],['lamp',8,1],['stool',2,1],['stool',2,2],['stool',2,3],['chair',2,6,1],['chair',4,8],['lamp',1,6],['plant',7,8],['plant',.3,7.2],['blackjack',6,3],['roulette',3,7,1]],
   outside:[['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],['streetlamp',11,10],['bench',3,8],['bench',10,3,1],['bench',9,9,2],['plant',0,1],['plant',0,10],['plant',13,1],['plant',13,10]],
   store:[['tackleCounter',3,2],['rodRack',7,1],['baitCrates',7,4],['plant',1,1],['stool',4,4]],
+  library:libraryLayout,
   bakery:bakeryLayout,
   [factionHall]:factionHallLayout,
   market:[['tradeCounter',3,2],['harvestCrates',7,3],['baitCrates',7,5],['plant',1,1],['stool',4,4]],

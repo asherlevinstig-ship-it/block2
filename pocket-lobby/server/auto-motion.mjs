@@ -5,7 +5,7 @@ import {autoWalkStepMs} from '../public/auto-walk.js';
 import {oreDeposits} from '../public/mining.js';
 
 // Use the same door tiles, arrivals and terrain as the playable world.
-const doors={home:[['hub',0,5,1,6]],hub:[['home',0,6,1,5],['store',0,10,1,5],['market',0,14,1,5],['armory',3,0,1,5],['lounge',14,0,1,5],['tailor',0,2,1,5],['furnishings',9,0,1,5],['outside',8,15,1,5]],outside:[['hub',0,5,8,14],['trail',6,11,1,5]],market:[['hub',0,5,1,14],['bakery',7,0,1,5]],bakery:[['market',0,5,7,1]],store:[['hub',0,5,1,10]],armory:[['hub',0,5,3,1]],lounge:[['hub',0,5,14,1]],tailor:[['hub',0,5,1,2]],furnishings:[['hub',0,5,9,1]]};
+const doors={home:[['hub',0,5,1,6]],library:[['hub',0,5,6,1]],hub:[['library',6,0,1,5],['home',0,6,1,5],['store',0,10,1,5],['market',0,14,1,5],['armory',3,0,1,5],['lounge',14,0,1,5],['tailor',0,2,1,5],['furnishings',9,0,1,5],['outside',8,15,1,5]],outside:[['hub',0,5,8,14],['trail',6,11,1,5]],market:[['hub',0,5,1,14],['bakery',7,0,1,5]],bakery:[['market',0,5,7,1]],store:[['hub',0,5,1,10]],armory:[['hub',0,5,3,1]],lounge:[['hub',0,5,14,1]],tailor:[['hub',0,5,1,2]],furnishings:[['hub',0,5,9,1]]};
 export function autoDoors(room,state){
  return doors[room]?.map(([to,x,y,ax,ay])=>({to,tile:{x,y},arrival:{x:ax,y:ay}}))??(moonwood.doors[room]??[]).filter(d=>Object.hasOwn(socialRooms,d.to)&&moonwood.open(d,state.adventure??{}));
 }
