@@ -46,6 +46,12 @@ export function styleAbilityAction(state,action,body,now){
   state.styleAbilities=abilities;
   return true;
  }
+ if(id==='patientCast'){
+  if(encounter||state.depthsRun)throw invalid('Activate Patient Cast before fishing, outside combat.');
+  if(abilities.patientCastReady)throw invalid('Patient Cast is already ready for your next manual cast.');
+  abilities.patientCastReady=true;abilities.readyAt[id]=now+styleAbilities[id].cooldown;
+  state.styleAbilities=abilities;return true;
+ }
  if(id==='stoneguard'){
   requireActionPoint(state);
   abilities.stoneguard={until:now+5000,reduction:30+(abilityMastery(state,id).stage-1)*10,credited:false};

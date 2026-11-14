@@ -2,6 +2,7 @@ import {skillLevel} from './skill-curve.js';
 import {styleAbilities} from './style-abilities.js';
 
 export const masteryBenefits={
+ patientCast:['50% wider reel window','75% wider reel window','100% wider reel window'],
  stoneguard:['30% damage reduction','40% damage reduction','50% damage reduction'],
  waypoint:['3-minute cooldown','150-second cooldown','2-minute cooldown'],
  shadowstep:['45-second cooldown','38-second cooldown','30-second cooldown'],
@@ -12,6 +13,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ patientCast:'Land a catch after manually reeling during an empowered bite. One use per catch.',
  stoneguard:'Absorb creature damage while Stoneguard is active. One successful use per cast.',
  waypoint:'Travel successfully to a discovered waypoint.',
  shadowstep:'Reposition successfully during arena combat.',
@@ -27,7 +29,7 @@ export function abilityMastery(state,id){
  const uses=Math.max(0,state.styleAbilities?.mastery?.[id]?.uses??0);
  const thresholds=id==='scoutAhead'?[1,2]:[5,20];
  const qualifies=offset=>Object.entries(definition.requirements).every(([stat,rank])=>
-  skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[stat+'Xp'])>=rank+offset);
+  skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[(stat==='fishing'?'patience':stat)+'Xp'])>=rank+offset);
  const stage=uses>=thresholds[1]&&qualifies(3)?3:uses>=thresholds[0]&&qualifies(1)?2:1;
  const next=stage===3?null:{uses:thresholds[stage-1],requirements:Object.fromEntries(Object.entries(definition.requirements).map(([stat,rank])=>[stat,rank+(stage===1?1:3)]))};
  const cooldown={waypoint:[180000,150000,120000],shadowstep:[45000,38000,30000],appraise:[60000,45000,30000]}[id]?.[stage-1]??definition.cooldown;

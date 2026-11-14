@@ -1,4 +1,5 @@
 import {recordShopPurchase} from './shop-licences.mjs';
+import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {activeScoutClue} from '../public/style-abilities.js';
 import {styleAbilityAction} from './style-abilities.mjs';
@@ -305,7 +306,10 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     const wait=familiarFishingTime(state,profile.duration*(.85+random()*.30));
     // Keep the reel window and landing animation timing identical.
     const biteAt=now+exertionDuration(3150+wait,state.vitals)-2700;
-    state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0,...(shoal?{shoalId:shoal.id}:{}),...(water?{water}:{}),...(atMoonfinPool?{room:moonfinPool.room}:{})};
+    const patient=state.styleAbilities?.patientCastReady===true;
+    const biteWindow=patient?2700+(abilityMastery(state,'patientCast').stage-1)*450:1800;
+    if(patient)delete state.styleAbilities.patientCastReady;
+    state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+biteWindow,bonus:0,...(patient?{patientCast:true}:{}),...(shoal?{shoalId:shoal.id}:{}),...(water?{water}:{}),...(atMoonfinPool?{room:moonfinPool.room}:{})};
     return;
   }
   if(action==='cancel'){
@@ -322,6 +326,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(action==='reel'){
       if(now>=cast.biteAt&&now<cast.landAt&&!cast.bonus){
         cast.bonus=5;cast.landAt=now;
+        if(cast.patientCast)cast.patientPerfect=true;
         if(cast.shoalId!==undefined)cast.shoalReeled=true;
       }
       return;
@@ -340,10 +345,11 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     const bondXp=awardFamiliarBond(state,'otter',otterHelp?6:2);
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
     state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
+    if(cast.patientPerfect)awardAbilityUse(state,'patientCast');
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
     const {id,started,castEnds,biteAt,landAt,water}=cast;
-    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,at:now,cast:{id,started,castEnds,biteAt,landAt,...(water?{water}:{})},spot:state.position,...(shoalReeled?{shoalReeled:true}:{}),...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
+    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,at:now,cast:{id,started,castEnds,biteAt,landAt,...(cast.patientCast?{patientCast:true}:{}),...(water?{water}:{})},spot:state.position,...(shoalReeled?{shoalReeled:true}:{}),...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
     if(cloakBoosted)recordEquipmentEffect(state,'angler',1,now,'angler:'+cast.id);
     delete state.fishingCast;
     return;

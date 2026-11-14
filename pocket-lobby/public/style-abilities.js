@@ -34,7 +34,8 @@ export const styleAbilities={
  shareHearth:{name:'Share a Hearth',icon:'♨',cooldown:180000,cost:0,description:'Share a cooked meal at the Waystation campfire. Both players recover up to 20 HP over five seconds.',requirements:{cooking:2,kindness:2},discovery:'Earned by cooking and caring for a familiar.'},
  ambush:{name:'Ambush',icon:'⚔',cooldown:60000,description:'Approach a wild boar from behind and open combat with a strike dealing 50% extra damage.',requirements:{hunting:3,stealth:2},discovery:'Earned through wild hunts and practising stealth.'},
  appraise:{name:'Appraise',icon:'◉',cost:0,cooldown:60000,description:'Compare an ore listing with completed player sales from the last seven days.',requirements:{trading:3,mining:2},discovery:'Earned by trading and mining.'},
- stoneguard:{name:'Stoneguard',icon:'⬡',cooldown:60000,description:'Raise stone plates for five seconds, reducing creature damage by 30%.',requirements:{mining:3,vitality:2},discovery:'Earned by mining and building Vitality.'}
+ stoneguard:{name:'Stoneguard',icon:'⬡',cooldown:60000,description:'Raise stone plates for five seconds, reducing creature damage by 30%.',requirements:{mining:3,vitality:2},discovery:'Earned by mining and building Vitality.'},
+ patientCast:{name:'Patient Cast',icon:'≈',cost:0,cooldown:60000,description:'Empower your next manual cast with a brighter bobber and a 50% wider perfect-reel window.',requirements:{fishing:3,exploration:2},discovery:'Earned by catching fish and exploring.'}
 };
 export const waypoints={
  outside:{name:'Tower Courtyard',x:2,y:5},
@@ -62,11 +63,11 @@ export function normalizeStyleAbilities(input){
  }));
  const guard=input?.stoneguard;
  const guarded=learned.includes('stoneguard')&&Number.isSafeInteger(guard?.until)&&guard.until>0&&[30,40,50].includes(guard.reduction);
- return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
+ return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (['shareHearth','appraise','stoneguard'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[stat+'Xp'])>=level)).map(([id])=>id);
+   (['shareHearth','appraise','stoneguard'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[(stat==='fishing'?'patience':stat)+'Xp'])>=level)).map(([id])=>id);
 }

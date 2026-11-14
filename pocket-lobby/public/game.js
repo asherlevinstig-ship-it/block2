@@ -5008,6 +5008,16 @@ function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
   }else if(phase==='waiting'){
     by+=still?0:Math.sin(time/250)*1.5;
   }
+  if(session.patientCast&&phase!=='casting'&&phase!=='landing'&&phase!=='complete'){
+    ctx.save();
+    const bite=phase==='bite';
+    ctx.strokeStyle=bite?'#fff2bd':'#72e4f5';ctx.fillStyle=bite?'#ffdf83':'#8ceafa';
+    const pulse=still?0:Math.sin(time/(bite?100:300))*2;
+    ctx.beginPath();ctx.ellipse(bx,by,9+pulse,4+pulse*.4,0,0,Math.PI*2);ctx.stroke();
+    ctx.fillRect(bx-2,by-7,4,7);
+    if(bite){ctx.font='bold 9px system-ui';ctx.textAlign='center';ctx.fillText('REEL!',bx,by-14);ctx.textAlign='start';}
+    ctx.restore();
+  }
   if(phase==='landing'){
     const t=still?1:Math.min(1,(time-session.landAt)/fishingMoments.LAND_MS);
     bx=waterX+(x+11-waterX)*t;
@@ -6270,14 +6280,14 @@ function refreshStyleAbilityBar(){
   if(!bar||!state||!window.styleAbilities)return;
   const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
   const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt[id]??0)-combatNow())/1000)));
-  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady()]);
+  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady]);
   if(nextKey===styleAbilityKey)return;
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
   bar.replaceChildren();
   for(const [index,id] of learned.entries()){
     const ability=window.styleAbilities[id],button=document.createElement('button');
-    button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':ability.name)+(seconds[index]?' · '+seconds[index]+'s':'');
+    button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':ability.name)+(seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=seconds[index]>0||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
     button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():castStyleAbility(id,{});
@@ -6339,6 +6349,10 @@ async function castStyleAbility(id,body){
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
     if(dialog.open)dialog.close();
+    if(id==='patientCast'){
+      note('Patient Cast ready · Your next manual cast has an empowered bobber.');
+      refreshStyleAbilityBar();return;
+    }
     if(id==='stoneguard'){
       note('Stoneguard · Stone plates protect you for 5 seconds.');
       refreshStyleAbilityBar();return;

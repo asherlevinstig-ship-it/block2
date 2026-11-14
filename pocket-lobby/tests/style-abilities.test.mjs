@@ -137,3 +137,21 @@ test('Stoneguard reduces creature damage for five seconds and awards one mastery
  assert.ok(later.every(event=>!event.stoneguardBlocked));
  assert.throws(()=>act(saved,'abilityCast',{id:'stoneguard'},10000),/recharging/);
 });
+
+test('Patient Cast widens the next bite and earns mastery only after landing a manually reeled catch',()=>{
+ const state=make({location:'pond',position:{x:4,y:5},styleAbilities:{learned:['patientCast']},fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:4}});
+ act(state,'abilityCast',{id:'patientCast'});
+ assert.equal(state.actionPoints.value,5);
+ applyGameplayAction(state,'cast',{},1001,()=>.5);
+ const cast=state.fishingCast;
+ assert.equal(cast.landAt-cast.biteAt,2700);
+ assert.equal(state.styleAbilities.patientCastReady,undefined);
+ applyGameplayAction(state,'reel',{castId:cast.id},cast.biteAt+2100,()=>.5);
+ assert.equal(cast.patientPerfect,true);
+ const landedAt=cast.landAt+900;
+ applyGameplayAction(state,'catch',{castId:cast.id},landedAt,()=>.5);
+ assert.equal(state.styleAbilities.mastery.patientCast.uses,1);
+ assert.equal(state.actionPoints.value,4);
+ applyGameplayAction(state,'catch',{castId:cast.id},landedAt+1,()=>.5);
+ assert.equal(state.styleAbilities.mastery.patientCast.uses,1);
+});

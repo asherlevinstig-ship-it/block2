@@ -126,6 +126,10 @@ function drawPreview(canvas,id,time,drawCharacter,reduced){
   drawCharacter(ctx,218,115,reduced?0:time);
   ctx.fillStyle='#f49a53';ctx.beginPath();ctx.moveTo(173,117);ctx.quadraticCurveTo(161,107,177,92);ctx.quadraticCurveTo(193,110,182,117);ctx.fill();
   ctx.fillStyle=tint;ctx.font='16px system-ui';ctx.fillText('♥',143,65-(reduced?0:t*12));ctx.fillText('♥',214,65-(reduced?0:t*12));
+ }else if(id==='patientCast'){
+  ctx.beginPath();ctx.ellipse(222,107,17,6,0,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='#9ceeff';ctx.fillRect(220,94,4,12);
+  ctx.beginPath();ctx.moveTo(151,81);ctx.quadraticCurveTo(192,44,222,96);ctx.stroke();
  }else if(id==='stoneguard'){
   for(let i=0;i<4;i++){
    const x=126+i*12,y=100+(i%2)*8;
