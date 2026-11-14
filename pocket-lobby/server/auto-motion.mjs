@@ -17,7 +17,7 @@ export function autoRoomPath(from,to,state){
 export function autoTilePath(room,from,to,state){
  const boxes=roomBoxes(room,state.homeFurniture),scenery=moonwood.layouts[room]?.scenery??[];
  if(moonwood.has(room))for(const item of scenery)boxes.push(furnitureBox(item));
- const open=(x,y)=>validRoomTile(room,x,y,boxes)&&(!moonwood.has(room)||!moonwood.blocked(room,x,y,state.adventure??{}));
+ const open=(x,y)=>validRoomTile(room,x,y,boxes,state.adventure)&&(!moonwood.has(room)||!moonwood.blocked(room,x,y,state.adventure??{}));
  if(!open(to.x,to.y))return null;
  const queue=[{x:Math.round(from.x),y:Math.round(from.y),path:[]}],seen=new Set();
  for(const p of queue){const key=p.x+','+p.y;if(seen.has(key))continue;seen.add(key);if(p.x===to.x&&p.y===to.y)return p.path;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const x=p.x+dx,y=p.y+dy;if(open(x,y)&&!seen.has(x+','+y))queue.push({x,y,path:[...p.path,{x,y}]});}}

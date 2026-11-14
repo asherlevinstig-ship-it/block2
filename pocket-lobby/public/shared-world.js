@@ -1,5 +1,5 @@
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
-import {watchRooms,watchAreas,watchWater,watchDimensions,willowmereRooms,willowmereAreas,riverDimensions,riverWater,riverBridge} from './region-catalog.js';
+import {watchRooms,watchAreas,watchWater,watchDimensions,willowmereRooms,willowmereAreas,willowbankView,willowbankBarrier,riverDimensions,riverWater,riverBridge} from './region-catalog.js';
 import {factionRegistrar} from './faction-registry.js';
 import {factionHall,factionHallLayout} from './faction-hall.js';
 import {furnitureCatalog,catalogFurnitureSize} from './furniture-catalog.js';
@@ -9,7 +9,7 @@ import {cellarFloor} from './mill-cellar.js';
 export * from './mining.js';
 export * from './forge.js';
 export {factionRegistrar,factionHall,factionHallLayout,furnitureCatalog,catalogFurnitureSize};
-export const socialRooms={crystaldeep:[12,10],quarry:[12,10],[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
+export const socialRooms={crystaldeep:[12,10],quarry:[12,10],[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,id==='willowbank'?[willowbankView.cols,willowbankView.rows]:[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
 const layouts={[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
   tailor:[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]],
   furnishings:[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1],['silverfinTank',2,7],['moonCrystal',7,3]],
@@ -29,11 +29,11 @@ export function furnitureBox(item){
   return {x,y,w,d};
 }
 export function roomBoxes(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot])=>({type,x,y,rot}))).filter(item=>item.type!=='shelf').map(furnitureBox);}
-export function validRoomTile(room,x,y,boxes=[]){const size=socialRooms[room]??(room==='millCellar'?[12,10]:null);return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&(room!=='millCellar'||cellarFloor(x,y))&&(room!==wildlifeRoom||!reserveWater(x,y))&&(!watchRooms.includes(room)||!watchWater(room,x,y))&&(!willowmereRooms.includes(room)||!riverWater(room,x,y)||riverBridge(room,x,y))&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
-export function reachableMove(room,from,to,boxes,maxSteps){
-  if(!validRoomTile(room,to.x,to.y,boxes))return false;
+export function validRoomTile(room,x,y,boxes=[],progress={}){const size=socialRooms[room]??(room==='millCellar'?[12,10]:null);return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&(room!=='willowbank'||!willowbankBarrier(x,y,progress))&&(room!=='millCellar'||cellarFloor(x,y))&&(room!==wildlifeRoom||!reserveWater(x,y))&&(!watchRooms.includes(room)||!watchWater(room,x,y))&&(!willowmereRooms.includes(room)||!riverWater(room,x,y)||riverBridge(room,x,y))&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
+export function reachableMove(room,from,to,boxes,maxSteps,progress={}){
+  if(!validRoomTile(room,to.x,to.y,boxes,progress))return false;
   const queue=[{x:from.x,y:from.y,n:0}],seen=new Set();
-  while(queue.length){const p=queue.shift(),key=p.x+','+p.y;if(seen.has(key))continue;seen.add(key);if(p.x===to.x&&p.y===to.y)return true;if(p.n>=maxSteps)continue;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])if(validRoomTile(room,p.x+dx,p.y+dy,boxes))queue.push({x:p.x+dx,y:p.y+dy,n:p.n+1});}
+  while(queue.length){const p=queue.shift(),key=p.x+','+p.y;if(seen.has(key))continue;seen.add(key);if(p.x===to.x&&p.y===to.y)return true;if(p.n>=maxSteps)continue;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])if(validRoomTile(room,p.x+dx,p.y+dy,boxes,progress))queue.push({x:p.x+dx,y:p.y+dy,n:p.n+1});}
   return false;
 }
 

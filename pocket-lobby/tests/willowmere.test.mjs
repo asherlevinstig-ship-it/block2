@@ -4,7 +4,7 @@ test('new regions preserve saves, have reciprocal exits and reachable entrances 
  assert(moonwood.doors.creek.some(d=>d.to==='reedwater'));for(const room of willowmereRooms){assert(socialRooms[room]);const s=normalizeState({location:room,adventure:{discovered:['pond',room]}});assert.equal(s.location,room);assert(s.adventure.discovered.includes(room));assert(s.adventure.discovered.includes('pond'));const doors=moonwood.doors[room];for(const door of doors){const reverse=moonwood.doors[door.to].find(d=>d.to===room);assert(reverse);assert(validRoomTile(room,door.inside.x,door.inside.y,roomBoxes(room)));for(const other of doors)assert(walk(room,door.inside,other.tile),room+' blocked exit '+other.to);}}
  for(const station of fishingSites.willowbank.stations)assert(walk('willowbank',{x:1,y:5},{x:station.x-1,y:station.y}));assert(walk('millbrook',{x:1,y:6},{x:3,y:5}));assert(walk('millbrook',{x:1,y:6},{x:4,y:6}));
 });
-test('water remains impassable but the stone bridge connects the river banks',()=>{assert.equal(validRoomTile('reedwater',5,1,roomBoxes('reedwater')),false);assert.equal(validRoomTile('reedwater',5,4,roomBoxes('reedwater')),true);assert(walk('reedwater',{x:1,y:4},{x:10,y:4}));assert.equal(validRoomTile('willowbank',8,5,roomBoxes('willowbank')),false);});
+test('water remains impassable but the stone bridge connects the river banks',()=>{assert.equal(validRoomTile('reedwater',5,1,roomBoxes('reedwater')),false);assert.equal(validRoomTile('reedwater',5,4,roomBoxes('reedwater')),true);assert(walk('reedwater',{x:1,y:4},{x:10,y:4}));assert.equal(validRoomTile('willowbank',9,5,roomBoxes('willowbank')),false);});
 test('each bank station supports a real separate cast and broadcasts the actual catch location',()=>{
  for(const station of fishingSites.willowbank.stations){const s=normalizeState({location:'willowbank',position:{x:station.x-1,y:station.y}});assert(besideFishingStation('willowbank',s.position));applyGameplayAction(s,'cast',{},1000,()=>.5);const c=s.fishingCast,before=structuredClone(s);applyGameplayAction(s,'catch',{castId:c.id},c.landAt+901,()=>.5);assert.equal(s.fishingGear.bait,9);assert.equal(s.stats.patienceXp,10);assert.equal(worldActivityEvents(before,s,c.landAt+902)[0].room,'willowbank');}
  const s=normalizeState({location:'willowbank',position:{x:1,y:5}});assert.throws(()=>applyGameplayAction(s,'cast',{},1000),/post/);
@@ -28,4 +28,36 @@ test('the mill bench is a real multiplayer seat and getting up cancels recovery 
 });
 test('a fully healthy player can sit by the mill and get up without starting recovery',async()=>{
  const g=boot(normalizeState({location:'millbrook',position:{x:4,y:6},health:100}));g.run('use(roomFurniture().find(i=>i.type==="riverBench"));finishInteraction()');assert.equal(g.read('player.seat?.type'),'riverBench');assert.equal(g.nodes.get('riverBenchRestPanel').hidden,false);assert.match(g.nodes.get('riverBenchRestStatus').textContent,/Fully rested/);await g.run('standFromRiverBench()');assert.equal(g.read('player.seat'),null);assert.equal(g.nodes.get('riverBenchRestPanel').hidden,true);assert.deepEqual(g.errors,[]);
+});
+import {willowbankView,willowbankShortcut,willowbankLatch,willowbankNook} from '../public/region-catalog.js';
+import {autoTilePath} from '../server/auto-motion.mjs';
+import {protectFishingState} from '../server/gameplay.mjs';
+test('expanded Willowbank has two routes and a saved shortcut that actually reduces travel',()=>{
+ const room='willowbank',boxes=roomBoxes(room);
+ const [reedwater,millbrook]=moonwood.doors[room];
+ const state=normalizeState({location:room,position:{x:8,y:6}});
+ const start=reedwater.inside,end=millbrook.inside;
+ assert.deepEqual(socialRooms[room],[willowbankView.cols,willowbankView.rows]);
+ const neighbors=[{x:3,y:7},{x:11,y:7}];
+ for(const crossing of neighbors){
+  const obstacles=[...boxes,...neighbors.filter(p=>p!==crossing).map(p=>({...p,w:1,d:1}))];
+  assert(reachableMove(room,start,end,obstacles,100));
+ }
+ const before=autoTilePath(room,start,end,state);
+ const {x,y}=willowbankShortcut;
+ assert.equal(validRoomTile(room,x,y,boxes,state.adventure),false);
+ assert.throws(()=>applyGameplayAction({...state,position:{x:willowbankLatch.x,y:7}},'willowbankExplore',{site:'latch'},1000),/Millbrook side/);
+ const ap=state.actionPoints.value;
+ applyGameplayAction(state,'willowbankExplore',{site:'latch'},1000);
+ assert.equal(state.actionPoints.value,ap);
+ assert(validRoomTile(room,x,y,boxes,state.adventure));
+ const after=autoTilePath(room,start,end,state);
+ assert(after.length<before.length);
+ assert(after.some(p=>p.x===x&&p.y===y));
+ state.position={x:willowbankNook.x-1,y:willowbankNook.y};
+ applyGameplayAction(state,'willowbankExplore',{site:'nook'},1100);
+ assert.equal(normalizeState(state).adventure.willowbankNook,true);
+ const old=normalizeState({location:room,position:{x:8,y:7}});
+ assert.notDeepEqual(old.position,{x:8,y:7});
+ assert.equal(protectFishingState(old,structuredClone(state)).adventure.willowbankShortcut,false);
 });

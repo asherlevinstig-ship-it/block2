@@ -3316,7 +3316,7 @@ const roomLayers={
   armory:makeRoomLayer(()=>drawFishingStore('armory'))
 };
 for(const id of Object.keys(moonwood.areas)){
-  roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),id===wildlifeRoom?wildlifeView:moonwood.view);
+  roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),id===wildlifeRoom?wildlifeView:id==='willowbank'?willowbankView:moonwood.view);
 }
 function moonfinPoolOpen(){
   return currentRoom===moonfinPool.room&&window.millRaidClient?.phase==='victory';
@@ -3467,7 +3467,7 @@ function updateWorldLabels(){
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
@@ -3579,6 +3579,17 @@ function updateWorldLabels(){
   }
   if(currentRoom==='millbrook'){const crack=roomFurniture().find(item=>item.type==='cellarCrack');if(crack&&(adventure.millCellarFound||Math.hypot(player.x-crack.x,player.y-crack.y)<3))add(adventure.millCellarFound?'Mill cellar':'Loose bricks',...point(crack.x+.5,crack.y+.5,35),'npc',()=>use(crack));}
   if(currentRoom==='millCellar')for(const item of roomFurniture()){const label={cellarStairs:'Back to Millbrook',cellarChest:adventure.millCellarClaimed?'Opened chest':adventure.millCellarCleared?'Millkeeper’s chest':'Sealed chest',cellarJournal:'Millkeeper’s journal'}[item.type];if(label)add(label,...point(item.x+.5,item.y+.5,(moonwood.heights[item.type]??20)+9),'npc',()=>use(item));}
+  if(currentRoom==='willowbank'){
+    if(player.cy>=8){
+      const forkY=13.5;
+      add('Inland trail',...point(3.5,forkY,14),'npc',()=>walkTo({x:3,y:13}));
+      add('Riverside walk',...point(11.5,forkY,14),'npc',()=>walkTo({x:11,y:13}));
+    }
+    for(const item of roomFurniture()){
+      if(item.type==='willowLatch'&&player.cy<=6&&!adventure.willowbankShortcut)add('Open shortcut',...point(item.x+.5,item.y+.5,32),'npc',()=>use(item));
+      if(item.type==='willowNook'&&(adventure.willowbankNook||player.cy<=4&&Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y)<=3))add(adventure.willowbankNook?'Moonlit Nook':'Light through the willows',...point(item.x+.5,item.y+.5,45),'npc',()=>use(item));
+    }
+  }
   if(willowmereRooms.includes(currentRoom)){
     for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
   }
@@ -4522,6 +4533,8 @@ async function revealDungeonRewardChest(item){
   finally{rewardChestBusy=false;}
 }
 function use(item){
+  if(item.type==='willowLatch'&&player.cy>=7){note('The latch is on the Millbrook side. Take either trail around.');return;}
+
   if(item.type==='submergedCache'&&!floodgateOpen(depthsRun)){note('Pull the sluice lever to reach the lockbox.');return;}
   if(vaultCoopState){if(item.coopAdd||item.type==='depthsColossus')window.towerVaultCoop?.target(item.coopAdd?.id??'boss');else note('Retreat from the co-op party before using another activity.');return;}
   if(miningCut){stopMining().then(ok=>{if(ok)use(item);});return;}
@@ -4604,7 +4617,7 @@ function reelFish(){
 function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
   const phase=fishingMoments.phase(session,time);
   const still=reducedMotion.matches;
-  const [waterX,waterY]=point(session.water?.x??fishingSites[currentRoom]?.waterX??7.4,session.water?.y??Math.max(.7,Math.min(9.3,spot.y+.45)));
+  const [waterX,waterY]=point(session.water?.x??fishingSites[currentRoom]?.waterX??7.4,session.water?.y??Math.max(.7,Math.min(view.rows-.7,spot.y+.45)));
   let bx=waterX,by=waterY;
   let tipX=x+19,tipY=y-33;
   if(phase==='casting'&&!still){
@@ -4744,6 +4757,13 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='willowLatch'||item.type==='willowNook'){
+    const site=item.type==='willowLatch'?'latch':'nook';
+    const reveal=()=>{worldLabelKey='';note(site==='latch'?'Shortcut opened. The gate is now open from both sides.':'Moonlit Nook discovered. The old river stone glows beneath the willows.',6500);};
+    if(window.playerCloud?.gameplay)serverGameplay('willowbankExplore',{site}).then(reveal).catch(error=>note(error.message));
+    else{adventure[site==='latch'?'willowbankShortcut':'willowbankNook']=true;savePlayerState();reveal();}
+    return;
+  }
   if(item.type==='dungeonRewardChest'){revealDungeonRewardChest(item);return;}
   if(item.type==='quarryForge'){window.quarryForgeUI?.open();return;}
   if(item.type==='oreDeposit'){startMining(item);return;}
@@ -6456,6 +6476,7 @@ function currentActivityPrompt(){
       if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:fishingSession.shoalId!==undefined?'Reel in time for better odds of a fine catch and +5 Patience XP.':'Reel in time for bonus Patience XP.',action:'adventureLandmark',secondChance:otterReady};
       return null;
     }
+    if(currentRoom==='willowbank')return null;
     if(fishingGear.bait<1)return {label:'FISHING SUPPLIES',title:'You need bait',text:'Riverworms are sold at Silverfin Outfitters in the Tower.',action:'baitRoute'};
     if(currentRoom==='pond'&&window.playerCloud?.gameplay)return {label:'SILVERFIN SHOAL',title:'Fish the shoal',text:'Follow the bright ripples. Reel at the bite for a better chance of a fine fish.',action:'pondShoal'};
     return {label:'FISHING',title:'Cast a line',text:'Each completed catch costs 1 AP. Watch the float and reel on a bite for bonus Patience XP.',action:'adventureLandmark'};
@@ -6606,7 +6627,7 @@ function updateAdventurePanel(){
   if(!exploring)return;
   const fieldNotes={
     reedwater:'Follow the stone bridge across the river. Willowbank lies beyond the eastern path.',
-    willowbank:'Choose any free station along the river. Your bait, catches and Patience are your own. Millbrook lies to the north.',
+    willowbank:'Follow the pale inland trail or timber riverside walk north to Millbrook. Look for an old latch on the far bank.',
     millbrook:'The river trader buys fish. Rest on the bench to restore your hearts, or return along the riverside path.'+(adventure.millCellarFound?' Discovery recorded: the forgotten cellar lies behind the mill’s loose bricks. '+(adventure.millCellarClaimed?'Millkeeper’s supplies recovered.':adventure.millCellarCleared?'The custodian is defeated; its chest is unsealed.':'The old custodian still guards its sealed chest.') :''),
     millCellar:adventure.millCellarClaimed?'Discovery complete: the millkeeper’s emergency supplies have been recovered. Take the western stairs back to Millbrook.':adventure.millCellarCleared?'The custodian is quiet. Open the millkeeper’s chest for 125 gold and a Shield Awakening Stone.':'Discovery: a forgotten storeroom beneath the watermill. The custodian guards an emergency supply chest. The western stairs return to Millbrook.',
     logging:!woodcutting.axeOwned?'Meet the woodcutter for a free basic axe. Then chop the marked tree, or set a timed offline shift.':'Chop timber to gain Woodcutting XP. Each timber sells for 4 gold at the Trading Post.',
@@ -7872,7 +7893,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;
   const exploring=moonwood.has(next);
-  const nextView=next===wildlifeRoom?wildlifeView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
+  const nextView=next===wildlifeRoom?wildlifeView:next==='willowbank'?willowbankView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
   if(view!==nextView){
     view=nextView;
     canvas.width=view.width;

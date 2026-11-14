@@ -12,8 +12,9 @@ import {cellarFlags} from '../public/mill-cellar.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {familiarAction} from './familiars.mjs';
 import {familiarFishingTime,familiarBond} from '../public/familiars.js';
+import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {watchAction} from './watch-expedition.mjs';
-import {watchFlags} from '../public/region-catalog.js';
+import {watchFlags,willowbankFlags,willowbankLatch,willowbankNook} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
 import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
@@ -98,6 +99,17 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
   if(action==='campRest'){startTrailCampRest(state,camp,now);return;}
   if(action==='campStand'){stopTrailCampRest(state);return;}
   if(cellarAction(state,action))return;
+  if(action==='willowbankExplore'){
+    location(state,['willowbank']);
+    const latch=body.site==='latch';
+    if(!latch&&body.site!=='nook')throw new Error('Choose a Willowbank landmark.');
+    const site=latch?willowbankLatch:willowbankNook;
+    const p=state.position;
+    if(!p||!validRoomTile('willowbank',p.x,p.y,roomBoxes('willowbank'),state.adventure)||Math.abs(p.x-site.x)+Math.abs(p.y-site.y)!==1||latch&&p.y>=site.y+1)throw new Error('Travel beside the landmark. The latch opens from the Millbrook side.');
+    if(latch)state.adventure.willowbankShortcut=true;
+    else state.adventure.willowbankNook=true;
+    return;
+  }
   if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
@@ -405,7 +417,7 @@ export function protectFishingState(previous,next){
   if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
   if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;
   next.familiars=previous.familiars;
-  next.adventure={...next.adventure};for(const key of [...watchFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
+  next.adventure={...next.adventure};for(const key of [...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;

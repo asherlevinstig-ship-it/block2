@@ -45,7 +45,7 @@ export async function handleWorldConnect(request,env){
   const access=room===factionHall?await factionHallAccess(env.TOWER_DB,identity.playerId):null;
   if(room===factionHall&&!access)return json({error:'Your faction hall access has ended.'},403);
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
-  if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);
+  if(!validRoomTile(room,position.x,position.y,boxes,state.adventure))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
     name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),mining:miningPose(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
@@ -138,7 +138,7 @@ export class SharedRoom{
     if(!actor||!other||actor.room!==room||other.room!==room||room==='home'||room==='factionHall'||other.veilUntil>now||actor.veilUntil>now)return json({error:'Choose a visible player in the same public area.'},400);
     const a=actor.walk?autoWalkPosition(actor.walk,now):actor,b=other.walk?autoWalkPosition(other.walk,now):other;
     const from={x:Math.round(a.x),y:Math.round(a.y)},to={x:Math.round(b.x),y:Math.round(b.y)};
-    if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>robberyRules.reach||!reachableMove(room,from,to,roomBoxes(room),1))return json({error:'Move next to this player, within one tile, before stealing.'},400);
+    if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>robberyRules.reach||!reachableMove(room,from,to,roomBoxes(room),1,actor))return json({error:'Move next to this player, within one tile, before stealing.'},400);
     return json({playerId:other.playerId});
   }
   async reserveFishingSpot(request){
@@ -210,6 +210,7 @@ export class SharedRoom{
     meta.activityRevision=revision;
     if(state.robbery?.lastReceived?.at>Date.now()-5000)this.send(ws,{type:'robbery',receipt:state.robbery.lastReceived,revision});
     if(Number.isSafeInteger(pondCatchAt)&&room==='pond'&&state.location==='pond'&&state.fishingReceipt?.room==='pond'&&state.fishingReceipt.at===pondCatchAt)await fishingTogetherCatch(this,ws,meta,pondCatchAt);
+    if(meta.room==='willowbank')meta.willowbankShortcut=state.adventure?.willowbankShortcut===true;
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
     const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge','perk'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
@@ -232,7 +233,7 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
     await this.loadTrees(profile.room);
-    const meta={...profile,usageAt:now,fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    const meta={...profile,willowbankShortcut:state.adventure?.willowbankShortcut===true,usageAt:now,fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();
@@ -283,7 +284,7 @@ export class SharedRoom{
     if(message?.type==='move'){
       if(meta.serverAuto||this.autoPeers.has(meta.playerId))return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
-      if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
+      if(!reachableMove(meta.room,meta,message,meta.boxes,steps,meta)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
       if(meta.x!==message.x||meta.y!==message.y){meta.seat=null;meta.meditationRequested=false;}const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
       ws.serializeAttachment(meta);this.snapshot();return;
     }

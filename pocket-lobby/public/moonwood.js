@@ -7,7 +7,7 @@ import {oreDeposits,quarryMiner,drawQuarryCliffs,depositRoom} from './mining.js'
 import {quarryForge} from './forge.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
-import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
+import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,willowbankView,willowbankBarrier,riverWater,riverBridge} from './region-catalog.js';
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
 import {dungeonFloor,dungeonRooms,isDungeonMob} from './dungeon-arena.js';
@@ -63,8 +63,8 @@ export const moonwood=(()=>{
   connect('thornwood','starfall',[11,5,10,5,'THORNWOOD'],[0,5,1,5,'ROOT CRACK']);
   connect('beaconwatch','millbrook',[0,8,1,8,'WATCH BRIDGE'],[4,9,4,8,'MILL BRIDGE'],'watchBeacon');
   connect('creek','reedwater',[8,9,8,8,'CREEK'],[0,4,1,4,'VALLEY']);
-  connect('reedwater','willowbank',[11,4,10,4,'CROSSING'],[0,5,1,5,'WILLOWBANK']);
-  connect('willowbank','millbrook',[3,0,3,1,'WILLOWBANK'],[0,6,1,6,'MILLBROOK']);
+  connect('reedwater','willowbank',[11,4,10,4,'CROSSING'],[7,15,7,14,'WILLOWBANK']);
+  connect('willowbank','millbrook',[8,0,8,1,'WILLOWBANK'],[0,6,1,6,'MILLBROOK']);
   connect('trail',wildlifeRoom,[10,0,10,1,'LANTERN TRAIL'],[0,9,1,9,'WILDLIFE RESERVE']);
   connect('trail','logging',[9,9,9,8,'TRAIL'],[0,5,1,5,'TIMBER']);
   connect('quarry','crystaldeep',[9,0,9,1,'QUARRY'],[0,5,1,5,'CRYSTALDEEP']);
@@ -82,7 +82,7 @@ export const moonwood=(()=>{
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
   const isWater=(id,x,y)=>id===wildlifeRoom?reserveWater(x,y):watchRooms.includes(id)?watchWater(id,x,y):willowmereRooms.includes(id)?riverWater(id,x,y):id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
-  const blocked=(id,x,y,progress,depthsRun)=>!dungeonFloor(id,x,y,depthsRun?.vaultMechanism)||isWater(id,x,y)&&!riverBridge(id,x,y)&&!(id==='creek'&&y===4&&progress.bridge||id==='depthsGate'&&floodCrossingOpen(depthsRun,x,y));
+  const blocked=(id,x,y,progress,depthsRun)=>id==='willowbank'&&willowbankBarrier(x,y,progress)||!dungeonFloor(id,x,y,depthsRun?.vaultMechanism)||isWater(id,x,y)&&!riverBridge(id,x,y)&&!(id==='creek'&&y===4&&progress.bridge||id==='depthsGate'&&floodCrossingOpen(depthsRun,x,y));
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
   // Give trees boxed in by the seeded scenery a reachable side.
   const reachableTreeSites={
@@ -157,7 +157,7 @@ export const moonwood=(()=>{
 
   function drawGround(id,{point,polygon,surface,block,rect}){
     if(id==='millCellar'){drawCellarGround({point,polygon,surface,block,rect});return;}
-    const {cols,rows}=id===wildlifeRoom?wildlifeView:view, area=areas[id], path=layouts[id].path;
+    const {cols,rows}=id===wildlifeRoom?wildlifeView:id==='willowbank'?willowbankView:view, area=areas[id], path=layouts[id].path;
     const [ground,light,trail]=area.palette;
     if(dungeonRooms.includes(id)){drawDungeonGround(id,{point,polygon,surface,block,rect});return;}
     if(id===wildlifeRoom){drawReserveGround({point,polygon,surface,block,rect});return;}
@@ -203,7 +203,7 @@ export const moonwood=(()=>{
     if(id==='millCellar'){drawCellarAtmosphere(time,{point,ctx,reduced});return;}
     if(id===wildlifeRoom){drawReserveWater(time,{point,surface,reduced});return;}
     if(watchRooms.includes(id)){drawWatchAtmosphere(id,time,{point,surface,block,ctx,reduced,progress});return;}
-    if(willowmereRooms.includes(id)){drawRiverWater(id,time,{point,surface,ctx,reduced});return;}
+    if(willowmereRooms.includes(id)){drawRiverWater(id,time,{point,surface,block,ctx,reduced,progress});return;}
     if(!['creek','pond','depthsGate'].includes(id))return;
     const drained=id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever');
     const phase=reduced?0:time/1700;
@@ -281,7 +281,7 @@ export const moonwood=(()=>{
     if(Object.hasOwn(cellarHeights,type)){drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,pose});return;}
     if(Object.hasOwn(dungeonHeights,type)){drawDungeonProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,pose,combat});return;}
     if(Object.hasOwn(watchPropHeights,type)){drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress});return;}
-    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced});return;}
+    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(type==='willowNook'?{...item,revealed:progress?.willowbankNook}:item,time,{point,polygon,surface,block,rect,ctx,reduced});return;}
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
