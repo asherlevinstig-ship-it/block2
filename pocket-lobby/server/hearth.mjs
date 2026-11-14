@@ -24,6 +24,23 @@ export async function readHearth(db,id,now=Date.now()){
 
 export async function changeHearth(env,row,body,now=Date.now()){
  const db=env.TOWER_DB,id=row.player_id,state=JSON.parse(row.state_json);
+ if(body.kind==='solo'){
+  if(row.last_request===body.operation)return;
+  if(!ready(state)||!state.styleAbilities?.learned?.includes('shareHearth'))throw fail('Learn Share a Hearth and stand beside the campfire.');
+  if((state.styleAbilities.readyAt?.shareHearth??0)>now)throw fail('Share a Hearth is recharging.');
+  if(state.health>=playerMaxHealth(state,now))throw fail('Your health is already full.');
+  if(!Object.hasOwn(mealRecipes,body.meal)||!state.meals?.[body.meal])throw fail('Choose a cooked meal from your bag.');
+  if((await readWaystation(db)).fire<target)throw fail('Restore the Waystation campfire first.');
+  const recovery=20+(abilityMastery(state,'shareHearth').stage-1)*10;
+  state.meals[body.meal]--;
+  state.styleAbilities=normalizeStyleAbilities(state.styleAbilities);
+  state.styleAbilities.hearth={nextAt:now+1000,ticks:5,perTick:recovery/5};
+  state.styleAbilities.readyAt.shareHearth=now+styleAbilities.shareHearth.cooldown;
+  const saved=await db.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? RETURNING *')
+   .bind(JSON.stringify(state),body.operation,now,id,row.revision).first();
+  if(!saved)throw fail('Your character changed. Try again.');
+  return;
+ }
  if(body.kind==='decline'){
   await db.prepare("UPDATE tower_hearth_invites SET status='declined' WHERE id=? AND recipient=? AND status='pending'").bind(body.id,id).run();
   return;

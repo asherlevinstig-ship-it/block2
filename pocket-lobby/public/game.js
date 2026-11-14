@@ -4807,16 +4807,20 @@ window.towerApplyFactionPurchase=(state,fee)=>{
   showTransaction('Faction registered',[{icon:'⚑',text:'You are the founding leader'}],-fee,{auto:true});
 };
 function moonTrailActive(){return familiarBond(familiarState,'owl').rank>=3&&moonSightActive(familiarState,currentRoom,combatNow());}
+function familiarScoutMapActive(){
+ const scout=window.playerCloud?.initial?.styleAbilities?.scout;
+ return scout?.room===currentRoom&&combatNow()<scout.at+45000;
+}
 function worldMapVisibility(){
- const scout=familiarState.equipped==='owl'&&canScoutHere()?(moonTrailActive()?3:2):false;
+ const scout=familiarScoutMapActive()?2:familiarState.equipped==='owl'&&canScoutHere()?(moonTrailActive()?3:2):false;
  return explorationVisibility({currentRoom,discovered:adventure.discovered,knownRooms:explorationRegions['The Tower'],rooms:Object.keys(roomDetails),exits:hudRoomExits,scout});
 }
 function mapPlaceName(room){
  const fog=worldMapVisibility();
- return room===wildlifeRoom||fog.known.has(room)||moonTrailActive()&&fog.scouted.has(room)?explorationName(room):'Unexplored';
+ return room===wildlifeRoom||fog.known.has(room)||(moonTrailActive()||familiarScoutMapActive())&&fog.scouted.has(room)?explorationName(room):'Unexplored';
 }
 function mapRouteVisible(room){
- const fog=worldMapVisibility(),path=hudRoute(room),scouting=moonTrailActive();
+ const fog=worldMapVisibility(),path=hudRoute(room),scouting=moonTrailActive()||familiarScoutMapActive();
  return fog.status(room)!=='hidden'&&path.every((door,i)=>fog.known.has(door.to)||scouting&&fog.scouted.has(door.to)||i===path.length-1);
 }
 function moonRouteToShare(destination){
@@ -5891,7 +5895,7 @@ function renderWorldMap(route=[]){
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
-  const fog=worldMapVisibility(),scouting=moonTrailActive();
+  const fog=worldMapVisibility(),scouting=moonTrailActive()||familiarScoutMapActive();
   const sharedEdges=new Set(),sharedPlaces=new Set();
   for(const trail of roomMoonTrails.filter(openMoonTrail)){
     let from=trail.room;
@@ -6224,16 +6228,16 @@ function renderHearth(){
   if((state.styleAbilities.readyAt?.shareHearth??0)>combatNow()){text('Share a Hearth is recharging.');return;}
   const guests=[...remotePeers.values()].filter(peer=>!peer.auto&&atHearth(peer));
   const food=Object.entries(mealRecipes).filter(([id])=>meals[id]>0);
-  if(!guests.length||!food.length){text(!food.length?'Bring a cooked meal in your bag.':'Ask a player to stand on another side of the campfire.');return;}
+  if(!food.length){text('Bring a cooked meal in your bag.');return;}
   const select=(label,choices,selected)=>{
     const wrap=document.createElement('label'),el=document.createElement('select');wrap.append(label,el);
     for(const [value,name] of choices){const choice=document.createElement('option');choice.value=value;choice.textContent=name;el.append(choice);}
     if(choices.some(([value])=>value===selected))el.value=selected;
     contents.append(wrap);return el;
   };
-  const guest=select('Guest ',guests.map(peer=>[peer.id,peer.name]),prior[0]);
+  const guest=select('Guest ',[['','Eat alone'],...guests.map(peer=>[peer.id,peer.name])],prior[0]);
   const meal=select('Meal ',food.map(([id,item])=>[id,item.name]),prior[1]);
-  const invite=document.createElement('button');invite.type='button';invite.textContent='Invite to share';invite.onclick=()=>refreshHearth({kind:'invite',peer:guest.value,meal:meal.value});contents.append(invite);
+  const invite=document.createElement('button');invite.type='button';invite.textContent=guest.value?'Invite to share':'Eat by the fire';guest.onchange=()=>{invite.textContent=guest.value?'Invite to share':'Eat by the fire';};invite.onclick=()=>refreshHearth(guest.value?{kind:'invite',peer:guest.value,meal:meal.value}:{kind:'solo',meal:meal.value});contents.append(invite);
 }
 async function refreshHearth(body){
   if(hearthBusy||!window.playerCloud?.hearth)return;
@@ -6289,7 +6293,7 @@ function ambushReady(){
   (enemy.id==='dusktusk'||combatNow()>=huntRespawnAt(hunting,enemy))&&window.ambushPosition?.({x:player.cx,y:player.cy},site);
 }
 function openAppraisalMarket(){
- if(currentRoom!=='market'){note('Visit the Trading Post and choose an ore listing to appraise.');return;}
+ if(currentRoom!=='market'){note('Visit the Trading Post and choose a listing to appraise.');return;}
  window.towerOpenMarketStalls?.();
 }
 function useAmbush(){
@@ -6398,7 +6402,7 @@ async function castStyleAbility(id,body){
     if(id==='scoutAhead'){
       const site=scoutedKeeperClue();
       if(site)animateFamiliarScout(site);
-      worldLabelKey='';note('Your familiar found a crest. Follow the gold signal and read the clue.');
+      worldLabelKey='';note(site?'Your familiar found a crest. Follow the gold signal and read the clue.':'Your familiar scouted nearby trails. Open the Map to see them.');
       refreshStyleAbilityBar();return;
     }
     if(id==='trackPrey'){

@@ -156,7 +156,7 @@ export function initializeRobbery({doc=document,cloud,hooks}){
    if(!receipt)return;
    const reward=receipt.reward?.kind==='item'?receipt.reward.name:receipt.reward?.amount?'+'+receipt.reward.amount+' gold':'Wallet full';
    hooks.pvpState?.(response.state,receipt);
-   $('pvpStatus').textContent=receipt.power==='deathmark'?'Deathmark placed on '+receipt.name+' · Strike within ten seconds.':receipt.trail?'Trail found for '+receipt.name+' · Follow the marked route.':receipt.killed?'Defeated '+receipt.name+' · '+reward+(receipt.bounty?' · +'+(receipt.reward.bounty??0)+' bounty gold':receipt.classification==='self-defence'?' · Self-defence · No Evil':' · +1 Evil')+(receipt.stealth?' · +1 Stealth XP':''):'Hit '+receipt.name+' for '+receipt.damage+' HP.'+(receipt.healed?' Restored '+receipt.healed+' HP.':'');
+   $('pvpStatus').textContent=receipt.trail?'Trail found for '+receipt.name+' · Follow the marked route.':receipt.killed?'Defeated '+receipt.name+' · '+reward+(receipt.bounty?' · +'+(receipt.reward.bounty??0)+' bounty gold':receipt.classification==='self-defence'?' · Self-defence · No Evil':' · +1 Evil')+(receipt.stealth?' · +1 Stealth XP':''):'Hit '+receipt.name+' for '+receipt.damage+' HP.'+(receipt.healed?' Restored '+receipt.healed+' HP.':'');
    if(receipt.killed)hooks.pvpReward?.(response.state,receipt.reward);
   }catch(error){$('pvpStatus').textContent=error.message;}
   finally{busy=false;renderPvp();}

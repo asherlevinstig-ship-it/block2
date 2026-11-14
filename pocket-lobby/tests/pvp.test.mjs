@@ -103,11 +103,10 @@ test('a defender can kill an attacker without Evil or guard/witness punishment',
  assert.equal(a.state('b').pvp.defensiveKills,1);assert.equal(a.state('b').pvp.wantedAt,undefined);assert.equal(a.state('b').pvp.incidents,undefined);
 });
 
-test('Deathmark costs AP, boosts exactly one matching strike, preserves defence rights and recharges',async t=>{
+test('Deathmark strikes immediately for one AP, preserves defence rights and recharges',async t=>{
  const a=arena(t,{styleAbilities:{learned:['deathmark']}});
- const mark=await a.hit('a',20000,'deathmark');assert.equal(mark.receipt.damage,0);assert.equal(a.state('a').actionPoints.value,19);assert.equal(a.state('b').health,100);
+ const boosted=await a.hit('a',20000,'deathmark');assert(boosted.receipt.damage>0);assert.equal(a.state('a').actionPoints.value,19);assert.equal(a.state('b').health,100-boosted.receipt.damage);
  await assert.rejects(a.hit('a',21000,'deathmark'),/recharging/);
- const boosted=await a.hit('a',22000);assert.equal(a.state('a').styleAbilities.deathmarkUntil,undefined);
  const normal=await a.hit('a',24000);assert(boosted.receipt.damage>normal.receipt.damage);assert.equal(a.state('a').styleAbilities.mastery.deathmark.uses,1);
  const b=publicPlayerState(a.state('a'));assert.equal(b.pvp.mark,undefined);assert.equal(b.pvp.engagements,undefined);assert.equal(b.pvp.lastOpponent.id,undefined);
 });
@@ -122,7 +121,7 @@ test('Siphon heals from actual damage, cannot overheal and counts mastery only w
 test('Bloodlust activates on a kill, buffs following PvP strikes and awards mastery once per activation',async t=>{
  const a=arena(t,{stats:{strengthXp:skillXpForLevel(8)},styleAbilities:{learned:['bloodlust']}});
  const normal=await a.hit('a',20000);a.update('b',s=>s.health=1);await a.hit('a',22000);
- assert.equal(a.state('a').styleAbilities.bloodlustUntil,37000);
+ assert.equal(a.state('a').styleAbilities.bloodlustUntil,67000);
  a.update('b',s=>{s.location='trail';s.health=100;delete s.hunting.recoveryUntil;});
  const boosted=await a.hit('a',24000);assert(boosted.receipt.damage>normal.receipt.damage);
  await a.hit('a',26000);assert.equal(a.state('a').styleAbilities.mastery.bloodlust.uses,1);
@@ -133,7 +132,7 @@ test('Shadow Pursuit follows only a recent opponent across outdoor areas, never 
  await assert.rejects(a.hit('a',19000,'shadowPursuit'),/Fight a player/);
  await a.hit('a',20000);a.update('b',s=>s.location='pond');
  const result=await a.hit('a',22000,'shadowPursuit');assert.equal(result.receipt.trail.room,'pond');assert.equal(a.state('a').location,'trail');assert.equal(a.state('a').actionPoints.value,18);
- assert.equal(normalizeStyleAbilities(a.state('a').styleAbilities).pursuit.until,52000);
+ assert.equal(normalizeStyleAbilities(a.state('a').styleAbilities).pursuit.until,142000);
  const safe=publicPlayerState(a.state('a'));assert.equal(safe.pvp.pursuit,undefined);
  a.update('a',s=>{s.location='pond';});await a.hit('a',24000);assert.equal(a.state('a').styleAbilities.mastery.shadowPursuit.uses,1);
  a.update('b',s=>{s.styleAbilities={learned:['shadowstep'],quietUntil:100000};});

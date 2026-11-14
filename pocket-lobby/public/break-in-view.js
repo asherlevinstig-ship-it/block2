@@ -1,3 +1,4 @@
+import {furnitureCatalog} from './furniture-catalog.js';
 import {furnitureBox,validRoomTile} from './shared-world.js';
 
 export function showBreakInRoom(doc,visit){
@@ -28,7 +29,8 @@ export function showBreakInRoom(doc,visit){
    const boxIndex=boxes.findIndex(box=>tile.x<box.x+box.w&&tile.x+1>box.x&&tile.y<box.y+box.d&&tile.y+1>box.y);
    const item=visit.furniture[boxIndex];
    tileButton.textContent=here?'●':item?'▣':'·';
-   tileButton.disabled=!pos||!open(tile)||Math.abs(tile.x-pos.x)+Math.abs(tile.y-pos.y)!==1;
+   const adjacent=!!pos&&Math.abs(tile.x-pos.x)+Math.abs(tile.y-pos.y)===1;
+   tileButton.disabled=!adjacent;
    tileButton.style.background=here?'#665321':item?'#43334a':'#233050';
    tileButton.setAttribute('aria-label',here?'Your position':item?.type??'Floor '+(tile.x+1)+', '+(tile.y+1));
    tileButton.title=item?.type??'';
@@ -37,7 +39,13 @@ export function showBreakInRoom(doc,visit){
  for(const tile of tiles){
   const button=doc.createElement('button');button.type='button';
   button.style.cssText='aspect-ratio:1;padding:0;min-width:0;min-height:0;';
-  button.onclick=()=>move(tile);floor.append(button);
+  button.onclick=()=>{
+   if(Date.now()>=visit.until){close();return;}
+   const index=boxes.findIndex(box=>tile.x<box.x+box.w&&tile.x+1>box.x&&tile.y<box.y+box.d&&tile.y+1>box.y);
+   const item=visit.furniture[index];
+   if(item){status.textContent='You inspect '+(furnitureCatalog[item.type]?.name??item.type)+'.';return;}
+   move(tile);
+  };floor.append(button);
  }
  dialog.addEventListener('keydown',event=>{
   const step={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[event.key];

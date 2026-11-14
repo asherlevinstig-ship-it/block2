@@ -42,7 +42,7 @@ export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomR
  actor.styleAbilities=normalizeStyleAbilities(actor.styleAbilities);
  if(power&&!actor.styleAbilities.learned.includes(power))throw invalid('Accept this ability before using it.');
  if(power&&(actor.styleAbilities.readyAt[power]??0)>now)throw invalid('This ability is still recharging.');
- const striking=!['deathmark','shadowPursuit'].includes(power);
+ const striking=power!=='shadowPursuit';
  if(power!=='shadowPursuit'&&(typeof body.target!=='string'||!/^[a-f0-9]{24}$/.test(body.target)))throw invalid('Choose a nearby player.');
  ready(actor);
  const weapon=weaponProfile(actor.combatGear.equippedWeapon,actor.combatGear.activeSwordUpgrade,actor.combatGear.weaponEnchantments);
@@ -83,21 +83,18 @@ export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomR
   const remember=(state,otherId)=>({...state.pvp,engagements:[...(state.pvp?.engagements??[]).filter(e=>e.id!==otherId&&e.until>now).slice(-7),{id:otherId,aggressor,until:now+120000}],lastOpponent:{id:otherId,name:state===actor?target.avatar.name:actor.avatar.name,until:now+120000}});
   actor.pvp=remember(actor,targetRow.player_id);target.pvp=remember(target,row.player_id);
  }
- if(power==='deathmark'){
-  actor.pvp={...actor.pvp,mark:{targetId:targetRow.player_id,until:now+10000,bonus:.25+(stage-1)*.1}};
-  abilities.deathmarkUntil=now+10000;
-  target.pvp.lastMark={id:body.operation,at:now,until:now+10000,name:actor.avatar.name,room:actor.location};
- }else if(power==='shadowPursuit'){
-  abilities.pursuit={room:target.location,name:target.avatar.name,until:now+30000+(stage-1)*15000};
+ if(power==='shadowPursuit'){
+  abilities.pursuit={room:target.location,name:target.avatar.name,until:now+120000+(stage-1)*30000};
   actor.pvp={...actor.pvp,pursuit:{id:targetRow.player_id,from:actor.location,until:abilities.pursuit.until}};
  }else{
   const marked=actor.pvp.mark?.targetId===targetRow.player_id&&actor.pvp.mark.until>now;
   const raging=abilities.learned.includes('bloodlust')&&abilities.bloodlustUntil>now;
-  const bonus=(marked?actor.pvp.mark.bonus:0)+(raging ? .1+(abilityMastery(actor,'bloodlust').stage-1)*.05:0);
+  const bonus=(power==='deathmark'?.25+(stage-1)*.1:marked?actor.pvp.mark.bonus:0)+(raging ? .1+(abilityMastery(actor,'bloodlust').stage-1)*.05:0);
   const armor=huntingAttributes(target.stats).armor+(armourProfile(armourSelection(target.combatGear))?.absorption??0);
   damage=Math.min(target.health,Math.max(3,Math.round(stats.damage*.55*(1+bonus))-armor));
   target.health-=damage;killed=target.health===0;bounty=killed&&!!target.pvp.wantedAt;
   classification=target.pvp.wantedAt?'bounty':aggressor===targetRow.player_id?'self-defence':'unprovoked';
+  if(power==='deathmark')awardAbilityUse(actor,'deathmark',body.operation);
   if(marked){delete actor.pvp.mark;delete abilities.deathmarkUntil;awardAbilityUse(actor,'deathmark');}
   if(raging)awardAbilityUse(actor,'bloodlust','bloodlust:'+abilities.bloodlustUntil);
   if(actor.pvp.pursuit?.id===targetRow.player_id&&actor.pvp.pursuit.until>now&&actor.pvp.pursuit.from!==actor.location){awardAbilityUse(actor,'shadowPursuit','pursuit:'+actor.pvp.pursuit.until);delete actor.pvp.pursuit;}
@@ -114,7 +111,7 @@ export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomR
    const key=classification==='bounty'?'bountyKills':classification==='self-defence'?'defensiveKills':'unprovokedKills';
    actor.pvp[key]=(actor.pvp[key]??0)+1;
    if(bounty){const amount=Math.min(bountyGold,100000000-actor.credits);actor.credits+=amount;actor.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(actor.goldEarned??0)+amount);reward.bounty=amount;}
-   if(actor.styleAbilities.learned.includes('bloodlust')&&(actor.styleAbilities.readyAt.bloodlust??0)<=now){actor.styleAbilities.bloodlustUntil=now+15000;actor.styleAbilities.readyAt.bloodlust=now+60000;}
+   if(actor.styleAbilities.learned.includes('bloodlust')&&(actor.styleAbilities.readyAt.bloodlust??0)<=now){actor.styleAbilities.bloodlustUntil=now+45000;actor.styleAbilities.readyAt.bloodlust=now+60000;}
   }
  }
  // Mastery normalization replaces the object; apply cooldowns to the latest state.

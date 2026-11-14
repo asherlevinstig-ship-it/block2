@@ -48,14 +48,16 @@ export async function changeMarketStall(db,row,state,body,now=Date.now()){
     if(!abilities.learned.includes('appraise'))throw invalid('Accept Appraise before inspecting market prices.');
     if((abilities.readyAt.appraise??0)>now)throw invalid('Appraise is still recharging.');
     const listing=await db.prepare('SELECT * FROM tower_market_stalls WHERE listing_id=? AND expires_at>?').bind(body.id,now).first();
-    if(!listing||!listing.item.startsWith('ore:'))throw invalid('Choose an available ore listing.');
+    if(!listing||!Object.hasOwn(stallCatalog,listing.item))throw invalid('Choose an available listing.');
     const stats=await db.prepare(`SELECT COUNT(*) trades,COALESCE(SUM(quantity),0) volume,
       SUM(quantity*price)*1.0/SUM(quantity) average,MIN(price) low,MAX(price) high
       FROM tower_market_sales WHERE item=? AND sold_at>=? AND sold_at<=?`).bind(listing.item,now-7*86400000,now).first();
+    const offers=stats.trades<3?await db.prepare(`SELECT COUNT(*) count,MIN(price) low,MAX(price) high
+      FROM tower_market_stalls WHERE item=? AND listing_id<>? AND expires_at>?`).bind(listing.item,listing.listing_id,now).first():null;
     abilities.readyAt.appraise=now+abilityMastery(state,'appraise').cooldown;
     state.styleAbilities=abilities;
-    if(stats.trades>=3)awardAbilityUse(state,'appraise',listing.listing_id);
-    const receipt={kind,item:listing.item,price:listing.price,trades:stats.trades,volume:stats.volume,
+    if(stats.trades>=3||offers?.count>0)awardAbilityUse(state,'appraise',listing.listing_id);
+    const receipt={kind,item:listing.item,price:listing.price,trades:stats.trades,volume:stats.volume,...(offers?.count?{otherOffers:offers}:{}),
       ...(stats.trades>=3?{average:stats.average,low:stats.low,high:stats.high}:{})};
     const [saved]=await db.batch([
       db.prepare(`UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=?

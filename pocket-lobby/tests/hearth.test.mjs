@@ -33,3 +33,19 @@ test('hearth acceptance consumes one meal and heals both players over five ticks
   assert.equal(saved.styleAbilities.hearth,undefined);
  }
 });
+
+test('solo hearth meals are consumed once and heal without a guest',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const now=1000000,id='host';
+ const state=normalizeState({location:'waystation',position:{x:4,y:5},health:60,meals:{boarStew:2},styleAbilities:{learned:['shareHearth']}});
+ sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?)').run(id,JSON.stringify(state),'create',now);
+ for(let i=0;i<8;i++)sql.prepare('INSERT INTO tower_waystation_donations (player_id,operation,site,name,at) VALUES (?,?,?,?,?)').run(id,'fire:'+i,'fire','Host',now);
+ const read=()=>sql.prepare('SELECT * FROM tower_players WHERE player_id=?').get(id);
+ const action={kind:'solo',meal:'boarStew',operation:'solo-hearth'};
+ await changeHearth({TOWER_DB:db},read(),action,now);
+ await changeHearth({TOWER_DB:db},read(),action,now+1);
+ const saved=JSON.parse(read().state_json);
+ assert.equal(saved.meals.boarStew,1);
+ assert(settleHearth(saved,now+5000));
+ assert.equal(saved.health,80);
+});

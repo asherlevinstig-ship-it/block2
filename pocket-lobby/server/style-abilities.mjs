@@ -44,7 +44,7 @@ export function styleAbilityAction(state,action,body,now){
  if(id==='scoutAhead'){
   if(!state.familiars?.owned?.includes(state.familiars.equipped))throw invalid('Equip a familiar before scouting.');
   if(encounter||state.depthsRun)throw invalid('Finish combat before scouting.');
-  if(!scoutAheadSite(state))throw invalid(state.adventure?.keeperRouteFound?'You already found the path to Keepers’ Overlook.':state.adventure?.keeperMarkerRead?'Use Scout Ahead at the Waystation to find the matching crest.':'Use Scout Ahead in Willowbank to find the faded crest.');
+  if(!scoutAheadSite(state)&&!state.adventure?.discovered?.includes(state.location))throw invalid('Use Scout Ahead at a discovered outdoor stop.');
   abilities.scout={room:state.location,at:now};
   abilities.readyAt[id]=now+styleAbilities[id].cooldown;
   state.styleAbilities=abilities;

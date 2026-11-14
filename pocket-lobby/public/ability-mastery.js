@@ -7,7 +7,7 @@ export const masteryBenefits={
  raiseFallen:['Base undead strength and lifetime','+1 strike damage · +5s lifetime, up to 60s','+2 strike damage · +10s lifetime, up to 60s'],
  deathmark:['25% marked strike bonus','35% marked strike bonus','45% marked strike bonus'],
  bloodlust:['10% PvP damage bonus','15% PvP damage bonus','20% PvP damage bonus'],
- shadowPursuit:['30-second trail','45-second trail','60-second trail'],
+ shadowPursuit:['2-minute trail','150-second trail','3-minute trail'],
  siphon:['Heal 25% of damage dealt','Heal 35% of damage dealt','Heal 45% of damage dealt'],
  patientCast:['50% wider reel window','75% wider reel window','100% wider reel window'],
  stoneguard:['30% damage reduction','40% damage reduction','50% damage reduction'],
@@ -24,7 +24,7 @@ export const masteryPractice={
  lightFingers:'Complete a successful Light Fingers steal. One use per attempt.',
  cutpurse:'Successfully steal additional gold with Cutpurse. One use per attempt.',
  raiseFallen:'Have your undead ally land a creature strike. One successful use per summon.',
- deathmark:'Strike the marked player before the mark fades.',
+ deathmark:'Land a Deathmark strike.',
  bloodlust:'Land a weapon strike while Bloodlust is active. One use per activation.',
  shadowPursuit:'Follow a trail to an opponent in a different area. One use per pursuit.',
  siphon:'Restore missing health with an empowered strike.',
@@ -36,7 +36,7 @@ export const masteryPractice={
  scoutAhead:'Read a new clue highlighted by your familiar.',
  shareHearth:'Share a meal that helps an injured player.',
  ambush:'Land an opening Ambush strike.',
- appraise:'Appraise a new listing with enough completed sales.'
+ appraise:'Appraise a new listing with comparable sales or other offers.'
 };
 export function abilityMastery(state,id){
  const definition=styleAbilities[id];

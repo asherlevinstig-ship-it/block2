@@ -42,7 +42,7 @@ export function initializeMarketStalls(api,doc=document){
     const expiry=entry.expiresAt<=board.now?'Expired':'Ends '+new Date(entry.expiresAt).toLocaleString();
     info.textContent=entry.seller+' · '+entry.quantity+' available · '+entry.price.toLocaleString()+' gold each · '+expiry;
     card.append(title,info);
-    if(entry.item.startsWith('ore:')&&api.state().styleAbilities?.learned?.includes('appraise')){
+    if(api.state().styleAbilities?.learned?.includes('appraise')){
       const appraise=button('Appraise ore',()=>change({kind:'appraise',id:entry.id}));
       appraise.dataset.appraise='true';
       const seconds=Math.ceil(((api.state().styleAbilities.readyAt?.appraise??0)-Date.now())/1000);
@@ -77,7 +77,8 @@ export function initializeMarketStalls(api,doc=document){
     }
     if(appraisal&&Date.now()<appraisalUntil){
       const report=appraisal,element=doc.createElement('p');element.className='market-appraisal';
-      if(report.average===undefined)element.textContent='Not enough recent sales. '+report.trades+' completed trades · '+report.volume+' units over the last 7 days. At least 3 trades are needed.';
+      if(report.otherOffers)element.textContent='Other active listings ask '+report.otherOffers.low+'–'+report.otherOffers.high+' gold per unit across '+report.otherOffers.count+' offers. Fewer than three completed sales were recorded this week.';
+      else if(report.average===undefined)element.textContent='Not enough recent sales. '+report.trades+' completed trades · '+report.volume+' units over the last 7 days. At least 3 trades are needed.';
       else{
         const difference=Math.round((report.price/report.average-1)*100);
         element.textContent=stallCatalog[report.item].name+' · Typical price '+report.average.toFixed(1)+' gold per unit · '+report.low+'–'+report.high+' gold range · '+report.volume+' units across '+report.trades+' trades in the last 7 days. This listing is '+(difference===0?'at the typical price.':Math.abs(difference)+'% '+(difference>0?'above':'below')+' the typical price.');
