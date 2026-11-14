@@ -78,7 +78,9 @@ let familiarReaction=null;
 const familiarFollowers=new Map(),familiarPortraits=[];
 const renderedActors=[],actorNameplates=new Map();
 let worldLabelBounds=[];
-const crowdedRoom=()=>remotePeers.size>=6&&['hub','logging','pond'].includes(currentRoom);
+const woodlandRouteRooms=new Set(['grove','creek','roots','thornwood']);
+const woodlandReadabilityRooms=new Set(['logging','pond',...woodlandRouteRooms]);
+const crowdedRoom=()=>remotePeers.size>=6&&(currentRoom==='hub'||woodlandReadabilityRooms.has(currentRoom));
 let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=!!savedPlayerState?.depthsRun?.rewardChests?.[savedPlayerState?.location];
@@ -270,15 +272,24 @@ function drawWoodEffects(time){
 }
 
 function timberCanopyOpacity(item){
-  if(!['logging','pond'].includes(currentRoom))return 1;
+  if(!woodlandReadabilityRooms.has(currentRoom))return 1;
   const [x,y]=point(item.x+.5,item.y+.5);
-  const covers=([px,py])=>Math.abs(px-x)<30&&py<y&&py>y-55;
-  const actors=[player,...(currentRoom==='logging'?remotePeers.values():[])];
-  if(actors.some(actor=>{
+  const covers=([px,py])=>Math.abs(px-x)<30&&py<y&&py>y-(item.type==='watchPine'?66:55);
+  const overlapsActor=actor=>{
     const [px,py]=point((actor.rx??actor.x)+.5,(actor.ry??actor.y)+.5);
     return covers([px,py-20]);
-  }))return .22;
+  };
+  if(overlapsActor(player)||currentRoom!=='pond'&&Array.from(remotePeers.values()).some(overlapsActor))return .22;
   if(currentRoom==='logging'&&[[5.8,3.5],[4.5,3.5],...route.slice(0,3).map(({x,y})=>[x+.5,y+.5])].some(([tx,ty])=>covers(point(tx,ty))))return .28;
+  if(woodlandRouteRooms.has(currentRoom)){
+    const layout=moonwood.layouts[currentRoom];
+    const crossesRoute=(tx,ty)=>covers(point(tx+.5,ty+.5));
+    const nearPath=[[item.x-1,item.y],[item.x,item.y-1],[item.x-1,item.y-1],[item.x-2,item.y-2]];
+    if(nearPath.some(([tx,ty])=>layout.path.has(tileKey(tx,ty))&&crossesRoute(tx,ty)))return .38;
+    if(currentRoom==='grove'&&adventure.groveTrail&&layout.hiddenTrail.some(([tx,ty])=>crossesRoute(tx,ty)))return .28;
+    if(roomDoors[currentRoom].some(door=>doorAvailable(door)&&crossesRoute(door.tile.x,door.tile.y)))return .28;
+    if(currentRoom==='thornwood'&&covers(point(6.5,5.5,18)))return .28;
+  }
   return 1;
 }
 function drawTimberTree(item,time){
@@ -3417,14 +3428,22 @@ function drawMoonwoodDetails(time){
   }
   if(currentRoom==='grove'&&adventure.groveTrail){
     for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
-      surface(x+.06,y+.06,.88,.88,.25,'#6d8195','#8fb6b9');
-      surface(x+.42,y+.42,.16,.16,.35,'#bedace');
+      surface(x+.04,y+.04,.92,.92,.25,'#416e70','#a7ded1');
+      surface(x+.34,y+.34,.32,.32,.35,'#a6d7bd','#dbf3d2');
+      surface(x+.46,y+.46,.08,.08,.45,'#fff1bc');
     }
   }
-  if(currentRoom==='creek'&&adventure.bridge){
+  if(currentRoom==='creek'){
+    for(const x of [4,6]){
+      surface(x+.06,4.06,.88,.88,.33,'#8c9b85','#d4d9aa');
+      for(const y of [4.12,4.77]){
+        block(x+.45,y,.12,.12,0,8,['#d4c6a0','#62594c','#8d7c61']);
+        surface(x+.43,y-.03,.16,.17,8,adventure.bridge?'#baf0c9':'#e4c18a');
+      }
+    }
     for(let i=0;i<3;i++){
-      block(5.05+i*.31,4.25+(i%2)*.07,.26,.50,-1,3,['#afc9c7','#577489','#779da7']);
-      surface(5.10+i*.31,4.32+(i%2)*.07,.12,.15,2.2,'#e0ded0');
+      block(5.025+i*.32,4.14+(i%2)*.03,.27,.72,-1,3,adventure.bridge?['#c2d7c2','#577489','#779da7']:['#728d94','#455c72','#577185']);
+      if(adventure.bridge)surface(5.09+i*.32,4.35,.14,.29,2.2,'#ecf0c9');
     }
   }
   for(const door of roomDoors[currentRoom]){
@@ -3503,12 +3522,14 @@ function updateWorldLabels(){
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   worldLabelBounds=[];
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
+  container.classList.toggle('woodland-route-labels',woodlandRouteRooms.has(currentRoom));
+  const separateLabels=woodlandRouteRooms.has(currentRoom)&&canvas.clientWidth<520;
   const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
     if(['Fishing station','Hidden fishing pool'].includes(text)&&!subtitle)subtitle='1 AP / catch';
     const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
@@ -3541,7 +3562,16 @@ function updateWorldLabels(){
     const width=label.offsetWidth||text.length*7+16,height=label.offsetHeight||(subtitle?30:19);
     const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
     const left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)));
-    const top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)));
+    let top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)));
+    if(separateLabels&&action){
+      const origin=top;
+      for(const offset of [0,16,-16,32,-32,48,-48]){
+        const candidate=origin+offset;
+        if(candidate<5||candidate+height>availableHeight-5)continue;
+        if(worldLabelBounds.some(box=>left<box.right+3&&left+width+3>box.left&&candidate<box.bottom+3&&candidate+height+3>box.top))continue;
+        top=candidate;break;
+      }
+    }
     label.style.left=left+'px';label.style.top=top+'px';
     if(action)worldLabelBounds.push({left,right:left+width,top,bottom:top+height});
     return label;
@@ -3550,12 +3580,14 @@ function updateWorldLabels(){
   for(const door of doors){
     let anchor;
     if(currentRoom==='millCellar'&&door.to==='millbrook'||door.to==='millCellar')continue;
-    if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
+    if(currentRoom==='creek'&&door.to==='ruins'&&player.cx<5){anchor=point(4.4,4.4,25);}
+    else if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
     else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
     const bridge=door.gate==='publicPondBridge';
     const label=bridge?'Silverfin Bridge':currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.side==='wild'?explorationName(door.to):door.label;
     const sign=add(label,...anchor,'door',()=>travelDoor(door),bridge?explorationName(door.to):'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
+    if(currentRoom==='creek'&&door.to==='ruins')sign.classList.add('creek-crossing-label');
     sign.dataset.apCost='1';sign.title=label+' · Travel · 1 AP';sign.setAttribute('aria-label','Go to '+label+' · Travel · 1 AP');
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
@@ -3671,6 +3703,9 @@ function updateWorldLabels(){
       const label=add(names[post.y],...point(post.x+.5,post.y+.5,28),'npc',()=>use(post),canvas.clientWidth<520?'':'Cast · 1 AP / catch');
       label.title=names[post.y]+' · Cast · 1 AP / catch';
     }
+  }
+  if(currentRoom==='grove'&&adventure.lantern&&!adventure.groveTrail){
+    add('Light lantern',...point(5.5,5.5,25),'npc',()=>$('lantern').onclick(),'Reveal the shrine trail');
   }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));

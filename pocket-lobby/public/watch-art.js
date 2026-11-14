@@ -35,12 +35,14 @@ export function drawWatchAtmosphere(id,time,{point,surface,block,ctx,reduced,pro
   for(const y of [7.9,9]){block(0,y,4,.12,9,2,wood);for(const x of [0,1,2,3,3.8])block(x,y,.13,.14,0,12,wood);}
  }
 }
-export function drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress}){
+export function drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,canopyOpacity=1}){
  const {x,y,type}=item,[px,py]=point(x+.5,y+.5),part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
  if(type==='watchOak'||type==='watchPine'){
   surface(x-.2,y-.2,1.4,1.3,.3,'#111a2b55');part(.38,.4,.2,.2,0,34,wood);
+  if(canopyOpacity<1){ctx.save();ctx.globalAlpha*=canopyOpacity;}
   if(type==='watchPine')for(let i=0;i<4;i++){const w=24-i*4,z=py-22-i*10;polygon([[px,z-23],[px+w,z+5],[px-w,z+5]],['#38495a','#495c69','#607584','#829494'][i]);polygon([[px,z-23],[px+3,z-7],[px-w,z+5]],'#80969355');}
   else{for(let i=0;i<18;i++){const a=i*2.4,dx=Math.sin(a)*(i%3?20:11),dy=Math.cos(a)*10;ctx.fillStyle=['#8f653d','#be8144','#dfa14f','#f0c270'][i%4];ctx.beginPath();ctx.ellipse(px+dx,py-44+dy,13,10,0,0,Math.PI*2);ctx.fill();}rect(px-11,py-54,6,2,'#f7d78b');}
+  if(canopyOpacity<1)ctx.restore();
  }else if(type==='watchTower'){
   part(.15,.15,2.65,2.65,0,8,masonry);part(.42,.42,2.1,2.1,8,74,masonry);part(.23,.23,2.5,2.5,82,7,['#d9d7bc','#6c7d89','#9daaaa']);
   for(let i=0;i<4;i++){part(.23+i*.67,.23,.36,.3,89,10,masonry);part(2.43,.23+i*.67,.3,.36,89,10,masonry);}

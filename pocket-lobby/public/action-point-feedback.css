@@ -8,3 +8,5 @@
 @media(max-width:520px){.shell .play>.exploration-nav{margin-top:var(--ap-profile-clearance,146px)}.shell .play:not(:has(>.exploration-nav:not([hidden]))){padding-top:var(--ap-profile-clearance,146px)}}
 
 @media(max-width:520px){.world-label[data-wall][data-ap-cost]::after{content:"1 AP";padding:2px 4px;font-size:8px}}
+
+@media(max-width:519px){.woodland-route-labels .world-label[data-ap-cost]:not(:hover):not(:focus-visible)::after{display:none}}

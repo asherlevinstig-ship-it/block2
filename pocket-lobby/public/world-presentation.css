@@ -83,3 +83,5 @@
  .world-labels[data-room=hub] .world-label-npc{font-size:9px;padding:4px 6px}
  .world-labels[data-room=pond] .world-label-shoal{font-size:9px;padding:4px 5px}
 }
+
+.world-label.creek-crossing-label{z-index:2;border-color:#a6d8bd;background:#163b3d;color:#e4f6d5}
