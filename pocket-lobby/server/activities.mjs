@@ -33,6 +33,7 @@ import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuratio
 import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
+import {activePreyTrail,preyTrail} from '../public/style-abilities.js';
 import {moonbackRules,moonbackSighting} from '../public/moonback.js';
 import {veilCloakId} from '../public/wardrobe.js';
 
@@ -107,7 +108,9 @@ function result(state,event,now,random=Math.random){
     }
     else{
       if(enemy.id==='crystalGuardian'&&state.combatId){const rare=awardRareHunt(state,enemy.id,random,now);if(rare)event.rareDrop=rewards.rareEquipment=rare.id;}
-      if(enemy.id==='moonbackStag'){
+      if(enemy.id==='dusktusk'){
+        if(state.styleAbilities?.preyTrail)state.styleAbilities.preyTrail.cleared=true;
+      }else if(enemy.id==='moonbackStag'){
         state.hunting.moonbackSighting=encounter.moonbackId;
         if(!state.wardrobe.owned.includes(veilCloakId)&&random()<moonbackRules.cloakChance){
           state.wardrobe.owned.push(veilCloakId);
@@ -232,7 +235,12 @@ export function activityAction(state,action,body,now,random){
     if(outfitVeilUntil(state)>now)throw new Error('Choose End Veilstep before starting a fight.');
     let sighting=null,enemy=huntEnemyForRoom(state.location);
     const index=depthsStageIndex(state.location);
-    if(body.moonbackId!==undefined){
+    if(body.trackedPrey===true){
+      const trail=activePreyTrail(state,now);
+      if(trail?.step!==preyTrail.tracks.length)throw new Error('Follow the fresh tracks to reveal the Dusktusk Boar.');
+      sighting=preyTrail.site;
+      enemy=huntEnemies.dusktusk;
+    }else if(body.moonbackId!==undefined){
       sighting=moonbackSighting(now);
       if(!sighting||sighting.id!==body.moonbackId||sighting.room!==state.location)throw new Error('The Moonback Stag moved. Follow its fresh tracks.');
       if(state.hunting.moonbackSighting===sighting.id)throw new Error('You already won this sighting. Follow the next trail when it returns.');
@@ -243,7 +251,7 @@ export function activityAction(state,action,body,now,random){
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(!sighting&&(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy)))throw new Error('Invalid encounter. Wait for the creature to return.');
     startCombatEncounter(state,enemy,now);
-    if(sighting)Object.assign(state.hunting.encounter,{moonbackRoom:sighting.room,moonbackId:sighting.id});
+    if(sighting&&enemy.id==='moonbackStag')Object.assign(state.hunting.encounter,{moonbackRoom:sighting.room,moonbackId:sighting.id});
     if(body.standGround===true&&index>=0)state.hunting.encounter.autoRetreatDisabled=true;
     const firstTactic=index>=0?nextCombatTactic(state):null;
     if(firstTactic?.action==='flee'){

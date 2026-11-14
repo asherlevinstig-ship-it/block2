@@ -33,6 +33,7 @@ const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'cha
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
 export const huntEnemies={
   boar,beetle,
+  dusktusk:{...boar,id:'dusktusk',name:'Dusktusk Boar',health:90,damage:15,xp:[20,15,20]},
   crystalGuardian:{...beetle,id:'crystalGuardian',name:'Shardback Guardian',room:'crystaldeep',prop:'crystalGuardian',archetype:'armoured',health:185,damage:20,shellArmor:5,firstAttack:2800,respawn:120000,loot:'runicFragment',lootName:'Runic Fragment',sellPrice:20,xp:[40,25,40],masteryXp:25,tactic:'SHARDBACK GUARDIAN · Leave the marked stomp, dodge hurled stone, and punish its recovery. Victory opens the rich iron veins for two minutes.'},
   millCustodian:{id:'millCustodian',name:'Clockwork Custodian',room:'millCellar',prop:'cellarCustodian',archetype:'armoured',move:'wardenSlam',health:110,firstAttack:2400,interval:3400,damage:14,shellArmor:3,exposureMs:2000,loot:'stonebackShell',lootName:'Salvaged plating',sellPrice:45,xp:[22,18,25],masteryXp:15,tactic:'CLOCKWORK CUSTODIAN · Leave the marked slam, move behind a pillar to block thrown cogs, then punish its recovery.'},
   moonbackStag:{id:'moonbackStag',name:'Moonback Stag',room:'grove',prop:'moonbackStag',move:'moonrush',health:132,firstAttack:2700,interval:3100,damage:17,loot:'deer',lootName:'Forest deer',sellPrice:24,xp:[35,30,35],masteryXp:20,tactic:'MOONRUSH · Watch the bright lane. Dodge just before the charge lands, then counter.'},
@@ -44,7 +45,7 @@ export const huntEnemies={
   sealGuardian:{...beetle,id:'sealGuardian',prop:'depthsSentinel',room:'depthsTrial',name:'Thornblade Duelist',elite:true,archetype:'duelist',tactic:'THORNBLADE · Quick Slash has a second cut. Wait for Held Thornstrike’s final flash, then counter for extra damage.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
   depthsGuardian:{...beetle,id:'depthsGuardian',prop:'depthsColossus',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
-const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).filter(enemy=>enemy.id!=='moonbackStag').map(enemy=>[enemy.room,enemy]));
+const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).filter(enemy=>!['moonbackStag','dusktusk'].includes(enemy.id)).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
 export function vaultPhase(encounter){
  if(encounter?.addActor||encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;

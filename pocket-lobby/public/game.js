@@ -1505,12 +1505,12 @@ function startMonsterEncounter(enemy,standGround=false){
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
-  if(index<0&&enemy.moonbackId===undefined&&combatNow()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
+  if(index<0&&enemy.id!=='dusktusk'&&enemy.moonbackId===undefined&&combatNow()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
   stopForCombat();resetCombatArt();
-  const site=enemy.moonbackId===undefined?{x:6,y:5}:moonbackSite(currentRoom);
+  const site=enemy.id==='dusktusk'?window.preyTrail.site:enemy.moonbackId===undefined?{x:6,y:5}:moonbackSite(currentRoom);
   player.direction=(site.x-player.cx)-(site.y-player.cy)>=0?'right':'left';player.back=site.x+site.y<player.cx+player.cy;
   if(window.playerCloud?.gameplay){
-    const body=enemy.moonbackId!==undefined?{moonbackId:enemy.moonbackId}:standGround?{standGround:true}:{};
+    const body=enemy.id==='dusktusk'?{trackedPrey:true}:enemy.moonbackId!==undefined?{moonbackId:enemy.moonbackId}:standGround?{standGround:true}:{};
     serverGameplay('fight',body).then(packet=>{
       serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;canvas.focus({preventScroll:true});
       combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
@@ -1725,7 +1725,7 @@ function updateCombatPanel(){
   if(enemy?.id==='depthsGuardian'&&!encounter&&!chamberCleared){notice.hidden=false;notice.textContent='VAULT GUARDIAN · 3 phases: stagger its armour, dodge and counter its blades, then interrupt or dodge its magic.';}
   if(enemy?.tactic&&(currentRoom!=='millCellar'||!!encounter)&&!hunting.recoveryUntil&&!chamberCleared&&!(enemy.id==='moonbackStag'&&encounter)){notice.hidden=false;notice.textContent=enemy.tactic;}
   if(!enemy||chamberCleared)return;
-  const beetle=!!enemy.shellArmor,stag=enemy.id==='moonbackStag',respawn=stage>=0||stag?0:huntRespawnAt(hunting,enemy);
+  const beetle=!!enemy.shellArmor,stag=enemy.id==='moonbackStag',respawn=stage>=0||stag||enemy.id==='dusktusk'?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
   $('combatChapter').textContent=currentRoom==='millCellar'?'GUARDIAN · FORGOTTEN CELLAR':stag?'RARE · MOONWOOD':enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
@@ -2212,7 +2212,16 @@ function moonbackHere(){
   const sighting=moonbackSighting(combatNow());
   return sighting?.room===currentRoom&&sighting.id!==hunting.moonbackSighting?sighting:null;
 }
+function trackedPreyTrail(){
+  const state=window.playerCloud?.initial;
+  return state&&window.activePreyTrail?.({...state,location:currentRoom},combatNow());
+}
+function dusktuskVisible(){
+  return currentRoom==='clearing'&&(hunting.encounter?.enemy==='dusktusk'||
+    !hunting.encounter&&trackedPreyTrail()?.step===window.preyTrail?.tracks.length&&!!window.preyTrail);
+}
 function roomEnemy(){
+  if(dusktuskVisible())return huntEnemies.dusktusk;
   if(currentRoom==='millCellar'&&adventure.millCellarCleared)return undefined;
   const stag=moonbackHere();
   return stag?{...huntEnemies.moonbackStag,room:stag.room,moonbackId:stag.id}:huntEnemyForRoom(currentRoom);
@@ -2241,7 +2250,7 @@ function roomFurniture(){
   if(currentRoom==='armory')return armoryFurniture;
   if(moonwood.has(currentRoom)){
     const enemy=huntEnemyForRoom(currentRoom);
-    const stag=moonbackHere();
+    const stag=moonbackHere(),tracked=dusktuskVisible();
     const index=depthsStageIndex(currentRoom);
     const available=currentRoom==='millCellar'? !adventure.millCellarCleared:index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
     const lightProps=currentRoom==='depthsGallery'&&depthsRun?.cleared===2
@@ -2249,11 +2258,11 @@ function roomFurniture(){
     const reward=depthsRun?.rewardChests?.[currentRoom];
     const chests=reward?[{type:'dungeonRewardChest',x:6,y:5,rot:0,receipt:reward}]:[];
     return [...chests,...lightProps,...moonwood.layouts[currentRoom].scenery.filter(item=>{
-      if(item.type===enemy?.prop)return available;
+      if(item.type===enemy?.prop)return tracked||available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
       return true;
-    }).map(item=>item.type==='depthsColossus'&&window.towerVaultCoop?.encounter()?{...item,coopBoss:true,defeated:window.towerVaultCoop.view()?.status==='victory'}:item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(window.towerVaultCoop?.adds()??[]).map(a=>({type:a.kind==='wisp'?'depthsSeer':'depthsSkitter',x:a.x,y:a.y,coopAdd:a})),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
+    }).map(item=>tracked&&item.type==='wildboar'?{...item,...window.preyTrail.site,trackedPrey:true}:item.type==='depthsColossus'&&window.towerVaultCoop?.encounter()?{...item,coopBoss:true,defeated:window.towerVaultCoop.view()?.status==='victory'}:item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(window.towerVaultCoop?.adds()??[]).map(a=>({type:a.kind==='wisp'?'depthsSeer':'depthsSkitter',x:a.x,y:a.y,coopAdd:a})),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -3602,7 +3611,8 @@ function updateWorldLabels(){
   const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const owner=currentShopLicence();
   const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
-  const labelKey=key+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
+  const labelKey=key+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   worldLabelBounds=[];
@@ -3689,6 +3699,7 @@ function updateWorldLabels(){
     if(shopOwner)add('SHOP OWNER',...site,'sign',openVenueLicence,shopOwner,{side:lounge?'left':'right',width:66,font:6});
     else add('Shop licence',...site,'sign',openVenueLicence,'',{side:lounge?'left':'right',width:55,font:6});
   }
+  if(track&&!player.inCombat&&!routineControlled())add('Read tracks',...point(track.x+.5,track.y+.5,16),'npc',()=>followPreyTrack(track,prey.step),prey.step===0?'Fresh prints':'Follow the trail');
   if(currentRoom==='bakery')add('Baker',...point(foodStall.x+.5,foodStall.y+.5,47),'npc',()=>use(bakeryFurniture[0]),'Buy Tower Bread');
   if(currentRoom==='hub'){
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
@@ -3845,7 +3856,8 @@ function draw(time){
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
   const victory=time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300;
   const stagVictory=victory&&combatReports.at(-1)?.enemy==='moonbackStag'&&combatReports.at(-1)?.room===currentRoom;
-  const enemy=roomEnemy()??(stagVictory?huntEnemies.moonbackStag:null);
+  const trackedVictory=victory&&currentRoom==='clearing'&&combatReports.at(-1)?.enemy==='dusktusk';
+  const enemy=trackedVictory?huntEnemies.dusktusk:roomEnemy()??(stagVictory?huntEnemies.moonbackStag:null);
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,width,height);
   const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
@@ -3865,6 +3877,8 @@ function draw(time){
     ctx.restore();
   }
   if(shadowstepTargeting&&window.drawShadowstepTargets)window.drawShadowstepTargets(ctx,point,shadowstepTargets(),hover,time,reducedMotion.matches);
+  const trail=trackedPreyTrail(),track=window.preyTrail?.tracks[trail?.step];
+  if(track&&!player.inCombat&&!routineControlled())window.drawPreyTracks?.(ctx,point,track,time,reducedMotion.matches,trail.step===0);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(roomMoonTrails.length||trackedMoonTrail)for(const door of hudRoomExits(currentRoom)){
     if(!door.tile)continue;
@@ -3937,7 +3951,7 @@ function draw(time){
     if(travelers.delivery)items.push({type:'waystationDelivery',x:8,y:5});
   }
   if(enemy&&victory){
-    const monster=stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
+    const monster=trackedVictory?{...window.preyTrail.site,type:'wildboar'}:stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
     if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
   }
   if(ghost)items.push(ghost);
@@ -5094,8 +5108,23 @@ function openWatchLandmark(item){
  });
 }
 
+function followPreyTrack(tile,stepIndex){
+  if(unavailable()||editing)return;
+  walkTo(tile);
+  const read={type:'preyTracks',step:stepIndex};
+  if(target?.x===tile.x&&target?.y===tile.y)interaction=read;
+  else if(!step&&player.cx===tile.x&&player.cy===tile.y){interaction=read;finishInteraction();}
+}
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='preyTracks'){
+    savePlayerState();
+    serverGameplay('abilityReadTracks',{id:'trackPrey',step:item.step}).then(({state})=>{
+      worldLabelKey='';
+      note(state.styleAbilities.preyTrail.step===window.preyTrail.tracks.length?'You found the Dusktusk Boar. Approach it to hunt.':'Fresh prints nearby. Follow the next set.');
+    }).catch(error=>note(error.message));
+    return;
+  }
   if(Object.hasOwn(keeperSites,item.type)){
     examineKeeperClue(item.type);
     return;
@@ -5206,7 +5235,7 @@ function finishInteraction(){
     if(enemy&&enemy.moonbackId===item.moonbackId)startMonsterEncounter(enemy);
     else note('The Moonback Stag moved. Follow the fresh tracks.');
   }else if(item.type===huntEnemyForRoom(currentRoom)?.prop){
-    startMonsterEncounter(huntEnemyForRoom(currentRoom));
+    startMonsterEncounter(item.trackedPrey?huntEnemies.dusktusk:huntEnemyForRoom(currentRoom));
   }else if(item.type==='riverTrader'){
     if(!caughtFishCount()){note('The river trader buys fish. Catch some at Willowbank, then return here.');return;}
     serverGameplay('sell',{id:'allFish'}).then(packet=>{const r=packet.state.tradeReceipt;savePlayerState();showTransaction('Fish sold at Millbrook',[{icon:'⋈',text:r.quantity+' fish sold'}],r.gold);note('Your catch has been sold.');}).catch(error=>note(error.message));
@@ -6120,7 +6149,7 @@ function refreshStyleAbilityBar(){
     button.type='button';button.textContent=ability.icon+' '+ability.name+(seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=seconds[index]>0||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):aimShadowstep();
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():castStyleAbility(id,{});
     bar.append(button);
   }
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
@@ -6152,8 +6181,8 @@ function openStyleAbilities(mode){
     for(const id of offers){
       const ability=window.styleAbilities[id],card=add(contents,'section','');
       add(card,'h3',ability.name);
-      add(card,'p',ability.description+' Costs 1 AP · '+(ability.cooldown/1000)+'s cooldown.');
-      add(card,'p',id==='waypoint'?'Earned by discovering areas and reaching Exploration 3.':'Earned by reaching Exploration 3 and Stealth 3.');
+      add(card,'p',ability.description+' '+(ability.cost===0?'No AP to cast':'Costs 1 AP')+' · '+(ability.cooldown/1000)+'s cooldown.');
+      add(card,'p',ability.discovery??(id==='waypoint'?'Earned by discovering areas and reaching Exploration 3.':'Earned by reaching Exploration 3 and Stealth 3.'));
       const decide=async decision=>{
         try{await serverGameplay('abilityDecision',{id,decision});openStyleAbilities();refreshStyleAbilityBar();}
         catch(error){status.textContent=error.message;}
@@ -6183,6 +6212,10 @@ async function castStyleAbility(id,body){
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
     if(dialog.open)dialog.close();
+    if(id==='trackPrey'){
+      worldLabelKey='';note('Fresh tracks. Walk to the glowing pawprints and read them.');
+      refreshStyleAbilityBar();return;
+    }
     abilityBursts.push({id,room,tile:from,phase:'departure',started:performance.now()});
     if(id==='waypoint'){
       if(!reducedMotion.matches){

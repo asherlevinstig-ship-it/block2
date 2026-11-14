@@ -1,6 +1,6 @@
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 
-const huntingXpByEnemy=new Map([['boar',10],['beetle',15],['thornBoar',20],['moonbackStag',25]]);
+const huntingXpByEnemy=new Map([['boar',10],['dusktusk',15],['beetle',15],['thornBoar',20],['moonbackStag',25]]);
 
 function award(state,key,xp){
   state.stats??={};

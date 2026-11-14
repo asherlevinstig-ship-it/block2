@@ -51,3 +51,22 @@ test('Shadowstep cannot cross a closed creek or land in water',()=>{
  assert.equal(state.actionPoints.value,4);
  assert.equal(state.styleAbilities.readyAt.shadowstep,46000);
 });
+
+test('Track Prey reveals the Dusktusk only after reading three tracks in order',()=>{
+ const state=make({location:'clearing',position:{x:5,y:5},stats:{huntingXp:50,explorationXp:50}});
+ assert.deepEqual(styleAbilityOffers(state),['trackPrey']);
+ accept(state,'trackPrey');
+ act(state,'abilityCast',{id:'trackPrey'});
+ assert.equal(state.actionPoints.value,5);
+ assert.throws(()=>act(state,'fight',{trackedPrey:true}),/fresh tracks/);
+ assert.throws(()=>act(state,'abilityReadTracks',{id:'trackPrey',step:0}),/Walk onto/);
+ for(const [step,position] of [{x:3,y:5},{x:5,y:7},{x:8,y:6}].entries()){
+  state.position=position;
+  act(state,'abilityReadTracks',{id:'trackPrey',step});
+ }
+ const saved=normalizeState(state);
+ saved.position={x:9,y:6};
+ act(saved,'fight',{trackedPrey:true});
+ assert.equal(saved.hunting.encounter.enemy,'dusktusk');
+ assert.equal(normalizeState(saved).hunting.encounter.enemy,'dusktusk');
+});

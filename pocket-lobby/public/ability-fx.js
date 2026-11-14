@@ -89,3 +89,21 @@ export function drawAbilityBursts(ctx,point,effects,room,time,reduced){
   ctx.restore();
  }
 }
+
+export function drawPreyTracks(ctx,point,tile,time,reduced,first){
+ const [x,y]=point(tile.x+.5,tile.y+.5,1);
+ const glow=reduced?1:.76+Math.sin(time/210)*.23;
+ ctx.save();
+ ctx.globalAlpha=glow;
+ const aura=ctx.createRadialGradient(x,y,1,x,y,19);
+ aura.addColorStop(0,'#ffd2779c');aura.addColorStop(1,'#ffc06600');
+ ctx.fillStyle=aura;ctx.fillRect(x-20,y-20,40,40);
+ if(first)ellipse(ctx,x,y,15,'#ffe39c',.8);
+ ctx.fillStyle='#ffe39c';
+ for(const [dx,dy] of [[-7,3],[0,-4],[7,-1]]){
+  ctx.fillRect(x+dx-2,y+dy,4,2);
+  ctx.fillRect(x+dx-2,y+dy-3,1,2);
+  ctx.fillRect(x+dx+1,y+dy-3,1,2);
+ }
+ ctx.restore();
+}
