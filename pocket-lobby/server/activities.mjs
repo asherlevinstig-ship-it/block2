@@ -1,3 +1,5 @@
+import {rememberFallen,undeadStrike} from './necromancy.mjs';
+import {activeRaised} from '../public/necromancy.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {settleHearth} from './hearth.mjs';
@@ -56,6 +58,7 @@ export function applyAmbushOpening(state,enemy,now,random=Math.random){
   state.combatReceipt={id:crypto.randomUUID(),events:[result(state,event,now,random)]};
 }
 export function startCombatEncounter(state,enemy,now){
+  if(activeRaised(state,now))state.styleAbilities.raised.nextAt=Math.max(state.styleAbilities.raised.nextAt,now+1500);
   delete state.timberCut;delete state.miningCut;
   if(state.outfitMagic)state.outfitMagic.veilUntil=0;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
@@ -102,6 +105,7 @@ function result(state,event,now,random=Math.random){
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=queueBossAdds(event.encounter,now);event.encounter=state.hunting.encounter;state.health=event.health;
   if(event.outcome==='victory'){
+    rememberFallen(state,enemy,encounter,now);
     useHunger(state,2);
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
     if(!state.essencesPaused&&state.location!==depthsCacheRoom&&state.location!=='depthsTrial'&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
@@ -158,6 +162,7 @@ function result(state,event,now,random=Math.random){
     else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});
   }
+  if(event.outcome==='defeat'&&state.styleAbilities)delete state.styleAbilities.raised;
   if(event.outcome!=='fighting'&&state.combatId){
     const decision=event.decision??encounter.lastDecision;
     const report={...(decision?{decision}:{}),id:state.combatId,enemy:enemy.id,room,outcome:event.outcome,endedAt:now,endedHealth:event.health,summary,rewards};
@@ -178,13 +183,14 @@ export function advanceServerCombat(state,now,random=Math.random){
   if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);return [];}
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
-    const {encounter,addsDue,tactic,automatic,due,warningAt}=combatSchedule(state);
+    const {encounter,undeadDue,addsDue,tactic,automatic,due,warningAt}=combatSchedule(state);
     state.hunting.encounter=encounter;
     if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
     if(due>now)break;
     state.health=Math.min(state.health,playerMaxHealth(state,due));
     let event;
-    if(automatic){
+    if(due===undeadDue)event=undeadStrike(state,due);
+    else if(automatic){
       if(tactic.action==='stoneguard'){
         const abilities=normalizeStyleAbilities(state.styleAbilities),reduction=30+(abilityMastery(state,'stoneguard').stage-1)*10;
         abilities.stoneguard={until:due+5000,reduction,credited:false};abilities.readyAt.stoneguard=due+60000;state.styleAbilities=abilities;

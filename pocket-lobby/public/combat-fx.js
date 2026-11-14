@@ -355,7 +355,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory||casting||!warning&&(counter||stunned||weak)?37:25);
     ctx.fillStyle=victory?'#f2ce8a':warning?'#f2aa7c':counter?'#ffe5a1':'#bed88f';ctx.fillRect(x-w/2,y,w,1);
     const victoryTitle='✦ '+(enemy?.name??'Wild Boar').toUpperCase()+' DEFEATED ✦';
-    const warningTitle=remaining<=boarRules.dodgeWindow?(encounter.arenaVersion===1?'MOVE / DODGE · ':'DODGE · ')+move.name.toUpperCase():move.name.toUpperCase()+' INCOMING';
+    const warningTitle=warning?(remaining<=boarRules.dodgeWindow?(encounter.arenaVersion===1?'MOVE / DODGE · ':'DODGE · ')+move.name.toUpperCase():move.name.toUpperCase()+' INCOMING'):'';
     ctx.font='bold 10px monospace';ctx.textAlign='center';
     ctx.fillText(victory?victoryTitle:warning?warningTitle:stunned?'STAGGERED!':weak?'WEAK SPOT · +25%':counter?(perfect?'PERFECT DODGE!':'COUNTER READY · +'+counterPercent+'%'):'WEAK SPOT EXPOSED',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';

@@ -1,3 +1,4 @@
+import {normalizeNecromancy} from './necromancy.js';
 import {keeperSites} from './lantern-keepers.js';
 import {skillLevel} from './skill-curve.js';
 
@@ -30,6 +31,7 @@ export function activePreyTrail(state,now){
  return state.location===preyTrail.room&&trail?.until>now&&!trail.cleared?trail:null;
 }
 export const styleAbilities={
+ raiseFallen:{name:'Raise Fallen',icon:'☠',cooldown:90000,description:'Necromancy · Raise a beast you defeated in the last minute. One undead ally follows and strikes in wild hunts and solo dungeons every three seconds for 30–60 seconds. Higher Magic Knowledge strengthens it. Bosses and players cannot be raised.',requirements:{magicKnowledge:5,evil:3}},
  waypoint:{name:'Waypoint',icon:'◇',cooldown:180000,description:'Travel to a discovered landmark from safety.',requirements:{exploration:3}},
  shadowstep:{name:'Shadowstep',icon:'◈',cooldown:45000,description:'Blink up to four reachable tiles. In arena combat, briefly delay the creature’s pursuit.',requirements:{exploration:3,stealth:3}},
  trackPrey:{name:'Track Prey',icon:'⁙',cooldown:180000,cost:0,description:'Reveal a trail in Bramble Clearing that leads to a Dusktusk Boar.',requirements:{hunting:2,exploration:2},discovery:'Earned through successful wild hunts and new discoveries.'},
@@ -73,11 +75,11 @@ export function normalizeStyleAbilities(input){
  const pvpTimers=Object.fromEntries(['deathmarkUntil','bloodlustUntil'].filter(key=>learned.includes(key==='deathmarkUntil'?'deathmark':'bloodlust')&&Number.isSafeInteger(input?.[key])&&input[key]>0).map(key=>[key,input[key]]));
  const pursuit=input?.pursuit;
  const pursuing=learned.includes('shadowPursuit')&&typeof pursuit?.room==='string'&&/^[a-zA-Z]{1,30}$/.test(pursuit.room)&&typeof pursuit.name==='string'&&Number.isSafeInteger(pursuit.until)&&pursuit.until>0;
- return {learned,declined,readyAt,quietUntil,lastBlinkAt,...pvpTimers,...(pursuing?{pursuit:{room:pursuit.room,name:pursuit.name.slice(0,40),until:pursuit.until}}:{}),...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
+ return {learned,declined,readyAt,quietUntil,lastBlinkAt,...normalizeNecromancy(input,learned),...pvpTimers,...(pursuing?{pursuit:{room:pursuit.room,name:pursuit.name.slice(0,40),until:pursuit.until}}:{}),...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
+   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
 }

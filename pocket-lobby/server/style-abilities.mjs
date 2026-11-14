@@ -1,3 +1,4 @@
+import {activeRaised,raisedProfile} from '../public/necromancy.js';
 import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
@@ -30,6 +31,16 @@ export function styleAbilityAction(state,action,body,now){
   return true;
  }
  if((abilities.readyAt[id]??0)>now)throw invalid('This ability is still recharging.');
+ if(id==='raiseFallen'){
+  if(activeRaised(state,now))throw invalid('You already have an undead ally.');
+  const fallen=abilities.fallen;
+  if(!fallen||fallen.until<=now||fallen.room!==state.location)throw invalid('Defeat a wild beast or dungeon beast, then raise it within one minute in the same area.');
+  if(!state.position||Math.abs(state.position.x-fallen.x)+Math.abs(state.position.y-fallen.y)>4)throw invalid('Move closer to the fallen beast to raise it.');
+  requireActionPoint(state);
+  const profile=raisedProfile(state.stats,abilityMastery(state,id).stage);
+  abilities.raised={id:fallen.id,enemy:fallen.enemy,summonedAt:now,until:now+profile.duration,nextAt:now+1500,damage:profile.damage};delete abilities.fallen;
+  abilities.readyAt[id]=now+styleAbilities[id].cooldown;state.styleAbilities=abilities;spendActionPoint(state,now);return true;
+ }
  if(id==='scoutAhead'){
   if(!state.familiars?.owned?.includes(state.familiars.equipped))throw invalid('Equip a familiar before scouting.');
   if(encounter||state.depthsRun)throw invalid('Finish combat before scouting.');

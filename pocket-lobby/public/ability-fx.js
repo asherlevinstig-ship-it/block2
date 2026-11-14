@@ -1,4 +1,5 @@
 const themes={
+ raiseFallen:{rim:'#78e6ad',light:'#e0ffc9',glow:'95,220,150',duration:920},
  deathmark:{rim:'#c88aff',light:'#f4d8ff',glow:'176,72,240',duration:800},
  siphon:{rim:'#f17aab',light:'#ffd8e5',glow:'237,72,125',duration:800},
  bloodlust:{rim:'#fa6c55',light:'#ffe2af',glow:'240,75,50',duration:800},
@@ -42,6 +43,13 @@ export function drawAbilityBursts(ctx,point,effects,room,time,reduced){
   const age=time-started,t=age/theme.duration;
   if(t<0||t>=1)continue;
   const [x,y]=point(tile.x+.5,tile.y+.5,1);
+  if(id==='raiseFallen'){
+   const t=Math.min(1,age/920),r=14+ease(t)*14;ctx.save();ctx.globalAlpha=1-t;
+   ellipse(ctx,x,y,r,'#91edb5',1.4);ellipse(ctx,x,y,r*.7,'#dbffc9',.7);
+   for(let i=0;i<9;i++){const a=i*tau/9+t;diamond(ctx,x+Math.cos(a)*r,y+Math.sin(a)*r*.46,2,3);ctx.fillStyle='#c9ffb5';ctx.fill();}
+   for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#7ee6b0':'#e4ffd3';ctx.fillRect(x+Math.sin(i*2.4)*r*(1-t),y-6-(i%7+1)*t*6,1.5,2.5);}
+   ctx.restore();continue;
+  }
   if(['deathmark','siphon','bloodlust','shadowPursuit'].includes(id)){
    ctx.save();ctx.globalAlpha=Math.max(0,1-t);ctx.strokeStyle=theme.rim;ctx.fillStyle=theme.light;ctx.lineWidth=1.5;
    if(id==='deathmark'){

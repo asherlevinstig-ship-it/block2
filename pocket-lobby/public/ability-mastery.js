@@ -1,6 +1,7 @@
 import {styleAbilities,abilityStatLevel} from './style-abilities.js';
 
 export const masteryBenefits={
+ raiseFallen:['Base undead strength and lifetime','+1 strike damage · +5s lifetime, up to 60s','+2 strike damage · +10s lifetime, up to 60s'],
  deathmark:['25% marked strike bonus','35% marked strike bonus','45% marked strike bonus'],
  bloodlust:['10% PvP damage bonus','15% PvP damage bonus','20% PvP damage bonus'],
  shadowPursuit:['30-second trail','45-second trail','60-second trail'],
@@ -16,6 +17,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ raiseFallen:'Have your undead ally land a creature strike. One successful use per summon.',
  deathmark:'Strike the marked player before the mark fades.',
  bloodlust:'Land a weapon strike while Bloodlust is active. One use per activation.',
  shadowPursuit:'Follow a trail to an opponent in a different area. One use per pursuit.',

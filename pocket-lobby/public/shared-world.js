@@ -1,3 +1,4 @@
+export {activeRaised,drawUndeadAlly,undeadNames,raisableBeasts} from './necromancy.js';
 import {libraryLayout} from './library.js';
 export {libraryLayout};
 export {readingAt,sharedReadingPose} from './library.js';

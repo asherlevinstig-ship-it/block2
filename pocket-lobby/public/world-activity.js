@@ -11,6 +11,8 @@ export function worldActivityEvents(before,after,now=Date.now()){
  if(!before||!after)return [];
  const events=[],room=after.location,p=plan(after),b=plan(before),same=p&&b&&(p.routineId??p.startedAt)===(b.routineId??b.startedAt);
  const add=(id,kind,label,amount=0,at=now,eventRoom=room)=>{if(now-at>=0&&now-at<5000)events.push({id,kind,label,amount,at,room:eventRoom});};
+ const raised=after.styleAbilities?.raised;
+ if(raised?.id&&raised.id!==before.styleAbilities?.raised?.id)add('raise:'+raised.id,'ability','Raise Fallen',0,raised.summonedAt);
  const strike=after.pvp?.lastStrike;
  if(strike?.id&&strike.id!==before.pvp?.lastStrike?.id){
   const names={deathmark:'Deathmark',siphon:'Siphon',shadowPursuit:'Shadow Pursuit'};
@@ -53,7 +55,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
  if(same&&!landed){const caught=sum(p.catches)-sum(b.catches);if(caught>0){const names=Object.keys(p.catches??{}).filter(id=>(p.catches[id]??0)>(b.catches?.[id]??0));add('catch:'+p.startedAt+':'+sum(p.catches),'catch','+'+caught+' '+(caught===1?fishProducts[names[0]]?.name??'fish':'fish'),caught,p.cursorAt??(Number.isFinite(p.nextCatchAt-p.interval)?p.nextCatchAt-p.interval:now),'pond');}}
  if(after.combatReceipt?.id!==before.combatReceipt?.id)for(const e of after.combatReceipt?.events??[]){
   const key='combat:'+after.combatId+':'+e.at+':'+e.action,eventRoom=before.hunting?.encounter?before.location:room;
-  if(['Stoneguard','Ambush'].includes(e.power))add(key+':ability','ability',e.power+(e.damage?' · '+e.damage+' damage':''),e.damage??0,e.at,eventRoom);
+  if(['Stoneguard','Ambush','Undead Strike'].includes(e.power))add(key+':ability','ability',e.power+(e.damage?' · '+e.damage+' damage':''),e.damage??0,e.at,eventRoom);
   if(e.taken>0)add(key+':hurt','damage','−'+e.taken+' HP',e.taken,e.at,eventRoom);
   if(e.healed>0&&!e.lifeSteal)add(key+':heal','heal','+'+e.healed+' HP',e.healed,e.at,eventRoom);
   if(e.dodged)add(key+':dodge','dodge',e.perfectDodge?'Perfect dodge':'Dodge',0,e.at,eventRoom);

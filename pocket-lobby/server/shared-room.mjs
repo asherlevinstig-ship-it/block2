@@ -1,3 +1,4 @@
+import {activeRaised,raisedRoom} from '../public/necromancy.js';
 import {readingAt,sharedReadingPose} from '../public/library.js';
 import {besideHearth} from './hearth.mjs';
 import {pvpRooms,pvpGuards,witnessRange} from '../public/pvp.js';
@@ -32,7 +33,7 @@ const canMeditate=meta=>!meta.serverAuto&&!meta.auto&&!meta.seat&&!meta.activity
 export function publicPeer(meta,now=Date.now()){
   const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
   const reading=!meta.auto&&readingAt(meta.reading,meta.room,x,y,now)?meta.reading:null;
-  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:reading?'reading':meta.activity==='reading'?null:meta.activity??null,reading,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,undead:raisedRoom(meta.room)&&meta.health>0&&meta.undead?.until>now?meta.undead:null,activity:reading?'reading':meta.activity==='reading'?null:meta.activity??null,reading,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
 }
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
@@ -259,6 +260,7 @@ export class SharedRoom{
     const leaving=state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules';
     recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});
     if(leaving){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
+    meta.undead=activeRaised(state);
     meta.stoneguardUntil=state.styleAbilities?.stoneguard?.until??0;
     meta.health=Math.max(0,Math.min(playerMaxHealth(state),state.health??100));meta.activity=sharedActivity(state);meta.reading=sharedReadingPose(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
     const blinkAt=state.styleAbilities?.lastBlinkAt??0;
@@ -281,7 +283,7 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
     await this.loadTrees(profile.room);
-    const meta={...profile,willowbankShortcut:state.adventure?.willowbankShortcut===true,usageAt:now,reading:sharedReadingPose(state),fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    const meta={...profile,willowbankShortcut:state.adventure?.willowbankShortcut===true,usageAt:now,undead:activeRaised(state),reading:sharedReadingPose(state),fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();

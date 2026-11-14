@@ -160,3 +160,10 @@ test('stagger meter, break feedback and boss recovery remain clear in both motio
  const record={};recordCombatFx(record,{action:'attack',damage:16,staggered:true,staggerGained:4},1000);const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1100,now:1100,events:record,player:{x:5,y:5},reduced:true});assert(c.calls.some(([method,text])=>method==='fillText'&&text==='STAGGER BREAK!'));c.balanced();
  for(const [now,nextBoarAt,title] of [[1500,4000,'STAGGERED!'],[2500,8000,'WEAK SPOT · +25%'],[2500,2800,'DODGE · CHARGE']]){const overlay=canvas();drawCombatOverlayFx({ctx:overlay.ctx,width:540,height:349,time:now,now,events:{},encounter:{staggerUntil:2000,staggerWeakUntil:3000,nextBoarAt},health:100,reduced:true});overlay.balanced();assert(overlay.calls.some(([method,text])=>method==='fillText'&&text===title));}
 });
+
+
+test('victory overlay draws after the defeated encounter has been removed',()=>{
+ const c=canvas(),events={bursts:[]};recordCombatFx(events,{action:'undead',power:'Undead Strike',damage:1,enemyId:'boar',outcome:'victory'},1000);
+ drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:1200,now:1200,events,encounter:null,enemy:huntEnemy(null),health:100,reduced:false});
+ assert(c.calls.some(([kind,text])=>kind==='fillText'&&String(text).includes('DEFEATED')));c.balanced();
+});

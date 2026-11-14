@@ -1,3 +1,4 @@
+import {drawUndeadAlly} from './necromancy.js';
 export function renderAbilityOffers({contents,status,state,catalog,offers,slots,mastery,practice,drawCharacter,decide,done,reduced,doc=document}){
  const dialog=contents.closest('dialog');
  let frame=0,holding=null,submitting=false,selected=offers[0],closed=false;
@@ -22,7 +23,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   if(progress.next){
    const meter=create('progress',undefined,card);meter.max=progress.next.uses;meter.value=progress.uses;
    meter.setAttribute('aria-label',catalog[id].name+' successful uses');
-   const needed=Object.entries(progress.next.requirements).map(([stat,rank])=>(stat==='familiarConnection'?'Familiar Connection':stat[0].toUpperCase()+stat.slice(1))+' '+rank).join(' · ');
+   const needed=Object.entries(progress.next.requirements).map(([stat,rank])=>(stat==='magicKnowledge'?'Magic Knowledge':stat==='familiarConnection'?'Familiar Connection':stat[0].toUpperCase()+stat.slice(1))+' '+rank).join(' · ');
    create('p',progress.uses+' / '+progress.next.uses+' successful uses · '+needed,card);
    create('small','Next · '+progress.nextBenefit,card);
   }else create('small','Fully mastered',card);
@@ -44,7 +45,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   if(submitting)return;
   cancel();selected=id;
   const ability=catalog[id];title.textContent=ability.name;description.textContent=ability.description;
-  requirements.textContent=Object.entries(ability.requirements).map(([key,level])=>(key==='familiarConnection'?'Familiar Connection':key[0].toUpperCase()+key.slice(1))+' '+level).join(' · ');
+  requirements.textContent=Object.entries(ability.requirements).map(([key,level])=>(key==='magicKnowledge'?'Magic Knowledge':key==='familiarConnection'?'Familiar Connection':key[0].toUpperCase()+key.slice(1))+' '+level).join(' · ');
   cost.textContent=ability.passive?'Passive · Activates at most once per minute':(ability.cost===0?'0 AP': '1 AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
   accept.textContent='Hold to accept '+ability.name;
   for(const button of choices.children)button.setAttribute('aria-pressed',String(button.dataset.ability===id));
@@ -111,7 +112,10 @@ function drawPreview(canvas,id,time,drawCharacter,reduced){
  const blink=shadow&&t>.45?35:0;
  drawCharacter(ctx,145+blink,115,reduced?0:time);
  ctx.strokeStyle=tint;ctx.fillStyle=tint;
- if(id==='waypoint'||shadow){
+ if(id==='raiseFallen'){
+  drawUndeadAlly(ctx,220,112,{enemy:'boar'},time,reduced);ctx.strokeStyle='#91eab5';ctx.beginPath();ctx.ellipse(220,113,28,11,0,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='#c9ffbb';ctx.font='bold 12px system-ui';ctx.fillText('ONE UNDEAD ALLY',177,57);
+ }else if(id==='waypoint'||shadow){
   const radius=18+(reduced?0:Math.sin(t*Math.PI)*8);
   ctx.beginPath();ctx.ellipse(145+blink,115,radius,radius*.42,0,0,Math.PI*2);ctx.stroke();
   if(id==='waypoint'){ctx.globalAlpha=.35;ctx.fillRect(138,38,14,77);ctx.globalAlpha=1;}
