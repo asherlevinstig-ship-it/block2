@@ -58,3 +58,40 @@ test('the preview and the committed haul use the same stat-scaled calculation',a
  const preview=await robberyAction(f.env,f.row(idA),structuredClone(f.a),{...f.body,kind:'preview'},now);
  const attempt=await robberyAction(f.env,f.row(idA),structuredClone(f.a),f.body,now,()=>0);assert.equal(attempt.receipt.gold,preview.preview.gold);assert(attempt.receipt.gold>10);f.sql.close();
 });
+
+test('Lockbreaker requires a learned ability in the lobby and atomically records a timed room visit',async t=>{
+ const f=fixture();t.after(()=>f.sql.close());
+ f.a.styleAbilities={learned:['lockbreaker']};
+ const body={...f.body,kind:'breakIn'};
+ await assert.rejects(robberyAction(f.env,f.row(idA),f.a,body,now,()=>0),/Grand Lobby/);
+ f.a.location=f.b.location='hub';
+ f.b.homeFurniture=[{type:'bed',x:2,y:2,rot:0,id:'private-id'}];
+ for(const meta of f.room.sessions.values())meta.room='hub';
+ f.sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(f.b),idB);
+ const preview=await robberyAction(f.env,f.row(idA),f.a,{...body,kind:'breakInPreview'},now);
+ assert.equal(preview.preview.ap,20);assert.equal(preview.preview.visit,undefined);
+ const result=await robberyAction(f.env,f.row(idA),f.a,body,now,()=>0);
+ assert.deepEqual(result.receipt.visit.furniture,[{type:'bed',x:2,y:2,rot:0}]);
+ assert.equal(result.receipt.visit.until,now+30000);
+ const owner=JSON.parse(f.row(idB).state_json);
+ assert.equal(owner.robbery.lastBreakIn.success,true);
+ assert.equal(owner.robbery.lastBreakIn.visit,undefined);
+ assert.equal(owner.credits,200);
+ const updated=JSON.parse(result.updated.state_json);
+ assert.equal(updated.actionPoints.value,5);assert.equal(updated.location,'hub');
+ const retry=await robberyAction(f.env,result.updated,updated,body,now+1,()=>0);
+ assert.equal(retry.updated.revision,2);
+});
+
+test('A failed Lockbreaker attempt charges AP and notifies the homeowner without revealing their room',async t=>{
+ const f=fixture();t.after(()=>f.sql.close());
+ f.a.location=f.b.location='hub';f.a.styleAbilities={learned:['lockbreaker']};
+ for(const meta of f.room.sessions.values())meta.room='hub';
+ f.sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(f.b),idB);
+ const result=await robberyAction(f.env,f.row(idA),f.a,{...f.body,kind:'breakIn'},now,()=>.99);
+ assert.equal(result.receipt.success,false);assert.equal(result.receipt.visit,undefined);
+ const homeowner=JSON.parse(f.row(idB).state_json);
+ assert.equal(homeowner.robbery.lastBreakIn.success,false);
+ assert(homeowner.robbery.protectedUntil>now);
+ assert.equal(JSON.parse(result.updated.state_json).actionPoints.value,5);
+});

@@ -1,6 +1,7 @@
 import {styleAbilities,abilityStatLevel} from './style-abilities.js';
 
 export const masteryBenefits={
+ lockbreaker:['30 seconds inside','40 seconds inside','50 seconds inside'],
  lightFingers:['+10 success percentage points · 85% cap','+12 success percentage points · 85% cap','+15 success percentage points · 85% cap'],
  cutpurse:['20% larger haul · 25% wallet cap','30% larger haul · 25% wallet cap','40% larger haul · 25% wallet cap'],
  raiseFallen:['Base undead strength and lifetime','+1 strike damage · +5s lifetime, up to 60s','+2 strike damage · +10s lifetime, up to 60s'],
@@ -19,6 +20,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ lockbreaker:'Successfully enter another player’s room.',
  lightFingers:'Complete a successful Light Fingers steal. One use per attempt.',
  cutpurse:'Successfully steal additional gold with Cutpurse. One use per attempt.',
  raiseFallen:'Have your undead ally land a creature strike. One successful use per summon.',

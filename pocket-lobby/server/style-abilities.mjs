@@ -72,6 +72,7 @@ export function styleAbilityAction(state,action,body,now){
   spendActionPoint(state,now);
   return true;
  }
+ if(id==='lockbreaker')throw invalid('Use Lockbreaker from the hotbar in the Grand Lobby.');
  if(['lightFingers','cutpurse'].includes(id))throw invalid('Choose a nearby player and use this technique in Pickpocket. Each attempt costs 10 AP.');
  if(['deathmark','bloodlust','shadowPursuit','siphon'].includes(id))throw invalid('Use PvP powers from Nearby players. Bloodlust activates after a player defeat.');
  if(id==='appraise')throw invalid('Choose an ore listing in Market stalls to appraise it.');

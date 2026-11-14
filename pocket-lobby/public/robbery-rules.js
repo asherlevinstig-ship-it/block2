@@ -19,4 +19,4 @@ export function robberyGold(credits,actor){
  const share=Math.min(2500,500+40*stealth+20*luck);
  return Math.max(0,Math.min(haul,credits-robberyRules.reserve,Math.ceil(credits*share/10000)));
 }
-export function normalizeRobbery(input){const time=v=>Number.isSafeInteger(v)&&v>=0?v:0;return {lastAttemptAt:time(input?.lastAttemptAt),protectedUntil:time(input?.protectedUntil),...(input?.lastAttempt?{lastAttempt:input.lastAttempt}:{}),...(input?.lastReceived?{lastReceived:input.lastReceived}:{})};}
+export function normalizeRobbery(input){const time=v=>Number.isSafeInteger(v)&&v>=0?v:0;return {lastAttemptAt:time(input?.lastAttemptAt),protectedUntil:time(input?.protectedUntil),...(input?.lastAttempt?{lastAttempt:input.lastAttempt}:{}),...(input?.lastBreakIn?{lastBreakIn:input.lastBreakIn}:{}),...(input?.lastReceived?{lastReceived:input.lastReceived}:{})};}
