@@ -1,4 +1,4 @@
-import {availableActionPoints,MAX_ACTION_POINTS} from '../public/action-points.js';
+import {normalizeActionPoints,MAX_ACTION_POINTS} from '../public/action-points.js';
 const invalid=message=>Object.assign(new Error(message),{status:400});
 export const HOMEWORK_QUESTIONS=10;
 function ensureSession(learning,now,{next=false}={}){
@@ -44,7 +44,7 @@ export function learningAction(state,action,body={},now=Date.now(),random=Math.r
  if(body.attemptId===learning.last?.id)return;
  const attempt=learning.attempt;
  if(!attempt||body.attemptId!==attempt.id)throw invalid('This question has changed. Open the current question and try again.');
- const correct=body.choice===attempt.answer,before=availableActionPoints(state.actionPoints,now),value=Math.min(MAX_ACTION_POINTS,before+1);
+ const correct=body.choice===attempt.answer,before=normalizeActionPoints(state.actionPoints).value,value=Math.min(MAX_ACTION_POINTS,before+1);
  const session=ensureSession(learning,now);session.answered++;if(correct)session.correct++;session.earned+=value-before;
  if(session.answered===session.target)session.completedAt=now;
  state.actionPoints={...state.actionPoints,value,at:now};

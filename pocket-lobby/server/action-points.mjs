@@ -5,6 +5,7 @@ export function requireActionPoint(state){
  if(!availableActionPoints(state.actionPoints))throw Object.assign(new Error('Answer an MCQ to earn an Action Point before this action.'),{status:402,code:'action-points'});
 }
 export function spendActionPoint(state,at,{stopAuto=true}={}){
+ if(state.actionPoints?.unlimited===true)return false;
  requireActionPoint(state);
  const p=normalizeActionPoints(state.actionPoints);
  state.actionPoints={...p,value:p.value-1,at,spent:Math.min(Number.MAX_SAFE_INTEGER,(p.spent??0)+1)};
@@ -14,8 +15,8 @@ export function spendActionPoint(state,at,{stopAuto=true}={}){
 
 export function beginAutoPoints(state,at){
  const p=normalizeActionPoints(state.actionPoints);
- state.actionPoints={...p,value:availableActionPoints(p,at),at,active:true};
- if(!state.actionPoints.value){stopForActionPoints(state,at);return false;}
+ state.actionPoints={...p,value:p.value,at,active:true};
+ if(!availableActionPoints(state.actionPoints)){stopForActionPoints(state,at);return false;}
  delete state.autoDisconnected;return true;
 }
 export function releaseAutoPoints(state,at){
@@ -23,13 +24,13 @@ export function releaseAutoPoints(state,at){
  if(p.active)state.actionPoints={...p,at,active:false};
 }
 export function autoHasNoPoints(state,at=Date.now()){
- const p=normalizeActionPoints(state.actionPoints),value=p.active||state.plan?.source==='rules'?p.value:availableActionPoints(p,at);
+ const value=availableActionPoints(state.actionPoints,at);
  return (state.plan?.source==='rules'||state.controlMode==='auto')&&!state.autoDisconnected&&value===0;
 }
 export function spendAutoPoint(state,plan,at){
  if(!plan)return false;
  if(spendActionPoint(state,at))return true;
- if(state.actionPoints.value===0){stopForActionPoints(state,at,plan);return true;}
+ if(!availableActionPoints(state.actionPoints)){stopForActionPoints(state,at,plan);return true;}
  return false;
 }
 export function stopForActionPoints(state,at,plan=state.plan){

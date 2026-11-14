@@ -1,3 +1,4 @@
+import {availableActionPoints} from '../public/action-points.js';
 import {openRewardChest,chestEquipmentComparison} from '../public/dungeon-chests.js';
 import {addClothingToOutfit,outfitAppearance} from '../public/wardrobe.js';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
@@ -87,7 +88,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
  }
  const result=applyGameplayActionImpl(state,action,body,now,random,options);
  if(paid||state.location!==room&&action!=='combat'&&action!=='recover'||state.fishingReceipt?.castId!==fish&&action==='catch'||state.timberReceipt?.id!==timber&&action==='cut')spendActionPoint(state,now);
- if(action==='cut'&&state.actionPoints?.value===0)delete state.timberCut;
+ if(action==='cut'&&!availableActionPoints(state.actionPoints))delete state.timberCut;
  return result;
 }
 function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.random,{millRaid,camp}={}){
@@ -233,7 +234,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
         const batch=homeCookingBatch(state,body.id,body.quantity);
         if(batch.reason)throw new Error(batch.message);
         if(JSON.stringify(body.used)!==JSON.stringify(batch.used))throw new Error('Choose Review again. Your ingredients have changed.');
-        if(state.actionPoints.value<body.quantity)throw Object.assign(new Error('Answer more questions to earn enough AP for this batch.'),{status:402});
+        if(availableActionPoints(state.actionPoints)<body.quantity)throw Object.assign(new Error('Answer more questions to earn enough AP for this batch.'),{status:402});
         Object.assign(state,batch.state);
         for(let i=1;i<body.quantity;i++)spendActionPoint(state,now);
       }

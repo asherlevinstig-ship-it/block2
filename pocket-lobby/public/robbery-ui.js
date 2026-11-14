@@ -55,7 +55,7 @@ export function initializeRobbery({doc=document,cloud,hooks}){
    if(quote.protectedUntil>Date.now())reason='This player is temporarily protected after a recent attempt.';
    else if(quote.cooldownUntil>Date.now())reason='Wait '+Math.ceil((quote.cooldownUntil-Date.now())/1000)+'s before your next attempt.';
    else if(!quote.gold)reason='This player has no unprotected wallet gold.';
-   else if((cloud.initial.actionPoints?.value??0)<robberyRules.ap)reason='You need 10 AP. Use Questions on the hotbar to earn more.';
+   else if(!cloud.initial.actionPoints?.unlimited&&(cloud.initial.actionPoints?.value??0)<robberyRules.ap)reason='You need 10 AP. Use Questions on the hotbar to earn more.';
    $('robberySteal').disabled=!!reason;$('robberyResult').textContent=reason||'Success may take up to '+quote.gold+' gold. The target can notice your attempt.';
   }catch(error){if(current===requestId)$('robberyResult').textContent=error.message;}
  }

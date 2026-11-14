@@ -748,7 +748,7 @@ function updateBedGuide(){
 }
 function needsAutoLesson(){return (window.playerCloud?.initial??savedPlayerState)?.autoLesson==='required';}
 function playerMeditating(){return window.towerLearning?.active&&!routineControlled()&&!player.inCombat&&!player.seat&&!step&&!woodSession&&!fishingSession&&!miningCut&&!homeBedRest;}
-function needsLearningPoints(){return (window.playerCloud?.initial??savedPlayerState)?.actionPoints?.value===0;}
+function needsLearningPoints(){const points=(window.playerCloud?.initial??savedPlayerState)?.actionPoints;return points?.value===0&&!points.unlimited;}
 function updateAutoLessonGuide(){
   const visible=needsAutoLesson()&&!loungeDressGuiding&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
   $('autoLessonGuide').hidden=!visible;
@@ -1449,7 +1449,7 @@ function updateDepthsDecisionVitals(){
   const ap=window.towerActionPoints?.availableActionPoints(window.playerCloud?.initial?.actionPoints??savedPlayerState?.actionPoints,combatNow())??100;
   $('depthsDecisionHp').textContent=health+' / '+maxHealth();
   $('depthsDecisionMana').textContent=manaAvailable(playerVitals,combatNow())+' / 100';
-  $('depthsDecisionAp').textContent=ap;
+  $('depthsDecisionAp').textContent=ap===Infinity?'Unlimited':ap;
   $('depthsDecisionApHint').textContent=ap===0?'Answer a question to earn 1 AP before travelling.':ap===1?'Entering uses your last AP. Attacks and abilities also cost AP.':'';
 }
 function startMonsterEncounter(enemy,standGround=false){
@@ -1721,7 +1721,7 @@ function updateCombatPanel(){
   $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
-  $('combatLog').textContent=(encounter&&window.playerCloud?.initial?.actionPoints?.value===0?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
+  $('combatLog').textContent=(encounter&&needsLearningPoints()?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments,currentCombatBuild());
   $('combatIntelligence').hidden=!encounter||!characterRules.combat.enabled;
@@ -5129,6 +5129,7 @@ function updateVitalsHud(){
  }
  for(const [id,value] of Object.entries(values)){
   const meter=$('vital'+id),number=$('vital'+id+'Value'),maximum=id==='health'?maxHealth():100;meter.max=maximum;
+  if(value===Infinity){meter.value=maximum;meter.setAttribute('aria-label','Unlimited Action Points');number.textContent='Unlimited';$('vital'+id+'Row').dataset.low='false';continue;}
   meter.value=value;meter.setAttribute('aria-label',id[0].toUpperCase()+id.slice(1)+' '+value+' of '+maximum);
   number.textContent=value+' / '+maximum;$('vital'+id+'Row').dataset.low=String(value<=20);
  }
@@ -6552,7 +6553,7 @@ function equippedEssenceStatus(now,slot='q'){
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth()&&!vaultCoopState;
   const lowMana=manaAvailable(playerVitals,combatNow())<currentCombatBuild().mana;
-  return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active||vaultCoopState)&&!remaining&&!fullHealth&&!lowMana&&(window.playerCloud?.initial?.actionPoints?.value??1)>0};
+  return {power,remaining,fullHealth,lowMana,canCast:!!power&&!!(player.inCombat&&hunting.encounter||window.millRaidClient?.active||vaultCoopState)&&!remaining&&!fullHealth&&!lowMana&&!needsLearningPoints()};
 }
 function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
@@ -6577,7 +6578,7 @@ function updateEssenceHotbar(now=Date.now()){
   for(const slot of ['q','e']){
     const suffix=slot==='q'?'':'E';
     const {power,remaining,fullHealth,lowMana,canCast}=equippedEssenceStatus(now,slot);
-    const noPoints=window.playerCloud?.initial?.actionPoints?.value===0;
+    const noPoints=needsLearningPoints();
     const button=$('essenceHotbarPower'+suffix);
     let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
       :!(player.inCombat||vaultCoopState||window.millRaidClient?.active)?allEssences[power.gem].name+' · Cast in combat'
@@ -8030,7 +8031,7 @@ function updateRoomLabel(){
 }
 function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChests?.[next]}={}){
   if(['trail','pond','market'].includes(next))window.towerRefreshPublicRequests?.();
-  if(next!==currentRoom&&window.playerCloud?.initial?.location!==next&&window.playerCloud?.initial?.actionPoints?.value===0){note('Travelling to another area costs 1 AP. Answer an MCQ to earn a point.');window.towerLearning?.open();return;}
+  if(next!==currentRoom&&window.playerCloud?.initial?.location!==next&&needsLearningPoints()){note('Travelling to another area costs 1 AP. Answer an MCQ to earn a point.');window.towerLearning?.open();return;}
   if(miningCut&&next!==currentRoom){stopMining().then(ok=>{if(ok)enterRoom(next,arrival,{automatic,explore});});return;}
   if(next!==currentRoom)window.quarryForgeUI?.close();
   if(window.playerCloud?.gameplay&&next!==currentRoom&&(next==='millCellar'||currentRoom==='millCellar')&&window.playerCloud.initial.location!==next){

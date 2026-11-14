@@ -17,18 +17,19 @@ export function initializeActionPointFeedback({doc=document,initial,onEarn,setTi
  const earn=doc.createElement('button');earn.id='earnActionPoints';earn.type='button';earn.className='ap-earn';earn.textContent='Answer questions · Earn AP';earn.onclick=onEarn;row.append(earn);
  const floats=doc.createElement('div');floats.className='ap-spend-floats';floats.setAttribute('aria-hidden','true');floats.setAttribute('popover','manual');doc.body.append(floats);
  const announcement=doc.createElement('span');announcement.className='ap-announcement';announcement.setAttribute('role','status');doc.body.append(announcement);
- const balance=value=>{
+ const balance=(value,unlimited)=>{
+  if(unlimited)value=Infinity;
   earn.hidden=value>0;row.dataset.empty=String(value===0);row.dataset.low=String(value<=20);
   const meter=doc.getElementById('vitalactionPoints'),number=doc.getElementById('vitalactionPointsValue');
-  meter.value=value;meter.setAttribute('aria-label','Action Points '+value+' of 100');number.textContent=value+' / 100';
- };balance(initial.state.actionPoints.value);
+  meter.value=unlimited?100:value;meter.setAttribute('aria-label',unlimited?'Unlimited Action Points':'Action Points '+value+' of 100');number.textContent=unlimited?'Unlimited':value+' / 100';
+ };balance(initial.state.actionPoints.value,initial.state.actionPoints.unlimited);
  const card=row.closest?.('.hud-character'),rail=card?.parentElement;
  if(card&&rail){
   const measure=()=>{const space=Math.ceil(card.getBoundingClientRect().height+12)+'px';rail.style.setProperty('padding-top',space);doc.documentElement?.style.setProperty('--ap-profile-clearance',space);};
   measure();if(globalThis.ResizeObserver)new ResizeObserver(measure).observe(card);
  }
  return {update(packet){
-  const result=tracker.update(packet);if(!result)return;balance(result.balance);if(!result.spent)return;
+  const result=tracker.update(packet);if(!result)return;balance(result.balance,packet.state.actionPoints.unlimited);if(!result.spent)return;
   const anchor=doc.getElementById('vitalactionPoints').getBoundingClientRect(),node=doc.createElement('span');node.className='ap-spend-float';node.textContent='−'+result.spent+' AP';
   const width=globalThis.innerWidth??1280,left=width<=520?(anchor.left??anchor.right-120)-75:anchor.right+8;
   node.style.left=Math.max(8,Math.min(width-90,left))+'px';node.style.top=Math.max(8,anchor.top-8)+'px';

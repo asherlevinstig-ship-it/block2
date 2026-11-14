@@ -85,3 +85,44 @@ test('failed sign-up session creation rolls back account linking and leaves gues
  assert.equal((await a.call('account/register',{username:'RetryHero',password:'a sufficiently long passphrase'})).status,200);
  sql.close();
 });
+
+test('only verified LiveWeave teachers can enable Unlimited AP without changing their balance',async t=>{
+ const {db,sql}=testDatabase(),env={TOWER_DB:db};t.after(()=>sql.close());
+ for(const role of ['student','teacher']){
+  const player=client(env);
+  await player.call('player/session',{newCharacter:true,legacy:{actionPoints:{value:100,unlimited:true}}});
+  const registered=await player.call('account/register',{username:role+'Fixture',password:'a sufficiently long passphrase'});
+  assert.equal(registered.status,200);
+  const account=sql.prepare('SELECT account_id FROM tower_accounts WHERE username=?').get(role+'Fixture');
+  sql.prepare('INSERT INTO tower_external_accounts VALUES (?,?,?,?,?)').run('liveweave',role+':1',1,account.account_id,Date.now());
+  const read=async()=>(await player.call('player/state')).data;
+  const change=async(path,data)=>player.call('player/'+path,{...data,revision:(await read()).revision,operation:crypto.randomUUID()});
+  let packet=await read();
+  assert.equal(packet.teacher,role==='teacher');
+  assert.equal(packet.state.actionPoints.value,0);
+  assert.equal(packet.state.actionPoints.unlimited,undefined);
+  const enabled=await change('learning/unlimited',{enabled:true});
+  if(role==='student'){
+   assert.equal(enabled.status,403);
+   const forged=await change('save',{state:{...packet.state,actionPoints:{value:100,unlimited:true}}});
+   assert.equal(forged.status,200);
+   packet=await read();
+   assert.equal(packet.state.actionPoints.value,0);
+   assert.equal(packet.state.actionPoints.unlimited,undefined);
+   continue;
+  }
+  assert.equal(enabled.status,200);
+  packet=await read();
+  assert.equal(packet.state.actionPoints.unlimited,true);
+  assert.equal(packet.state.actionPoints.value,0);
+  const journey=await change('save',{state:{...packet.state,location:'hub',position:{x:8,y:12}}});
+  assert.equal(journey.status,200);
+  assert.equal(journey.data.state.actionPoints.value,0);
+  assert.equal(journey.data.state.actionPoints.spent??0,0);
+  assert.equal((await change('learning/unlimited',{enabled:false})).status,200);
+  packet=await read();
+  assert.equal(packet.state.actionPoints.unlimited,undefined);
+  assert.equal(packet.state.actionPoints.value,0);
+  assert.equal((await change('save',{state:{...packet.state,location:'home',position:{x:5,y:7}}})).status,402);
+ }
+});

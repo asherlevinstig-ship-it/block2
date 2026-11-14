@@ -1,5 +1,6 @@
+import {availableActionPoints} from './action-points.js';
 import {armourSelection} from './hunting.js';
-export function initializeLearning({doc=document,change,getState,renderer=null,onAdventure=async()=>{}}){
+export function initializeLearning({doc=document,change,getState,renderer=null,isTeacher=()=>false,onAdventure=async()=>{}}){
  const dialog=doc.createElement('dialog');dialog.className='game-window learning-window';dialog.id='learningDialog';dialog.setAttribute('aria-labelledby','learningTitle');
  dialog.innerHTML=`<header class="learning-head"><div><span class="eyebrow">THE TOWER ACADEMY · MATHS</span><h2 id="learningTitle">Homework powers adventure.</h2></div><button class="close" type="button" aria-label="Close learning">×</button></header><div class="learning-banner"><span class="learning-gem" aria-hidden="true">ϟ</span><div><b>10 questions. One clear goal.</b><p>Each submitted answer earns 1 AP, up to 100 stored. Your progress is saved.</p></div><strong id="learningBalance"></strong></div><section class="learning-session" aria-label="Homework session progress"><div><b>Your maths homework</b><span id="learningSessionCount">0 / 10 answered</span></div><progress id="learningSessionBar" max="10" value="0" aria-label="Homework progress"></progress></section><form id="learningForm"><fieldset><legend id="learningPrompt">Preparing your question…</legend><div id="learningChoices" class="learning-choices"></div></fieldset><section id="learningFeedback" class="learning-feedback" role="status" hidden></section><p id="learningError" class="learning-error" role="alert"></p><footer><span id="learningProgress"></span><button id="learningSubmit" class="primary" type="submit" disabled>Submit answer · +1 AP</button><button id="learningNext" class="primary" type="button" hidden>Next question</button></footer></form><article id="learningComplete" class="learning-complete" hidden aria-labelledby="homeworkCompleteTitle"><span class="homework-complete-mark" aria-hidden="true">✓</span><span class="eyebrow">TEN QUESTIONS ANSWERED</span><h3 id="homeworkCompleteTitle">Homework complete!</h3><p id="homeworkSummary"></p><p id="homeworkAvailable"></p><div class="homework-actions"><button id="homeworkAdventure" class="primary" type="button">Back to adventure</button><button id="homeworkAgain" type="button">Start another 10</button></div><small>You can return to questions whenever you want more AP.</small><p id="homeworkError" class="learning-error" role="alert"></p></article>`;
  doc.body.append(dialog);
@@ -10,6 +11,23 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
  tripContinue.type='button';tripContinue.textContent='Back to your upgrade goal';
  trip.append(tripStatus,tripContinue);dialog.append(trip);
  tripContinue.onclick=()=>{if(!busy&&goalTrip){const resume=goalTrip.onContinue;dialog.close();resume();}};
+ const teacherPanel=doc.createElement('section');
+ teacherPanel.className='learning-feedback';
+ teacherPanel.hidden=true;
+ const toggle=doc.createElement('button'),teacherStatus=doc.createElement('p');
+ toggle.type='button';teacherStatus.setAttribute('role','status');
+ teacherPanel.append(toggle,teacherStatus);
+ dialog.insertBefore(teacherPanel,el('learningSessionBar').parentElement);
+ toggle.onclick=async()=>{
+  if(busy||!isTeacher())return;
+  busy=true;toggle.disabled=true;teacherStatus.textContent='';
+  const enabled=getState().actionPoints?.unlimited!==true;
+  try{
+   await change('unlimited',{enabled});
+   teacherStatus.textContent=enabled?'Unlimited AP is on. Your stored points won’t be spent.':'Unlimited AP is off. Your stored points are available again.';
+  }catch(error){teacherStatus.textContent=error.message;}
+  finally{busy=false;toggle.disabled=false;summary();}
+ };
  const preview=doc.createElement('canvas');preview.width=180;preview.height=180;preview.className='learning-avatar';preview.setAttribute('role','img');preview.setAttribute('aria-label','Your character meditating');
  if(renderer)dialog.querySelector('.learning-gem').replaceWith(preview);
  const reduced=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;
@@ -24,11 +42,15 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
  const finished=()=>{const session=getState().learning?.session;return session&&session.answered>=session.target;};
  function summary(){
   const s=getState(),session=s.learning?.session,answered=session?.answered??0,target=session?.target??10;
-  el('learningBalance').textContent=(s.actionPoints?.value??0)+' / 100 AP';
+  const unlimited=s.actionPoints?.unlimited===true;
+  el('learningBalance').textContent=unlimited?'Unlimited AP':(s.actionPoints?.value??0)+' / 100 AP';
+  teacherPanel.hidden=!isTeacher();
+  toggle.textContent=unlimited?'Turn off Unlimited AP':'Enable Unlimited AP';
+  toggle.setAttribute('aria-pressed',String(unlimited));
   trip.hidden=!goalTrip;
   if(goalTrip){
    tripContinue.textContent=goalTrip.continueLabel??'Back to your upgrade goal';
-   const remaining=Math.max(0,goalTrip.travelAP-(s.actionPoints?.value??0));
+   const remaining=Math.max(0,goalTrip.travelAP-availableActionPoints(s.actionPoints));
    const label=goalTrip.goalLabel??'Trading Post trip';
    tripStatus.textContent=remaining?label+' · '+remaining+' more answer'+(remaining===1?'':'s')+' needed':goalTrip.readyText??'You have enough AP to reach the Trading Post.';
   }
@@ -40,7 +62,7 @@ export function initializeLearning({doc=document,change,getState,renderer=null,o
   summary();form.hidden=true;el('learningComplete').hidden=false;
   const s=getState(),session=s.learning.session,remaining=session.target-session.correct;
   el('homeworkSummary').textContent=session.correct+' correct'+(remaining?' · '+remaining+' to practise':'')+' · '+session.earned+' AP earned';
-  el('homeworkAvailable').textContent=(s.actionPoints?.value??0)+' AP available for journeys, attacks, abilities and gathering.';
+  el('homeworkAvailable').textContent=s.actionPoints?.unlimited?'Unlimited AP is on.':(s.actionPoints?.value??0)+' AP available for journeys, attacks, abilities and gathering.';
  }
  function showQuestion(){
   summary();form.hidden=false;el('learningComplete').hidden=true;current=getState().learning?.attempt;selected=null;choices.replaceChildren();feedback.hidden=true;el('learningError').textContent='';

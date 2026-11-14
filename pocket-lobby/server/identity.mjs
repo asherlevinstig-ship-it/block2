@@ -9,9 +9,9 @@ export async function resolveIdentity(request,env){
   const accountToken=cookieToken(request,ACCOUNT_COOKIE);
   if(accountToken){
     const sessionHash=await tokenHash(accountToken);
-    const row=await env.TOWER_DB.prepare('SELECT a.account_id, a.username, a.player_id, s.expires_at FROM tower_sessions s JOIN tower_accounts a ON a.account_id = s.account_id WHERE s.session_hash = ? AND s.expires_at > ?').bind(sessionHash,Date.now()).first();
+    const row=await env.TOWER_DB.prepare(`SELECT a.account_id, a.username, a.player_id, s.expires_at, EXISTS (SELECT 1 FROM tower_external_accounts e WHERE e.account_id=a.account_id AND e.provider='liveweave' AND e.subject GLOB 'teacher:[0-9]*') AS teacher FROM tower_sessions s JOIN tower_accounts a ON a.account_id = s.account_id WHERE s.session_hash = ? AND s.expires_at > ?`).bind(sessionHash,Date.now()).first();
     if(!row?.account_id)return {expired:true};
-    return {playerId:row.player_id,account:{id:row.account_id,username:row.username},sessionHash,expiresAt:row.expires_at};
+    return {playerId:row.player_id,account:{id:row.account_id,username:row.username},teacher:row.teacher===1,sessionHash,expiresAt:row.expires_at};
   }
   const guestToken=cookieToken(request,GUEST_COOKIE);if(!guestToken)return null;
   const playerId=await tokenHash(guestToken);

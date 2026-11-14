@@ -13,6 +13,7 @@
   const gate=document.getElementById('cloudGate');
   const gateText=document.getElementById('cloudGateText');
   const retry=document.getElementById('cloudRetry');
+  let verifiedTeacher=false;
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
   let pausedForPoints=false,shiftTimer=null,shiftPolling=false;
   let presenceBusy=null,acting=0,gameplayBusy=false,lastInputAt=Date.now(),lastReportedInputAt=0,resumeAutoView=false;
@@ -46,6 +47,7 @@
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
     }
+    if(typeof data.teacher==='boolean')verifiedTeacher=data.teacher;
     apFeedback?.update(data);
     return data;
   }
@@ -608,7 +610,7 @@
         const {initializeBuildUI}=await import('./combat-build-ui.js');window.towerBuildUI=initializeBuildUI({doc:document,hooks:window.towerBuildHooks});
         const {initializeRobbery}=await import('./robbery-ui.js');window.towerRobbery=initializeRobbery({doc:document,cloud:window.playerCloud,hooks:window.towerRobberyHooks});
         const {initializeLearning}=await import('./learning-ui.js');
-        window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,onAdventure:async()=>{if(pausedForPoints)await retry.onclick?.();},change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
+        window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,isTeacher:()=>verifiedTeacher,onAdventure:async()=>{if(pausedForPoints)await retry.onclick?.();},change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
         const {initializeActionPointFeedback}=await import('./action-point-feedback.js');
         apFeedback=initializeActionPointFeedback({doc:document,initial:packet,onEarn:()=>window.towerLearning.open()});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');

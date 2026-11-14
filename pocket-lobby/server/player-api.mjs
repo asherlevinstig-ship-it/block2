@@ -199,7 +199,7 @@ export async function handlePlayerApi(request,env){
     let id=identity?.playerId;
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env,id,true);
-      if(existing)return json(packet(existing));
+      if(existing)return json({...packet(existing),teacher:identity?.teacher===true});
       const body=await bodyOf(request);
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
@@ -271,7 +271,7 @@ export async function handlePlayerApi(request,env){
     }
     if(path==="/api/player/state"&&request.method==="GET"){
       const row=await settled(env,id,true);
-      return row?json(packet(row)):json({error:"Character not found."},401);
+      return row?json({...packet(row),teacher:identity?.teacher===true}):json({error:"Character not found."},401);
     }
     if(path==="/api/player/rankings"&&request.method==="GET"){
       const row=await settled(env,id);
@@ -398,6 +398,12 @@ export async function handlePlayerApi(request,env){
         if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);
       }
     }else switch(path){
+      case "/api/player/learning/unlimited":
+        if(!identity?.teacher)return json({error:'Unlimited Action Points are available to verified LiveWeave teachers.'},403);
+        if(typeof body.enabled!=='boolean')return json({error:'Choose whether to enable Unlimited AP.'},400);
+        if(body.enabled)state.actionPoints.unlimited=true;
+        else delete state.actionPoints.unlimited;
+        break;
       case "/api/player/learning/next":
       case "/api/player/learning/answer":
         learningAction(state,path.split('/').at(-1),body);
@@ -456,7 +462,7 @@ export async function handlePlayerApi(request,env){
       }
       case "/api/player/reconnect":{
         if(state.autoDisconnected){
-          const at=Date.now();state.actionPoints={...state.actionPoints,value:availableActionPoints(state.actionPoints,at),at,active:false};
+          const at=Date.now();state.actionPoints={...state.actionPoints,at,active:false};
           delete state.autoDisconnected;state.controlMode='play';state.routineLastSeen=at;
           if(state.report?.reason==='action-points')delete state.report;
         }
@@ -525,7 +531,7 @@ export async function handlePlayerApi(request,env){
     const oldRoom=JSON.parse(row.state_json).location;
     if(['/api/player/save','/api/player/gameplay/factionHall','/api/player/plan/start'].includes(path)&&state.location!==oldRoom){
       spendActionPoint(state,Date.now());
-      if(state.plan&&state.actionPoints.value===0){stopForActionPoints(state,Date.now());finishRoutineReport(state,Date.now());}
+      if(state.plan&&!availableActionPoints(state.actionPoints)){stopForActionPoints(state,Date.now());finishRoutineReport(state,Date.now());}
     }
     const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation,pondCatchAt);
     if(!updated&&treeMutation){const latest=await read(env.TOWER_DB,id);if(latest?.revision===row.revision)return json({error:'Invalid cut: another player felled this tree. Choose a standing tree.'},400);}

@@ -15,10 +15,10 @@ export function prepareRobbery(actor,target,operation,now,random=()=>crypto.getR
  const available=robberyGold(target.credits,actor);
  if(!available)throw invalid('This player has no unprotected wallet gold to steal. Banked gold and the first 50 wallet gold are safe.');
  const points=normalizeActionPoints(actor.actionPoints);
- if(points.value<robberyRules.ap)throw invalid('A steal attempt costs 10 AP. Answer more questions first.',402);
+ if(!points.unlimited&&points.value<robberyRules.ap)throw invalid('A steal attempt costs 10 AP. Answer more questions first.',402);
  if(actor.credits>100000000-available)throw invalid('Make room in your wallet before stealing.');
  const chance=robberyChance(actor,target),success=random()*100<chance,gold=success?available:0,xp=success?10:3;
- actor.actionPoints={...points,value:points.value-robberyRules.ap,spent:Math.min(Number.MAX_SAFE_INTEGER,(points.spent??0)+robberyRules.ap),at:now};
+ if(!points.unlimited)actor.actionPoints={...points,value:points.value-robberyRules.ap,spent:Math.min(Number.MAX_SAFE_INTEGER,(points.spent??0)+robberyRules.ap),at:now};
  actor.credits+=gold;target.credits-=gold;
  actor.stats={...actor.stats,stealthXp:Math.min(MAX_SKILL_XP,(actor.stats?.stealthXp??0)+xp)};
  a.lastAttemptAt=now;b.protectedUntil=now+robberyRules.protection;
