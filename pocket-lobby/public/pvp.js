@@ -1,0 +1,1 @@
+export const pvpRooms=new Set(['trail','grove','creek','roots','pond','logging','clearing','ruins','reedwater','willowbank','millbrook','ambermead','thornwood','beaconwatch','waystation','keepersOverlook','quarry']);

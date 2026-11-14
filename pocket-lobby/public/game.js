@@ -8454,7 +8454,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
       if(!gift?.id)return;
       showTransaction('Gift from '+gift.from,[{icon:'✦',text:'+'+gift.quantity+' × '+gift.label}]);
       window.playerCloud.refreshGift?.();
-    },onFishTogether:receiveFishTogether,onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
+    },onFishTogether:receiveFishTogether,onPvp:receipt=>window.playerCloud.refreshPvp?.(receipt),onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,onAutoDisconnected:()=>window.playerCloud.pauseAuto?.(),
@@ -8554,6 +8554,15 @@ async function openMillCellarChest(){
  catch(error){note(error.message);}
 }
 
+let lastPvpNotice;
+window.towerApplyPvpHit=(state,receipt)=>{
+  if(!receipt?.id||receipt.id===lastPvpNotice)return;
+  lastPvpNotice=receipt.id;
+  if(receipt.killed)window.towerApplyRoutineState(state,{handoff:true,reconcile:true});
+  else applyServerGameplay(state);
+  combatArt.hurtAt=performance.now();
+  note(receipt.killed?'Defeated by '+receipt.name+' · Recovering at home.':receipt.name+' hit you for '+receipt.damage+' HP.',5000);
+};
 window.towerApplyRobberyState=state=>{credits=state.credits;Object.assign(playerStats,state.stats);$('credits').textContent=new Intl.NumberFormat().format(credits);walletTween=null;updatePlayerStats();};
 window.towerRobberyHooks={gift:state=>window.towerApplySupperInventory(state),peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};
 

@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {pvpStrike} from '../server/pvp.mjs';
+import {normalizeState} from '../server/player-state.mjs';
+import {testDatabase} from './db-helper.mjs';
+
+test('an outdoor PvP strike requires both players to opt in and commits a kill once',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const actor=normalizeState({location:'trail',actionPoints:{value:3}});
+ const target=normalizeState({location:'trail',health:2,credits:150});
+ actor.pvp={enabled:true};
+ const insert=sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?)');
+ insert.run('a',JSON.stringify(actor),'fixture',1);
+ insert.run('b',JSON.stringify(target),'fixture',1);
+ const env={TOWER_DB:db,SHARED_ROOMS:{idFromName:id=>id,get:()=>({fetch:async()=>Response.json({playerId:'b'})})}};
+ const row={player_id:'a',revision:1},body={target:'a'.repeat(24),operation:'strike-one'};
+ await assert.rejects(pvpStrike(env,row,structuredClone(actor),body,20000),/not enabled/);
+ await assert.rejects(pvpStrike(env,row,{...actor,location:'hub'},body,20000),/outdoor/);
+ target.pvp={enabled:true};
+ sql.prepare("UPDATE tower_players SET state_json=? WHERE player_id='b'").run(JSON.stringify(target));
+ const attempts=await Promise.allSettled([pvpStrike(env,row,structuredClone(actor),body,20000),pvpStrike(env,row,structuredClone(actor),body,20000)]);
+ assert.equal(attempts.filter(r=>r.status==='fulfilled').length,1);
+ const records=Object.fromEntries(sql.prepare('SELECT player_id,state_json FROM tower_players').all().map(r=>[r.player_id,JSON.parse(r.state_json)]));
+ assert.equal(records.a.actionPoints.value,2);
+ assert.equal(records.a.pvp.kills,1);
+ assert.equal(records.b.pvp.deaths,1);
+ assert.equal(records.b.pvp.enabled,false);
+ assert.equal(records.b.location,'home');
+ assert.equal(records.b.credits,150);
+});

@@ -1,3 +1,4 @@
+import {pvpRooms} from '../public/pvp.js';
 import {playerMaxHealth} from '../public/food-buffs.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {factionHallAccess} from './faction-projects.mjs';
@@ -120,6 +121,16 @@ export class SharedRoom{
       for(const [ws,peer] of this.sessions)if(peer.playerId===recipient)this.send(ws,{type:'gift',receipt});
       return json({ok:true});
     }
+    if(path==='/pvp-notice'&&request.method==='POST'){
+      const {recipient,receipt}=await request.json();
+      for(const [ws,peer] of this.sessions)if(peer.playerId===recipient)this.send(ws,{type:'pvp',receipt});
+      return json({ok:true});
+    }
+    if(path==='/pvp-target'&&request.method==='POST'){
+      const target=await request.json();
+      if(!pvpRooms.has(target.room))return json({error:'PvP is disabled here.'},400);
+      return this.robberyTarget(target,true,'attacking');
+    }
     if(path==='/gift-target'&&request.method==='POST')return this.robberyTarget(await request.json(),true);
     if(path==='/robbery-target'&&request.method==='POST')return this.robberyTarget(await request.json());
     if(path==='/waystation'&&request.method==='POST'){
@@ -135,7 +146,7 @@ export class SharedRoom{
     if(path==='/raid'&&request.method==='POST'){const {raid,playerId,receipt,cast}=await request.json();const peer=[...this.sessions.values()].find(m=>m.playerId===playerId);const cue=peer?{player:peer.id,hit:receipt?.hit??0,cast}:null;for(const ws of this.sessions.keys())this.send(ws,{type:'millRaid',raid,cue});return json({ok:true});}
     return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);
   });}
-  robberyTarget({playerId,target,room},gift=false){
+  robberyTarget({playerId,target,room},gift=false,verb='stealing'){
     const now=Date.now(),peers=new Map([...this.sessions.values()].filter(p=>!p.serverAuto).map(p=>[p.playerId,p]));
     if(!gift)for(const [id,p] of this.autoPeers)if(p.until>now)peers.set(id,p);
     const actor=peers.get(playerId),other=[...peers.values()].find(p=>p.id===target&&p.playerId!==playerId);
@@ -143,7 +154,7 @@ export class SharedRoom{
     if(!actor||!other||actor.room!==room||other.room!==room||room==='home'||room==='factionHall'||other.veilUntil>now||actor.veilUntil>now)return json({error:'Choose a visible player in the same public area.'},400);
     const a=actor.walk?autoWalkPosition(actor.walk,now):actor,b=other.walk?autoWalkPosition(other.walk,now):other;
     const from={x:Math.round(a.x),y:Math.round(a.y)},to={x:Math.round(b.x),y:Math.round(b.y)};
-    if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>robberyRules.reach||!reachableMove(room,from,to,roomBoxes(room),1,actor))return json({error:'Move next to this player, within one tile, before stealing.'},400);
+    if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>robberyRules.reach||!reachableMove(room,from,to,roomBoxes(room),1,actor))return json({error:'Move next to this player, within one tile, before '+verb+'.'},400);
     return json({playerId:other.playerId});
   }
   async reserveFishingSpot(request){

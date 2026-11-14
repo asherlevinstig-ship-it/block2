@@ -1,3 +1,4 @@
+import {pvpStrike} from './pvp.mjs';
 import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
 import {waystationRoom} from '../public/waystation.js';
 import {readWaystation,useWaystation} from './waystation.mjs';
@@ -307,6 +308,7 @@ export async function handlePlayerApi(request,env){
     }
     if(row.last_request===body.operation){
       if(path==='/api/player/public-requests')return json({...playerPacket(row),board:await readPublicRequests(env.TOWER_DB)});
+      if(path==='/api/player/pvp')return json({...playerPacket(row),receipt:body.kind==='strike'?JSON.parse(row.state_json).pvp?.lastStrike:undefined});
       if(path==='/api/player/robbery')return json({...playerPacket(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
       if(path==='/api/player/gameplay/waystation')return json({...playerPacket(row),waystation:await readWaystation(env.TOWER_DB)});
       if(path==='/api/player/gameplay/campRefuel')return json({...playerPacket(row),camp:await readTrailCamp(env.TOWER_DB)});
@@ -343,6 +345,18 @@ export async function handlePlayerApi(request,env){
       const updated=await deliverPublicRequest(env.TOWER_DB,row,state,body.id,body.operation,Date.now());
       if(!updated)return json({error:'The board changed. Refresh it and try again.',...playerPacket(await read(env.TOWER_DB,id))},409);
       return json({...playerPacket(updated),board:await readPublicRequests(env.TOWER_DB)});
+    }
+    if(path==='/api/player/pvp'){
+      if(body.kind==='toggle'){
+        if(typeof body.enabled!=='boolean')return json({error:'Choose whether to enable PvP.'},400);
+        if(!body.enabled&&Date.now()-(state.pvp?.lastHit?.at??0)<15000)return json({error:'Wait 15 seconds after being hit before disabling PvP.'},400);
+        state.pvp={...state.pvp,enabled:body.enabled};
+        const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation);
+        return updated?json(playerPacket(updated)):json({error:'Your character changed. Try again.'},409);
+      }
+      if(body.kind!=='strike')return json({error:'Choose a PvP action.'},400);
+      const result=await pvpStrike(env,row,state,body);
+      return json({...playerPacket(result.row),receipt:result.receipt});
     }
     if(path==='/api/player/robbery'){
       const result=await robberyAction(env,row,state,body);
