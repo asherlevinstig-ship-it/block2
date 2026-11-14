@@ -18,10 +18,9 @@ export function essenceAction(state,action,body){
   if(action==='bondEssences'){
     if(!confluence(body.picks))throw new Error('Choose three different Magic Gems.');
     const {location,position}=state;
-    const changing=magic.picks.length>0;
     const atLandmark=position&&Math.abs(position.x-6)+Math.abs(position.y-4)===1;
-    if(!atLandmark||location!==(changing?'shrine':'ruins')){
-      throw new Error(changing?'Travel beside the Moth Shrine to change your Gems.':'Travel beside the Moonwell in Moonwell Ruins to bond your first Gems.');
+    if(!atLandmark||location!=='shrine'){
+      throw new Error('Travel beside the Moth Shrine to bond or change your Gems.');
     }
     if(!magic.picks.length)magic.stones.sword++;
     magic.picks=[...body.picks];

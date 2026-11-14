@@ -2963,7 +2963,7 @@ function object(item,highlight=false,time=0,weather=null) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -3741,10 +3741,9 @@ function updateWorldLabels(){
   }
   if(currentRoom==='shrine'||currentRoom==='ruins'){
     const landmark=roomFurniture().find(item=>item.id==='landmark');
-    add(currentRoom==='shrine'?'Moth Shrine':'Moonwell',...point(landmark.x+.5,landmark.y+.5,35),'npc',()=>use(landmark));
-  }
-  if(currentRoom==='ruins'&&depthsDiscovered&&!unavailable()){
-    add('Moonwell Depths',...point(7.4,3.4,19),'npc',reviewDepthsEntrance,'Review expedition');
+    const shrine=currentRoom==='shrine';
+    const label=add(shrine?'Moth Shrine':'Moonwell Depths',...point(landmark.x+.5,landmark.y+.5,shrine?35:78),'npc',()=>use(landmark),shrine?'':depthsDiscovered?'Dungeon portal':'Guarded by Stoneback Beetle');
+    if(!shrine)label.classList.add('moonwell-portal-label');
   }
   if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign',null,'',{side:'left',width:48,font:5.2});
   if(['store','market','armory','furnishings'].includes(currentRoom)){
@@ -5149,7 +5148,7 @@ function finishInteraction(){
   }else if(item.type==='mothAltar'){
     if(!adventure.shrine){
       adventure.shrine=true;
-      recordAdventure('Moth Shrine discovered. Return here to change your bonded Gems.');
+      recordAdventure('Moth Shrine discovered. Bond or change your Gems here.');
     }
     openEssences();
   }else if(item.type==='moonwell'){
@@ -5158,7 +5157,8 @@ function finishInteraction(){
       ownedFurniture.moonbloom=(ownedFurniture.moonbloom??0)+1;
       recordAdventure('Moonbloom added to inventory. The root passage opens.');
     }
-    openEssences();
+    if(depthsDiscovered)reviewDepthsEntrance();
+    else note('Defeat the Stoneback Beetle to open the dungeon portal.');
   }else if(item.type==='enchanter'||currentRoom==='armory'&&item.type==='anvil'){
     openEnchanter();
   }else if(['armoryCounter','weaponRack','brazier'].includes(item.type)){
@@ -6568,8 +6568,7 @@ function renderEssences(){
   const fusion=confluence(gemDraft);
   const bonded=bondedEssences(magic.picks);
   const changed=gemDraft.length!==magic.picks.length||gemDraft.some(id=>!magic.picks.includes(id));
-  const altar=['ruins','shrine'].includes(currentRoom)&&Math.abs(player.cx-6)+Math.abs(player.cy-4)===1;
-  const canBond=altar&&currentRoom===(bonded.length?'shrine':'ruins');
+  const canBond=currentRoom==='shrine'&&Math.abs(player.cx-6)+Math.abs(player.cy-4)===1;
   $('essenceIntro').textContent=canBond?'Bond three Gems to form a fourth. Awakening Stones unlock one power from a bonded Gem.':'Your first bonded victory and every fifth victory earn a Stone. Vault Guardians and Essence Caches guarantee Stones. Visit the Moth Shrine to change Gems.';
   $('essenceBuild').hidden=!canBond;
   const choices=$('essenceChoices');choices.replaceChildren();
@@ -6587,7 +6586,7 @@ function renderEssences(){
   $('essenceBond').textContent=bonded.length?'Change Gems':'Bond Gems · Get a Sword Stone';
   $('essenceBond').disabled=essenceBusy||!canBond||!fusion||!changed;
   $('essencePowers').hidden=!bonded.length;
-  if(!bonded.length){if(!canBond)$('essenceIntro').textContent='Visit the Moonwell in Moonwell Ruins to choose your first three Gems.';return;}
+  if(!bonded.length){if(!canBond)$('essenceIntro').textContent='Visit the Moth Shrine to bond your first Gems. Light the lantern in Whispering Grove to find the trail.';return;}
   if(!bonded.includes(viewedEssence))viewedEssence=bonded[0];
   const count=magic.unlocked.filter(id=>bonded.includes(essencePower(id)?.gem)).length;
   for(const slot of ['q','e']){
@@ -6744,7 +6743,7 @@ function currentActivityPrompt(){
   if(currentRoom==='beaconwatch'&&!adventure.watchBeacon)return {label:'BEACONWATCH EXPEDITION',title:'Light the watchtower beacon',text:'Restore the beacon to open a permanent bridge back to Millbrook.',action:'watchBeaconGuide'};
   if(currentRoom==='creek'&&!adventure.bridge)return {label:'CREEK CROSSING',title:'Continue to the ruins',text:'Use the stepping stones to cross Glass Creek.',action:'adventureLandmark'};
   if(currentRoom==='trail'&&!adventure.lantern)return {label:'EXPLORATION',title:'Take the waystone lantern',text:'Its light reveals hidden paths through Moonwood.',action:'adventureLandmark'};
-  if(currentRoom==='ruins'&&!magicState?.picks.length)return {label:'MAGIC GEMS',title:'Choose your first Gems',text:'Visit the Moonwell to bond three Gems and get a free Awakening Stone.',action:'adventureLandmark'};
+  if(currentRoom==='ruins'&&depthsDiscovered&&!player.inCombat)return {label:'DUNGEON PORTAL',title:'Moonwell Depths',text:'Enter the portal to prepare for your expedition.',action:'adventureLandmark'};
   if(currentRoom==='clearing'&&combatNow()>=hunting.respawnAt){
     if(!combatGear.equippedWeapon)return {label:'PREPARE TO HUNT',title:'Equip a weapon',text:'Open Inventory and equip a sword before approaching the boar.',action:'equipHunting'};
     return {label:'HUNTING',title:'Wild Boar ahead',text:'Approach when you’re ready. Dodge its charge and flee if your hearts run low.',action:'adventureLandmark'};
@@ -6895,8 +6894,8 @@ function updateAdventurePanel(){
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
     creek:adventure.bridge?'Tap the button to walk across the stepping stones.':'Tap the button to light the way and walk across. There’s a spare lantern if you need one.',
-    shrine:'Visit the Moonwell to bond your first Gems. Return to this altar to change your combination.',
-    ruins:'Visit the Moonwell to choose your first Magic Gems, or approach the Stoneback Beetle to hunt.',
+    shrine:'Bond your first Gems or change your combination at the altar.',
+    ruins:depthsDiscovered?'Use the Moonwell portal to enter the dungeon.':'Defeat the Stoneback Beetle to open the Moonwell portal.',
     roots:'Follow the roots back to Lantern Trail.',
     pond:fishingSession?({casting:'Casting your line…',waiting:'Watch the float. Your character will reel automatically.',twitch:'A nibble! Keep watching the float…',bite:'Bite! Reel now for +5 Patience XP. Your character will also reel automatically.',landing:'Reeling in your catch…'}[fishingMoments.phase(fishingSession,performance.now())]):fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
   };
@@ -6912,7 +6911,7 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).filter(room=>depthsStageIndex(room)<0).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action=(currentRoom==='willowbank'||currentRoom==='ambermead')?(bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Choose a fishing station'):{clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action=(currentRoom==='willowbank'||currentRoom==='ambermead')?(bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Choose a fishing station'):{clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:depthsDiscovered?'Enter dungeon portal':'Inspect dungeon portal',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action||player.inCombat;
   landmark.disabled=(!!fishingSession&&!bite)||(isFishingRoom(currentRoom)&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);

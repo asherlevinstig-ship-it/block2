@@ -10,7 +10,7 @@ import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 
 const gems=['fire','ice','shadow'];
 const character=()=>normalizeState({
-  location:'ruins',position:{x:5,y:4}
+  location:'shrine',position:{x:5,y:4}
 });
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
 
@@ -29,9 +29,9 @@ test('three distinct base Gems form an order-independent fourth, with five power
 test('server bonds once, spends typed stones once, preserves unlocks across gem changes, and blocks forged snapshots',()=>{
   const s=character();
   assert.throws(()=>act(s,'bondEssences',{picks:['fire','fire','ice']}),/three/);
-  s.location='shrine';
-  assert.throws(()=>act(s,'bondEssences',{picks:gems}),/Moonwell/);
   s.location='ruins';
+  assert.throws(()=>act(s,'bondEssences',{picks:gems}),/Moth Shrine/);
+  s.location='shrine';
   act(s,'bondEssences',{picks:gems});
   assert.equal(s.magic.stones.sword,1);
   assert.throws(()=>act(s,'awakenPower',{id:'storm:sword'}),/bonded/);
@@ -106,7 +106,7 @@ test('old saves shed the retired magic while retaining Essence powers and an alr
     cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;
     if(response.ok)packet=await response.json();
   }
-  await call('session',{legacy:{location:'ruins',position:{x:5,y:4},woodcutting:{axeOwned:true,equipped:true}}});
+  await call('session',{legacy:{location:'shrine',position:{x:5,y:4},woodcutting:{axeOwned:true,equipped:true}}});
   const send=(path,body)=>call(path,{...body,revision:packet.revision,operation:crypto.randomUUID()});
   await send('gameplay/bondEssences',{picks:gems});
   await send('gameplay/awakenPower',{id:'fire:sword'});
@@ -456,7 +456,7 @@ test('saved mastery and contribution cannot be forged, and concurrent victory re
     const data=await response.json();if(response.ok)packet=data;
     return {status:response.status,...data};
   }
-  await call('session',{legacy:{location:'ruins',position:{x:5,y:4}}});
+  await call('session',{legacy:{location:'shrine',position:{x:5,y:4}}});
   const send=(name,body={})=>call(name,{...body,revision:packet.revision,operation:crypto.randomUUID()});
   await send('gameplay/bondEssences',{picks:gems});await send('gameplay/awakenPower',{id:'fire:sword'});
   const seed=structuredClone(packet.state);

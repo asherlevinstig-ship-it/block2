@@ -10,7 +10,7 @@ import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
 function fighter(ids=['fire:sword','ice:shield'],picks=['fire','ice','shadow'],combat={enabled:true,q:true,e:true,fleeBelow:0},room='clearing'){
- const s=normalizeState({location:'ruins',position:{x:5,y:4},characterRules:{combat}});
+ const s=normalizeState({location:'shrine',position:{x:5,y:4},characterRules:{combat}});
  act(s,'bondEssences',{picks});
  for(const id of ids){s.magic.stones[id.split(':')[1]]=1;act(s,'awakenPower',{id});}
  s.location=room;s.position={x:5,y:5};if(room==='depthsCache')s.depthsRun={cleared:2};
@@ -101,7 +101,7 @@ test('rules API persists tactics, blocks mid-fight changes and settles a saved f
   const data=await response.json();if(response.ok)packet=data;return {status:response.status,...data};
  }
  const send=(path,body={})=>call(path,{...body,revision:packet.revision,operation:crypto.randomUUID()});
- await call('session',{legacy:{location:'ruins',position:{x:5,y:4}}});
+ await call('session',{legacy:{location:'shrine',position:{x:5,y:4}}});
  await send('rules/save',{rules:{combat:{enabled:true,q:true,e:false,fleeBelow:20}}});
  assert.equal(packet.state.characterRules.enabled,false);assert.equal(packet.state.characterRules.combat.enabled,true);
  await send('gameplay/bondEssences',{picks:['fire','ice','shadow']});await send('gameplay/awakenPower',{id:'fire:sword'});

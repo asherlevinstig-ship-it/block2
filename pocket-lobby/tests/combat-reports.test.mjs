@@ -9,7 +9,7 @@ import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
 function caster(){
- const s=normalizeState({location:'ruins',position:{x:5,y:4},characterRules:{combat:{enabled:true,q:true,e:true,fleeBelow:0}}});
+ const s=normalizeState({location:'shrine',position:{x:5,y:4},characterRules:{combat:{enabled:true,q:true,e:true,fleeBelow:0}}});
  act(s,'bondEssences',{picks:['fire','ice','shadow']});act(s,'awakenPower',{id:'fire:sword'});
  s.magic.stones.shield=1;act(s,'awakenPower',{id:'ice:shield'});
  s.location='clearing';s.position={x:5,y:5};act(s,'fight');return s;
