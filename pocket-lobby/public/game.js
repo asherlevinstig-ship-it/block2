@@ -2806,6 +2806,10 @@ function dimensions(item) {
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
 function object(item,highlight=false,time=0) {
+  if(item.type==='waystationFire'||item.type==='waystationSupplies'){
+    drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced:reducedMotion.matches},waystationBoard);
+    return;
+  }
   if(item.type==='dungeonRewardChest'){
     drawDungeonRewardChest(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches});
     const [cx,cy]=point(item.x+.5,item.y+.5);
@@ -3407,6 +3411,7 @@ const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
   Willowmere:[...willowmereRooms,'millCellar'],
   Beaconwatch:watchRooms,
+  Northreach:[waystationRoom],
   Moonwood:['trail',wildlifeRoom,'logging','quarry','crystaldeep','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null,trackedMoonTrail=null,roomMoonTrails=[],trailListKey='';
@@ -3467,7 +3472,7 @@ function updateWorldLabels(){
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
@@ -3579,6 +3584,13 @@ function updateWorldLabels(){
   }
   if(currentRoom==='millbrook'){const crack=roomFurniture().find(item=>item.type==='cellarCrack');if(crack&&(adventure.millCellarFound||Math.hypot(player.x-crack.x,player.y-crack.y)<3))add(adventure.millCellarFound?'Mill cellar':'Loose bricks',...point(crack.x+.5,crack.y+.5,35),'npc',()=>use(crack));}
   if(currentRoom==='millCellar')for(const item of roomFurniture()){const label={cellarStairs:'Back to Millbrook',cellarChest:adventure.millCellarClaimed?'Opened chest':adventure.millCellarCleared?'Millkeeper’s chest':'Sealed chest',cellarJournal:'Millkeeper’s journal'}[item.type];if(label)add(label,...point(item.x+.5,item.y+.5,(moonwood.heights[item.type]??20)+9),'npc',()=>use(item));}
+  if(currentRoom===waystationRoom){
+    for(const [site,project] of Object.entries(waystationSites)){
+      const amount=waystationBoard?.[site];
+      const title=amount>=project.target?(site==='fire'?'Rest at the campfire':'Buy rations'):project.name+(amount===undefined?'':' · '+amount+'/'+project.target);
+      add(title,...point(project.x+.5,project.y+.5,site==='fire'?39:52),'npc',()=>use(roomFurniture().find(item=>item.type===project.type)));
+    }
+  }
   if(currentRoom==='willowbank'){
     if(player.cy>=8){
       const forkY=13.5;
@@ -3980,6 +3992,58 @@ function updateLoungeDressGuide(){
 $('loungeDressWardrobe').onclick=openLoungeWardrobe;
 $('loungeWardrobeContinue').onclick=continueToLounge;
 $('loungeDressGuideAction').onclick=()=>isSmartlyDressed(wardrobe)?continueToLounge():openLoungeWardrobe();
+let waystationBoard=null,waystationSite='fire',waystationBusy=false;
+function receiveWaystation(board){
+  if(!board||board.revision<(waystationBoard?.revision??0))return;
+  const previous=waystationBoard;
+  waystationBoard=board;worldLabelKey='';
+  if(previous&&board.revision>previous.revision&&currentRoom===waystationRoom&&board.last){
+    const project=waystationSites[board.last.site];
+    note(board.last.name+' added timber to the '+project.name.toLowerCase()+
+      (board[board.last.site]===project.target?' · Restoration complete!':'.'),4500);
+  }
+  renderWaystation();
+}
+async function refreshWaystation(){
+  try{receiveWaystation(await window.playerCloud?.readWaystation?.());}
+  catch(error){if($('waystationDialog').open)$('waystationStatus').textContent=error.message;}
+}
+function renderWaystation(){
+  if(!$('waystationDialog').open)return;
+  const project=waystationSites[waystationSite];
+  const amount=waystationBoard?.[waystationSite];
+  const ready=amount>=project.target;
+  $('waystationTitle').textContent=project.name;
+  $('waystationProgress').max=project.target;
+  $('waystationProgress').value=amount??0;
+  $('waystationDetail').textContent=amount===undefined?'Checking shared progress…':ready
+    ?(waystationSite==='fire'?'The fire is lit. Rest here to restore health and mana.':'The ration counter is open. Tower Bread costs 3 gold.')
+    :amount+' / '+project.target+' timber. '+(waystationSite==='fire'?'Rebuild the hearth so anyone can rest here.':'Rebuild the counter so anyone can buy rations here.');
+  $('waystationBag').textContent=woodcutting.timber+' timber in your bag';
+  const action=$('waystationAction');
+  action.textContent=ready?(waystationSite==='fire'?'Rest by the fire':'Buy Tower Bread · 3 gold'):'Contribute 1 timber';
+  action.disabled=waystationBusy||amount===undefined||!window.playerCloud?.gameplay||!ready&&!woodcutting.timber;
+}
+function openWaystationProject(site){
+  waystationSite=site;
+  $('waystationStatus').textContent='';
+  $('waystationDialog').showModal();
+  renderWaystation();
+  refreshWaystation();
+}
+$('waystationClose').onclick=()=>$('waystationDialog').close();
+$('waystationAction').onclick=async()=>{
+  if(waystationBusy||!waystationBoard)return;
+  const site=waystationSite;
+  const kind=waystationBoard[site]<waystationSites[site].target?'donate':site==='fire'?'rest':'buy';
+  waystationBusy=true;renderWaystation();
+  try{
+    const result=await serverGameplay('waystation',{site,kind});
+    receiveWaystation(result.waystation);
+    $('waystationStatus').textContent=kind==='rest'?'Health and mana restored.':kind==='buy'?'Tower Bread added to your bag.':'Your timber is now part of the '+waystationSites[site].name.toLowerCase()+'.';
+  }catch(error){$('waystationStatus').textContent=error.message;await refreshWaystation();}
+  finally{waystationBusy=false;renderWaystation();}
+};
 let publicRequestBoard=null;
 let publicBoardBusy=false;
 async function refreshPublicRequests(){
@@ -4359,13 +4423,13 @@ function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
 function updateExplorationNav(){
   bounds=null;
   const next=nextExplorationDoor();
-  const outside=explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='millCellar'||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
+  const outside=currentRoom===waystationRoom||explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='millCellar'||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
   const nav=$('explorationNav');
   nav.hidden=!!depthsRun||(!outside&&!trackedDestination);
   if(nav.hidden)return;
-  $('explorationRegion').textContent=watchRooms.includes(currentRoom)?'BEACONWATCH':(currentRoom==='millCellar'||willowmereRooms.includes(currentRoom))?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
+  $('explorationRegion').textContent=currentRoom===waystationRoom?'NORTHREACH':watchRooms.includes(currentRoom)?'BEACONWATCH':(currentRoom==='millCellar'||willowmereRooms.includes(currentRoom))?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
-  let guidance=watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':currentRoom==='starfall'&&adventure.grottoCache?'Treasure recovered. Follow the root tunnel back to Thornwood.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
+  let guidance=currentRoom===waystationRoom?'Choose a project to help restore the outpost.':watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':currentRoom==='starfall'&&adventure.grottoCache?'Treasure recovered. Follow the root tunnel back to Thornwood.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
   if(currentRoom===wildlifeRoom)guidance='Click an animal or choose a habitat to start taming.';
   if(next)guidance='Next: '+explorationName(next.to)+' · Heading to '+explorationName(trackedDestination);
   else if(trackedDestination===currentRoom)guidance='Arrived at '+explorationName(currentRoom);
@@ -4757,6 +4821,10 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='waystationFire'||item.type==='waystationSupplies'){
+    openWaystationProject(item.type==='waystationFire'?'fire':'supplies');
+    return;
+  }
   if(item.type==='willowLatch'||item.type==='willowNook'){
     const site=item.type==='willowLatch'?'latch':'nook';
     const reveal=()=>{worldLabelKey='';note(site==='latch'?'Shortcut opened. The gate is now open from both sides.':'Moonlit Nook discovered. The old river stone glows beneath the willows.',6500);};
@@ -5435,7 +5503,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={[waystationRoom]:[285,1215],crystaldeep:[60,145],quarry:[60,220],...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -7925,6 +7993,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   $('railDecorate').hidden=$('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
   updateRoomLabel();
+  if(next===waystationRoom)refreshWaystation();
   document.title='Tower of Beginnings • '+name;
   // Older saves can be standing beyond the new flooded channel.
   if(next==='depthsGate'&&arrival?.x>=8&&!floodgateOpen(depthsRun))arrival={x:7,y:4};
@@ -8181,7 +8250,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onGift:gift=>{
+    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onWaystation:receiveWaystation,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onGift:gift=>{
       if(!gift?.id)return;
       showTransaction('Gift from '+gift.from,[{icon:'✦',text:'+'+gift.quantity+' × '+gift.label}]);
       window.playerCloud.refreshGift?.();

@@ -1,3 +1,5 @@
+import {waystationRoom} from '../public/waystation.js';
+import {readWaystation,useWaystation} from './waystation.mjs';
 import {readGift,sendGift} from './gifts.mjs';
 import {contributeSilverfinSupper,giftSilverfinSupper,readSilverfinSupper} from './silverfin-supper.mjs';
 import {readSilverfinWatch,silverfinContribution} from './silverfin-watch.mjs';
@@ -248,6 +250,7 @@ export async function handlePlayerApi(request,env){
       return json({raid:(await readVaultParty(env.TOWER_DB,code,id)).public});
     }
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
+    if(path==='/api/player/waystation'&&request.method==='GET')return json({waystation:await readWaystation(env.TOWER_DB)});
     if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/mining'&&request.method==='GET')return json({deposits:await readOreDeposits(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/timber-orders'&&request.method==='GET'){
@@ -290,6 +293,7 @@ export async function handlePlayerApi(request,env){
     if(row.last_request===body.operation){
       if(path==='/api/player/public-requests')return json({...packet(row),board:await readPublicRequests(env.TOWER_DB)});
       if(path==='/api/player/robbery')return json({...packet(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
+      if(path==='/api/player/gameplay/waystation')return json({...packet(row),waystation:await readWaystation(env.TOWER_DB)});
       if(path==='/api/player/gameplay/campRefuel')return json({...packet(row),camp:await readTrailCamp(env.TOWER_DB)});
       return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
     }
@@ -338,6 +342,16 @@ export async function handlePlayerApi(request,env){
       if(!updated)return json({error:'Your character changed. Reload to continue.',...packet(await read(env.TOWER_DB,id))},409);
       await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision);
       return json({...packet(updated),deposits:await readOreDeposits(env.TOWER_DB)});
+    }
+    if(path==='/api/player/gameplay/waystation'){
+      const updated=await useWaystation(env.TOWER_DB,row,state,body,Date.now());
+      if(!updated)return json({error:'Your character changed. Try again.',...packet(await read(env.TOWER_DB,id))},409);
+      const waystation=await readWaystation(env.TOWER_DB);
+      if(body.kind==='donate'&&env.SHARED_ROOMS){
+        const room=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(publicRoomNamespace(waystationRoom)));
+        await room.fetch(new Request('https://room.internal/waystation',{method:'POST',body:JSON.stringify(waystation)})).catch(()=>{});
+      }
+      return json({...packet(updated),waystation});
     }
     if(path==='/api/player/gameplay/campRefuel'){
       const now=Date.now();settleActivities(state,now);

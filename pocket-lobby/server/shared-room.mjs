@@ -122,6 +122,11 @@ export class SharedRoom{
     }
     if(path==='/gift-target'&&request.method==='POST')return this.robberyTarget(await request.json(),true);
     if(path==='/robbery-target'&&request.method==='POST')return this.robberyTarget(await request.json());
+    if(path==='/waystation'&&request.method==='POST'){
+      const board=await request.json();
+      for(const [ws,peer] of this.sessions)if(peer.room==='waystation')this.send(ws,{type:'waystation',board});
+      return json({ok:true});
+    }
     if(path==='/trail-camp'&&request.method==='POST'){
       const camp=await request.json();
       for(const ws of this.sessions.keys())this.send(ws,{type:'trailCamp',camp});
