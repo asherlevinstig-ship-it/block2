@@ -1,3 +1,5 @@
+import {openRewardChest,chestEquipmentComparison} from '../public/dungeon-chests.js';
+import {addClothingToOutfit,outfitAppearance} from '../public/wardrobe.js';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {rollFishingReward} from '../public/fishing.js';
 import {rareHunts,normalizeRareHunts,ownsRareItem} from '../public/rare-loot.js';
@@ -62,6 +64,19 @@ function location(state,rooms){
 const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
+  if(action==='dungeonChestOpen'||action==='dungeonChestEquip'){
+    available(state);
+    if(state.fishingCast||state.timberCut||state.miningCut||state.bedRest||state.gambling?.round?.status==='playing')throw new Error('Finish your current activity before opening the chest.');
+    const chest=state.depthsRun?.rewardChests?.[state.location];
+    if(action==='dungeonChestOpen'){openRewardChest(state,body.id);return;}
+    if(!chest?.opened||chest.id!==body.chest||!chest.items.includes(body.id))throw new Error('Open this expedition’s reward chest before choosing its equipment.');
+    const comparison=chestEquipmentComparison(state,body.id);
+    if(!comparison?.canEquip)throw new Error('Meet the requirements and keep this item in your bag to equip it.');
+    if(comparison.kind==='weapon')state.combatGear.equippedWeapon=body.id;
+    else{addClothingToOutfit(state.wardrobe,state.wardrobe.active,body.id);state.avatar=outfitAppearance(state.wardrobe,state.avatar);if(!wearsVeilCloak(state.wardrobe))state.outfitMagic.veilUntil=0;}
+    return;
+  }
+
  const room=state.location,fish=state.fishingReceipt?.castId,timber=state.timberReceipt?.id;
  const paid=pointActions.has(action),journey=journeyActions.has(action);
  if(paid||journey||['cast','catch','chop','cut','fight'].includes(action)){

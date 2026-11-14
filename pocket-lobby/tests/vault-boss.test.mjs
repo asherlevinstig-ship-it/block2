@@ -59,9 +59,9 @@ test('offline replay matches polling across both transitions and pays the comple
  applyGameplayAction(online,'vaultVictoryAck',{},120000);applyGameplayAction(online,'vaultVictoryAck',{},120001);assert.equal(normalizeState(online).depthsRun.victorySeen,true);assert.equal(online.credits,100);
 });
 
-test('victory reveal shows unbanked haul and the awarded relic; dismissal survives a reload',async()=>{
+test('legacy saves without a physical chest keep their victory reveal and persistent dismissal',async()=>{
  const s=veteran();applyGameplayAction(s,'fight',{},1000,()=>.5);advanceServerCombat(s,60000,()=>.5);
- const game=boot(s);assert.equal(game.nodes.get('vaultVictoryDialog').open,true);assert.equal(game.nodes.get('vaultVictoryGold').textContent,'81 gold');assert.match(game.nodes.get('vaultVictoryRelic').textContent,/Breaker Spear/);assert.match(game.nodes.get('vaultVictoryMaterials').textContent,/Moonwell Shard/);
+ delete s.depthsRun.rewardChests;const game=boot(s);assert.equal(game.nodes.get('vaultVictoryDialog').open,true);assert.equal(game.nodes.get('vaultVictoryGold').textContent,'81 gold');assert.match(game.nodes.get('vaultVictoryRelic').textContent,/Breaker Spear/);assert.match(game.nodes.get('vaultVictoryMaterials').textContent,/Moonwell Shard/);
  await game.run('closeVaultVictory()');assert.equal(game.nodes.get('vaultVictoryDialog').open,false);assert.equal(game.read('depthsRun.victorySeen'),true);assert.deepEqual(game.errors,[]);
  const reloaded=boot({...s,depthsRun:{...s.depthsRun,victorySeen:true}});assert.notEqual(reloaded.nodes.get('vaultVictoryDialog').open,true);
 });

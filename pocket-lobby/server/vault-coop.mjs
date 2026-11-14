@@ -1,3 +1,4 @@
+import {recordDungeonChest} from '../public/dungeon-chests.js';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {rareBootsPenalty,awardRareHunt} from '../public/rare-loot.js';
 import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
@@ -89,11 +90,12 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='claim'){
   if(r.status!=='victory'||m.claimed||!(m.damage>0||m.support>=1)||s.depthsRun?.cleared!==2)throw invalid('Help defeat the Guardian to claim one Vault reward.');
+  const heldBefore=depthsSpoils(s.depthsRun);
   m.claimed=true;s.depthsRun.cleared=3;s.depthsRun.shardEarned=true;
   if(r.vaultMechanism)s.depthsRun.vaultMechanism=r.vaultMechanism;
   delete s.vaultCoop;
   for(const [key,xp] of Object.entries({strengthXp:75,agilityXp:55,vitalityXp:75}))s.stats[key]=Math.min(MAX_SKILL_XP,s.stats[key]+xp);
-  awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);awardRareHunt(s,'depthsGuardian',random,now);if(s.equipmentEffects?.at(-1)?.perk==='luck'&&s.equipmentEffects.at(-1).at===now)m.perk=s.equipmentEffects.at(-1);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
+  awardLeadership(s,'vaultClear');awardEssenceMastery(s.magic,m.used,50);const rare=awardRareHunt(s,'depthsGuardian',random,now);if(s.equipmentEffects?.at(-1)?.perk==='luck'&&s.equipmentEffects.at(-1).at===now)m.perk=s.equipmentEffects.at(-1);const drop=awardDungeonWeapon(s,now,random);if(drop)s.depthsRun.vaultWeapon=drop.weapon;const held=depthsSpoils(s.depthsRun);recordDungeonChest(s,{id:'coop:'+r.id+':'+id,enemy:'depthsGuardian',room:'depthsVault',outcome:'victory',endedAt:now,rewards:{held:{gold:held.gold-heldBefore.gold,loot:Object.fromEntries(Object.entries(held.loot).map(([key,n])=>[key,n-(heldBefore.loot[key]??0)]).filter(([,n])=>n>0))},...(rare?{rareEquipment:rare.id}:{}),...(drop?{weapon:drop.weapon}:{})}});return {text:'Vault cleared! Review your haul and bank it to leave safely.'};
  }
  if(kind==='mechanism'){
   if(r.leader!==id||r.status!=='waiting'||r.vaultMechanism||s.depthsRun.vaultMechanism)throw invalid('Only the waiting party leader can choose one Vault mechanism.');

@@ -79,7 +79,7 @@ const familiarFollowers=new Map(),familiarPortraits=[];
 const renderedActors=[],actorNameplates=new Map();
 let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
-let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
+let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=!!savedPlayerState?.depthsRun?.rewardChests?.[savedPlayerState?.location];
 let vaultCoopState=savedPlayerState?.vaultCoop??null;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
@@ -668,8 +668,8 @@ function updateActorNameplates(){
    seen.add(key);
    let plate=actorNameplates.get(key);
    if(!plate){
-    const node=document.createElement(kind==='enemy-label'||kind==='remote-player-label'?'button':'span');
-    if(kind==='enemy-label'||kind==='remote-player-label')node.type='button';
+    const node=document.createElement(kind==='enemy-label'||kind==='remote-player-label'||kind==='reward-label'?'button':'span');
+    if(kind==='enemy-label'||kind==='remote-player-label'||kind==='reward-label')node.type='button';
     node.className='player-label '+kind;node.dataset.actor=key;layer.append(node);
     plate={node};actorNameplates.set(key,plate);
    }
@@ -677,11 +677,13 @@ function updateActorNameplates(){
    if(plate.caption!==caption){plate.caption=caption;plate.node.textContent=caption;plate.node.title=caption;}
    if(color&&plate.color!==color){plate.color=color;plate.node.style.setProperty('--pet-label-color',color);}
    if(kind==='remote-player-label')plate.node.onclick=()=>window.towerRobbery?.open(key);
+   if(kind==='reward-label'){plate.node.onclick=action;plate.node.disabled=!action;}
    if(kind==='enemy-label'){plate.node.onclick=action;plate.node.disabled=!action;plate.node.dataset.target=String(detail==='Target');}
    plate.node.style.left=Math.round(position.x)+'px';plate.node.style.top=Math.round(position.y)+'px';
   };
   for(const actor of renderedActors){
    const owner=toScreen(actor.x,actor.y);
+   if(actor.reward){render(actor.id,actor.name,actor.detail,owner,'reward-label',null,actor.action);continue;}
    if(actor.enemy){render(actor.id,actor.name,actor.detail,owner,'enemy-label',null,actor.action);continue;}
    if(actor.familiar){
     const {id,x,y}=actor.familiar,pet=toScreen(x,y),species=familiars[id];
@@ -934,6 +936,7 @@ async function closeDungeonLoot(equip=false){
 }
 let vaultVictoryBusy=false;
 function showVaultVictory(){
+ if(depthsRun?.rewardChests?.depthsVault)return false;
  if(currentRoom!=='depthsVault'||depthsRun?.cleared!==3||!depthsRun.shardEarned||depthsRun.victorySeen)return false;
  if(document.hidden||player.inCombat||activityBusy||serverActionBusy||document.querySelector('dialog[open]'))return true;
  if(performance.now()-combatArt.victoryAt<1400)return true;
@@ -953,7 +956,7 @@ async function closeVaultVictory(){
 }
 function showPendingDungeonLoot(){
   if(document.hidden||unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report||document.querySelector('dialog[open]'))return;
-  const notice=dungeonLootState.notices[0];if(notice)openDungeonLoot(notice.weapon,notice);
+  const notice=dungeonLootState.notices.find(n=>!Object.values(depthsRun?.rewardChests??{}).some(c=>c.at===n.at&&c.items.includes(n.weapon)));if(notice)openDungeonLoot(notice.weapon,notice);
 }
 
 let combatSoundEnabled=typeof load==='function'?load('combat-sound',false)===true:false;
@@ -1017,8 +1020,9 @@ function showPendingCombatRecap(){
   if(document.hidden||player.inCombat||activityBusy||serverActionBusy||state.plan||state.report)return;
   const dialog=$('combatRecapDialog');
   if(!dialog.open){
-    if(document.querySelector('dialog[open]')||!combatReports.length)return;
-    activeCombatRecap=combatReports[0];combatRecapKey='';$('combatRecapError').textContent='';
+    const pending=combatReports.find(r=>!Object.values(depthsRun?.rewardChests??{}).some(c=>c.id===r.id));
+    if(document.querySelector('dialog[open]')||!pending)return;
+    activeCombatRecap=pending;combatRecapKey='';$('combatRecapError').textContent='';
     renderCombatRecap(activeCombatRecap);dialog.showModal();
   }
   const key=[activeCombatRecap.id,health,currentRoom,hunting.recoveryUntil,depthsRun?.cleared,depthsRun?.finds?.join(',')].join('|');
@@ -1371,9 +1375,10 @@ function updateDepthsPanel(){
   $('depthsCacheRoute').textContent=cacheRoom?(depthsCacheReturn(depthsRun)==='depthsGate'?'Back to Flooded Gate':'Continue to Shell Gallery'):pendingGuardian?'Return to the dangerous passage':'Elite cache · '+essenceCacheGold+' gold + stone';
   $('depthsOpenCache').hidden=!cacheRoom||!cleared||!!depthsRun?.finds?.includes('essenceCache');
   const atCamp=cleared&&!unavailable();
-  const canDecide=atCamp&&!depthsExploring;
-  const galleryExploring=atCamp&&depthsExploring&&currentRoom==='depthsGallery';
-  const gateExploring=atCamp&&depthsExploring&&currentRoom==='depthsGate';
+  const chestPending=atCamp&&!!depthsRun?.rewardChests?.[currentRoom]&&!depthsRun.rewardChests[currentRoom].opened;
+  const canDecide=atCamp&&!depthsExploring&&!chestPending;
+  const galleryExploring=atCamp&&depthsExploring&&!chestPending&&currentRoom==='depthsGallery';
+  const gateExploring=atCamp&&depthsExploring&&!chestPending&&currentRoom==='depthsGate';
   $('floodExplore').hidden=!gateExploring;
   const lockboxOpened=depthsRun?.finds?.includes('submergedCache');
   $('floodExploreTitle').textContent=lockboxOpened?'Lockbox collected':floodgateOpen(depthsRun)?'The crossing is open':'Treasure across the water';
@@ -1384,7 +1389,7 @@ function updateDepthsPanel(){
   $('galleryEncounterVisit').hidden=!galleryExploring||!discovery;
   if(discovery)$('galleryEncounterVisit').textContent=encounter.choice?'Review '+discovery.name:'Visit '+discovery.name+' · Optional';
   $('galleryExplore').hidden=!galleryExploring;
-  $('depthsCampRibbon').hidden=!atCamp||!depthsExploring||galleryExploring||gateExploring;
+  $('depthsCampRibbon').hidden=chestPending||!atCamp||!depthsExploring||galleryExploring||gateExploring;
   if(galleryExploring){
     const light=depthsRun.galleryLight,receiver=galleryLightReceiver(light);
     $('galleryLightHint').textContent=light?.claimed?'The moonbeam has been spent.':receiver==='lightAlcove'?'Alcove lit · 35 unbanked gold':receiver==='lightShrine'?'Shrine lit · Up to 25 HP and 30 mana':light?.first?'Turn the second mirror toward a receiver.':'Turn the first mirror to redirect the moonbeam.';
@@ -2183,7 +2188,9 @@ function roomFurniture(){
     const available=currentRoom==='millCellar'? !adventure.millCellarCleared:index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
     const lightProps=currentRoom==='depthsGallery'&&depthsRun?.cleared===2
       ?Object.entries(galleryLightSites).map(([type,site])=>({type,...site,rot:0})): [];
-    return [...lightProps,...moonwood.layouts[currentRoom].scenery.filter(item=>{
+    const reward=depthsRun?.rewardChests?.[currentRoom];
+    const chests=reward?[{type:'dungeonRewardChest',x:6,y:5,rot:0,receipt:reward}]:[];
+    return [...chests,...lightProps,...moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
@@ -2799,6 +2806,11 @@ function dimensions(item) {
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
 function object(item,highlight=false,time=0) {
+  if(item.type==='dungeonRewardChest'){
+    drawDungeonRewardChest(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches});
+    const [cx,cy]=point(item.x+.5,item.y+.5);
+    renderedActors.push({id:'reward:'+item.receipt.id,reward:true,name:item.receipt.opened?'Victory spoils':'Open reward chest',detail:item.receipt.items.length?'Rare equipment':'',x:cx,y:cy-41,action:()=>use(item)});return;
+  }
   const {x,y,type,rot}=item;
   if(type==='quarryForge'){drawQuarryForge(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches});return;}
   const [w,d]=dimensions(item);
@@ -3786,7 +3798,7 @@ function draw(time){
     else object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3829,7 +3841,7 @@ function installGamingTables(items){
 function inRoom(x,y){return x>=0&&y>=0&&x<view.cols&&y<view.rows;}
 function blocked(x,y,items=roomFurniture()){
   const run=currentRoom==='depthsVault'?{vaultMechanism:currentVaultMechanism()}:depthsRun;
-  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure,run)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
+  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure,run)||items.some(item=>item.type!=='shelf'&&item.type!=='dungeonRewardChest'&&overlap(item,{x,y}));
 }
 function currentVaultMechanism(){
   return vaultCoopState?window.towerVaultCoop?.view()?.vaultMechanism:depthsRun?.vaultMechanism;
@@ -3901,7 +3913,8 @@ function note(message,duration=3000){
 }
 function setHint(){
   const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Trade your spoils or visit the Bakery',bakery:'Speak to the baker · Use Market to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
-  const message=editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
+  const reward=depthsRun?.rewardChests?.[currentRoom];
+  const message=reward&&!reward.opened?'Victory! Click the glowing reward chest to reveal your haul.':editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').dataset.kind=currentRoom==='home'&&!editing?'movement':'guide';
   $('hint').textContent=needsBedLesson()?(editing?'Place your bed on a clear floor spot · R to rotate':'Step 1: open Inventory to place your free bed'):message;
 }
@@ -4493,6 +4506,21 @@ function drawHudMiniMap(){
   ink.fillStyle='#ffe2a0';ink.fill();
   ink.strokeStyle='#72583b';ink.stroke();
 }
+let rewardChestBusy=false;
+async function revealDungeonRewardChest(item){
+  if(rewardChestBusy||unavailable())return;
+  rewardChestBusy=true;
+  const wasOpen=item.receipt.opened;
+  try{
+    const {openDungeonChest}=await import('./dungeon-chest-ui.js');
+    await serverGameplay('dungeonChestOpen',{id:item.receipt.id});
+    const receipt=depthsRun?.rewardChests?.[currentRoom];
+    if(!receipt||receipt.id!==item.receipt.id)return;
+    openDungeonChest({receipt,reopen:wasOpen,getState:()=>dungeonLootView(),change:serverGameplay,onClose:()=>{depthsExploring=true;canvas.focus();updateDepthsPanel();}});
+    combatAudio.play?.(receipt.items.length?'rare':'victory');
+  }catch(error){note(error.message,6000);}
+  finally{rewardChestBusy=false;}
+}
 function use(item){
   if(item.type==='submergedCache'&&!floodgateOpen(depthsRun)){note('Pull the sluice lever to reach the lockbox.');return;}
   if(vaultCoopState){if(item.coopAdd||item.type==='depthsColossus')window.towerVaultCoop?.target(item.coopAdd?.id??'boss');else note('Retreat from the co-op party before using another activity.');return;}
@@ -4715,6 +4743,7 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='dungeonRewardChest'){revealDungeonRewardChest(item);return;}
   if(item.type==='quarryForge'){window.quarryForgeUI?.open();return;}
   if(item.type==='oreDeposit'){startMining(item);return;}
   if(currentRoom===quarryRoom&&item.type==='woodcutter'){
@@ -5598,6 +5627,7 @@ function applyServerGameplay(state){
   magicState=state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
   if(player.inCombat&&hunting.encounter?.arenaVersion===1&&!step&&!route.length){const p=arenaPlayer(hunting.encounter);if(p.x!==player.cx||p.y!==player.cy)route=walkingPath({x:player.cx,y:player.cy},p)??[];}
+  if(state.depthsRun?.rewardChests?.[currentRoom]?.id!==depthsRun?.rewardChests?.[currentRoom]?.id&&state.depthsRun?.rewardChests?.[currentRoom])depthsExploring=true;
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
   Object.assign(quest,state.quest);Object.assign(history,state.history);Object.assign(adventure,state.adventure);
   Object.assign(combatGear,state.combatGear);
@@ -7663,7 +7693,7 @@ function updateRoomLabel(){
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
-function enterRoom(next,arrival,{automatic=false,explore=false}={}){
+function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChests?.[next]}={}){
   if(['trail','pond','market'].includes(next))window.towerRefreshPublicRequests?.();
   if(next!==currentRoom&&window.playerCloud?.initial?.location!==next&&window.playerCloud?.initial?.actionPoints?.value===0){note('Travelling to another area costs 1 AP. Answer an MCQ to earn a point.');window.towerLearning?.open();return;}
   if(miningCut&&next!==currentRoom){stopMining().then(ok=>{if(ok)enterRoom(next,arrival,{automatic,explore});});return;}

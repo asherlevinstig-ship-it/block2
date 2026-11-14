@@ -1,3 +1,5 @@
+import {normalizeRewardChests} from './dungeon-chests.js';
+export * from './dungeon-chests.js';
 import {playerMaxHealth} from './food-buffs.js';
 import {validVaultMechanism} from './vault-mechanisms.js';
 export {vaultMechanisms,vaultSpillwayTiles,vaultScreen,chooseVaultMechanism} from './vault-mechanisms.js';
@@ -164,7 +166,7 @@ export function normalizeDepthsRun(input,room,encounter){
   if(finds.includes('sideSeal')&&!input.sideWins?.includes('trial')||finds.includes('sideTreasure')&&!input.sideWins?.includes('treasure'))throw new Error('Invalid optional room reward.');
   if(input.vaultMechanism!==undefined&&(input.cleared<2||!validVaultMechanism(input.vaultMechanism)))throw new Error("Invalid Vault mechanism.");
   const galleryLight=normalizeGalleryLight(input.galleryLight,input.cleared);
-  return {cleared:input.cleared,...(input.vaultMechanism?{vaultMechanism:input.vaultMechanism}:{}),...(galleryLight?{galleryLight}:{}),...(input.floodCrossing?{floodCrossing:input.floodCrossing}:{}),...(input.floodCacheChoice?{floodCacheChoice:input.floodCacheChoice}:{}),...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
+  return {...(input.rewardChests!==undefined?{rewardChests:normalizeRewardChests(input.rewardChests)}:{}),cleared:input.cleared,...(input.vaultMechanism?{vaultMechanism:input.vaultMechanism}:{}),...(galleryLight?{galleryLight}:{}),...(input.floodCrossing?{floodCrossing:input.floodCrossing}:{}),...(input.floodCacheChoice?{floodCacheChoice:input.floodCacheChoice}:{}),...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
     ...(finds.includes('essenceCache')&&Object.hasOwn(stoneForms,input.cacheStone)?{cacheStone:input.cacheStone}:{})};
 }
