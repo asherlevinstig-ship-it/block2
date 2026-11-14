@@ -64,3 +64,23 @@ test('three listings cap the stall, expired stock is reclaimable, and concurrent
  await act(seller,{kind:'reclaim',id:expired.id},end);
  assert.equal(seller.state.huntingLoot.copperOre,20);
 });
+
+test('Appraise uses completed sales only, requires three trades, and charges no AP',async t=>{
+ const {player,act,board}=fixture(t);
+ const seller=player('seller',0,30),buyer=player('buyer',200,0);
+ buyer.state.styleAbilities={learned:['appraise'],readyAt:{}};
+ await act(seller,list);
+ let offer=(await board(buyer)).offers[0];
+ const sparse=await act(buyer,{kind:'appraise',id:offer.id});
+ assert.equal(sparse.average,undefined);
+ assert.equal(sparse.trades,0);
+ const points=buyer.state.actionPoints.value;
+ await assert.rejects(act(buyer,{kind:'appraise',id:offer.id}),/recharging/);
+ for(let i=0;i<3;i++)await act(buyer,{kind:'buy',id:offer.id,price:7,quantity:1});
+ buyer.state.styleAbilities.readyAt.appraise=0;
+ const report=await act(buyer,{kind:'appraise',id:offer.id});
+ assert.equal(report.average,7);
+ assert.equal(report.volume,3);
+ assert.equal(report.trades,3);
+ assert.equal(buyer.state.actionPoints.value,points);
+});

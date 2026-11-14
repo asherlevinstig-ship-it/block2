@@ -6238,6 +6238,10 @@ function ambushReady(){
   state?.styleAbilities?.learned?.includes('ambush')&&(state.styleAbilities.readyAt.ambush??0)<=combatNow()&&
   (enemy.id==='dusktusk'||combatNow()>=huntRespawnAt(hunting,enemy))&&window.ambushPosition?.({x:player.cx,y:player.cy},site);
 }
+function openAppraisalMarket(){
+ if(currentRoom!=='market'){note('Visit the Trading Post and choose an ore listing to appraise.');return;}
+ window.towerOpenMarketStalls?.();
+}
 function useAmbush(){
  if(!ambushReady()){note('Approach the back of a wild boar with Ambush ready.');return;}
  startMonsterEncounter(roomEnemy(),false,true);
@@ -6269,7 +6273,7 @@ function refreshStyleAbilityBar(){
     button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':ability.name)+(seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=seconds[index]>0||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():castStyleAbility(id,{});
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():castStyleAbility(id,{});
     bar.append(button);
   }
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';

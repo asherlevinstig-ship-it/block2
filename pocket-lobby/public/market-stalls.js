@@ -34,13 +34,21 @@ export function initializeMarketStalls(api,doc=document){
   };
   const items=Object.entries(stallCatalog).sort(([,a],[,b])=>a.name.localeCompare(b.name));
   filter.append(option('','All items'),...items.map(([key,item])=>option(key,item.name)));
-  let board=null,busy=false;
+  let board=null,busy=false,appraisal=null;
+  let appraisalUntil=0;
   function listing(entry,own){
     const card=doc.createElement('article'),title=doc.createElement('strong'),info=doc.createElement('p');
     title.textContent=stallCatalog[entry.item].name;
     const expiry=entry.expiresAt<=board.now?'Expired':'Ends '+new Date(entry.expiresAt).toLocaleString();
     info.textContent=entry.seller+' · '+entry.quantity+' available · '+entry.price.toLocaleString()+' gold each · '+expiry;
     card.append(title,info);
+    if(entry.item.startsWith('ore:')&&api.state().styleAbilities?.learned?.includes('appraise')){
+      const appraise=button('Appraise ore',()=>change({kind:'appraise',id:entry.id}));
+      appraise.dataset.appraise='true';
+      const seconds=Math.ceil(((api.state().styleAbilities.readyAt?.appraise??0)-Date.now())/1000);
+      if(seconds>0){appraise.disabled=true;appraise.textContent='Appraise · '+seconds+'s';}
+      card.append(appraise);
+    }
     if(own){
       card.append(button(entry.expiresAt<=board.now?'Reclaim stock':'Cancel and reclaim',()=>change({kind:'reclaim',id:entry.id})));
     }else{
@@ -61,10 +69,20 @@ export function initializeMarketStalls(api,doc=document){
   }
   function render(){
     if(!board)return;
+    dialog.querySelectorAll('.market-appraisal').forEach(el=>el.remove());
     for(const [key,empty] of [['offers','No listings match.'],['own','No items listed.']]){
       const target=field(key);
       if(board[key].length)target.replaceChildren(...board[key].map(entry=>listing(entry,key==='own')));
       else target.textContent=empty;
+    }
+    if(appraisal&&Date.now()<appraisalUntil){
+      const report=appraisal,element=doc.createElement('p');element.className='market-appraisal';
+      if(report.average===undefined)element.textContent='Not enough recent sales. '+report.trades+' completed trades · '+report.volume+' units over the last 7 days. At least 3 trades are needed.';
+      else{
+        const difference=Math.round((report.price/report.average-1)*100);
+        element.textContent=stallCatalog[report.item].name+' · Typical price '+report.average.toFixed(1)+' gold per unit · '+report.low+'–'+report.high+' gold range · '+report.volume+' units across '+report.trades+' trades in the last 7 days. This listing is '+(difference===0?'at the typical price.':Math.abs(difference)+'% '+(difference>0?'above':'below')+' the typical price.');
+      }
+      field('status').after(element);
     }
     field('wallet').textContent=api.state().credits.toLocaleString()+' gold in wallet';
     field('slots').textContent=board.own.length+' / '+stallLimits.listings+' listing slots used';
@@ -93,7 +111,8 @@ export function initializeMarketStalls(api,doc=document){
     try{
       const packet=await api.change({...body,filter:filter.value});
       board=packet.board;api.apply(packet.state,packet.receipt);
-      field('status').textContent={list:'Item listed.',buy:'Items added to your bag.',reclaim:'Stock returned to your bag.',claim:'Gold collected.'}[body.kind];
+      if(body.kind==='appraise'&&packet.receipt){appraisal=packet.receipt;appraisalUntil=Date.now()+60000;}
+      field('status').textContent={list:'Item listed.',buy:'Items added to your bag.',reclaim:'Stock returned to your bag.',claim:'Gold collected.',appraise:'Ore appraised.'}[body.kind];
     }catch(error){
       board=await api.read(filter.value).catch(()=>board);
       throw error;
@@ -115,4 +134,12 @@ export function initializeMarketStalls(api,doc=document){
   const open=button('Market stalls',()=>{if(!dialog.open)dialog.showModal();refresh();});
   shop.querySelector('.timber-nav').append(open);
   doc.body.append(dialog);
+  window.towerOpenMarketStalls=()=>{if(!dialog.open)dialog.showModal();refresh();};
+  setInterval(()=>{
+    if(!dialog.open)return;
+    const seconds=Math.max(0,Math.ceil(((api.state().styleAbilities?.readyAt?.appraise??0)-Date.now())/1000));
+    for(const button of dialog.querySelectorAll('[data-appraise]')){
+      button.disabled=busy||seconds>0;button.textContent=seconds?'Appraise · '+seconds+'s':'Appraise ore';
+    }
+  },1000);
 }

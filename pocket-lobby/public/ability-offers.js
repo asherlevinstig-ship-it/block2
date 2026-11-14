@@ -113,6 +113,9 @@ function drawPreview(canvas,id,time,drawCharacter,reduced){
   drawCharacter(ctx,218,115,reduced?0:time);
   ctx.fillStyle='#f49a53';ctx.beginPath();ctx.moveTo(173,117);ctx.quadraticCurveTo(161,107,177,92);ctx.quadraticCurveTo(193,110,182,117);ctx.fill();
   ctx.fillStyle=tint;ctx.font='16px system-ui';ctx.fillText('♥',143,65-(reduced?0:t*12));ctx.fillText('♥',214,65-(reduced?0:t*12));
+ }else if(id==='appraise'){
+  ctx.font='bold 16px system-ui';ctx.fillText('6g / 8g',191,81);
+  ctx.beginPath();ctx.arc(219,101,12,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(228,111);ctx.lineTo(238,122);ctx.stroke();
  }else{
   ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(175,73);ctx.lineTo(217,116);ctx.stroke();ctx.beginPath();ctx.moveTo(213,74);ctx.lineTo(178,114);ctx.stroke();ctx.font='bold 13px system-ui';ctx.fillText('+50%',220,72);
  }

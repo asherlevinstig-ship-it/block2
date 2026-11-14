@@ -1,4 +1,5 @@
 import {stallCatalog,stallLimits} from '../public/market-stall-catalog.js';
+import {normalizeStyleAbilities,styleAbilities} from '../public/style-abilities.js';
 import {GOLD_CAP} from '../public/bank.js';
 import {VAULT_CAP,vaultBagCount} from '../public/vault.js';
 import {transferStorageItem} from './vault.mjs';
@@ -40,6 +41,28 @@ export async function changeMarketStall(db,row,state,body,now=Date.now()){
       AND (SELECT COUNT(*) FROM tower_market_stalls WHERE seller_id=?)<?
       RETURNING listing_id`).bind(token,id,state.avatar.name,item,quantity,price,now+stallLimits.hours*3600000,token,id,row.revision,id,stallLimits.listings);
     receipt={kind,item,quantity};
+  }else if(kind==='appraise'){
+    const abilities=normalizeStyleAbilities(state.styleAbilities);
+    if(!abilities.learned.includes('appraise'))throw invalid('Accept Appraise before inspecting market prices.');
+    if((abilities.readyAt.appraise??0)>now)throw invalid('Appraise is still recharging.');
+    const listing=await db.prepare('SELECT * FROM tower_market_stalls WHERE listing_id=? AND expires_at>?').bind(body.id,now).first();
+    if(!listing||!listing.item.startsWith('ore:'))throw invalid('Choose an available ore listing.');
+    const stats=await db.prepare(`SELECT COUNT(*) trades,COALESCE(SUM(quantity),0) volume,
+      SUM(quantity*price)*1.0/SUM(quantity) average,MIN(price) low,MAX(price) high
+      FROM tower_market_sales WHERE item=? AND sold_at>=? AND sold_at<=?`).bind(listing.item,now-7*86400000,now).first();
+    abilities.readyAt.appraise=now+styleAbilities.appraise.cooldown;
+    state.styleAbilities=abilities;
+    const receipt={kind,item:listing.item,price:listing.price,trades:stats.trades,volume:stats.volume,
+      ...(stats.trades>=3?{average:stats.average,low:stats.low,high:stats.high}:{})};
+    const [saved]=await db.batch([
+      db.prepare(`UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=?
+        WHERE player_id=? AND revision=? RETURNING *`).bind(JSON.stringify(state),operation,now,id,row.revision),
+      db.prepare(`INSERT INTO tower_market_appraisals SELECT ?,?,? WHERE changes()=1
+        ON CONFLICT(player_id) DO UPDATE SET operation=excluded.operation,receipt=excluded.receipt RETURNING player_id`)
+        .bind(id,operation,JSON.stringify(receipt))
+    ]);
+    if(!saved.results.length)throw invalid('Your character changed. Try again.');
+    return {updated:saved.results[0],receipt};
   }else if(kind==='claim'){
     const balance=await db.prepare('SELECT gold,quantity FROM tower_market_proceeds WHERE seller_id=?').bind(id).first();
     const gold=Math.min(balance?.gold??0,GOLD_CAP-state.credits);
@@ -69,6 +92,10 @@ export async function changeMarketStall(db,row,state,body,now=Date.now()){
     if(buying){
       recordShopPurchase(state,'market',gold,now,listing.seller_id);
       after=[
+        db.prepare(`INSERT INTO tower_market_sales SELECT ?,?,?,?,? WHERE EXISTS
+          (SELECT 1 FROM tower_market_stalls WHERE listing_id=? AND mutation=?)
+          AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=? AND last_request=?)
+          RETURNING operation`).bind(operation,key,count,listing.price,now,listing.listing_id,token,id,row.revision+1,operation),
         ...shopSaleStatements(db,state,id,row.revision+1,operation),
         db.prepare(`INSERT INTO tower_market_proceeds SELECT ?,?,? WHERE EXISTS
           (SELECT 1 FROM tower_market_stalls WHERE listing_id=? AND mutation=?)

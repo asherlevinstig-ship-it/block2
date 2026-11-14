@@ -338,7 +338,10 @@ export async function handlePlayerApi(request,env){
       return json({...playerPacket(await read(env.TOWER_DB,id)),hearth:await readHearth(env.TOWER_DB,id)});
     }
     if(row.last_request===body.operation){
-      if(path==='/api/player/market-stalls')return json({...playerPacket(row),board:await readMarketStalls(env.TOWER_DB,id,body.filter)});
+      if(path==='/api/player/market-stalls'){
+        const appraisal=body.kind==='appraise'?await env.TOWER_DB.prepare('SELECT receipt FROM tower_market_appraisals WHERE player_id=? AND operation=?').bind(id,body.operation).first():null;
+        return json({...playerPacket(row),board:await readMarketStalls(env.TOWER_DB,id,body.filter),...(appraisal?{receipt:JSON.parse(appraisal.receipt)}:{})});
+      }
       if(path==='/api/player/gameplay/shopLicence')return json({...playerPacket(row),shopBoard:await shopLicenceBoard(env.TOWER_DB,id)});
       if(path==='/api/player/public-requests')return json({...playerPacket(row),board:await readPublicRequests(env.TOWER_DB)});
       if(path==='/api/player/pvp')return json({...playerPacket(row),receipt:body.kind==='strike'?JSON.parse(row.state_json).pvp?.lastStrike:undefined});
