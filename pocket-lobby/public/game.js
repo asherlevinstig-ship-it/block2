@@ -5026,6 +5026,63 @@ function mealArt(id){
   const stew='<path d="M9 29h46l-5 17q-18 13-36 0z" fill="#b57557" stroke="#edb787" stroke-width="2"/><ellipse cx="32" cy="29" rx="23" ry="8" fill="#835142" stroke="#edb787" stroke-width="2"/><path d="m21 29 5-3 4 4-5 2zm13-2 5-2 5 4-6 2z" fill="#e4ae62"/><path d="M25 17q-5-4 0-9m12 10q-5-4 0-10" fill="none" stroke="#e4dcc2" stroke-width="2"/>';
   return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'||id==='heartyStew'||id==='moonfinChowder'?stew:fish)+'</svg>';
 }
+window.towerApplySupperInventory=state=>{
+  meals={...state.meals};
+  for(const id of Object.keys(fishStock))delete fishStock[id];
+  Object.assign(fishStock,state.fishStock);
+  updateInventory();
+};
+let supperBusy=false,supperRefreshTimer=null,supperSession=null;
+async function refreshSilverfinSupper(kind=null){
+  const dialog=$('silverfinSupperDialog'),status=$('silverfinSupperStatus');
+  if(supperBusy||!dialog.open||currentRoom!=='bakery')return;
+  supperBusy=true;
+  const button=$('silverfinSupperContribute'),gift=$('silverfinSupperGift'),select=$('silverfinSupperFish');
+  button.disabled=gift.disabled=true;
+  try{
+    const body=kind&&supperSession?{id:supperSession.id,fish:select.value,kind}:null;
+    const packet=await window.playerCloud.silverfinSupper(body);
+    const previous=supperSession;
+    supperSession=packet.supper;
+    window.towerApplySupperInventory(packet.state);
+    if(!dialog.open)return;
+    $('silverfinSupperOffer').hidden=true;gift.hidden=true;
+    if(!supperSession){status.textContent='Land a catch with a fishing partner at Silverfin Pond first.';return;}
+    const {partner,partnerReady,contributed,count}=supperSession;
+    if(count===2){
+      status.textContent='You and '+partner+' cooked a Silverfin Supper. It restores 25 HP and 35 hunger. You can donate it to your faction kitchen.';
+      gift.hidden=!partnerReady||!(meals.silverfinSupper>0)||supperSession.gifted;
+      gift.disabled=gift.hidden;
+      if(kind==='gift')status.textContent='You shared a Silverfin Supper with '+partner+'.';
+      if(previous?.id===supperSession.id&&previous.count<2)showTransaction('Silverfin Supper ready',[{icon:'♨',text:'+1 Silverfin Supper in your inventory'}]);
+      return;
+    }
+    status.textContent=contributed?'Your fish is in. Waiting for '+partner+' to contribute.':partnerReady?partner+' is at the counter. Each of you can contribute one Silverfin. The baker holds your fish until your partner adds theirs.':'Meet '+partner+' beside the baker to cook together.';
+    const choices=Object.keys(fishProducts).filter(id=>id.startsWith('silverfin')&&fishStock[id]>0);
+    const selected=select.value;
+    select.replaceChildren(...choices.map(id=>{const option=document.createElement('option');option.value=id;option.textContent=fishProducts[id].name+' × '+fishStock[id];return option;}));
+    if(choices.includes(selected))select.value=selected;
+    $('silverfinSupperOffer').hidden=contributed||!partnerReady;
+    button.disabled=!choices.length;
+    if(!contributed&&partnerReady&&!choices.length)status.textContent+=' Bring a Silverfin from your bag.';
+  }catch(error){status.textContent=error.message;}
+  finally{supperBusy=false;}
+}
+$('silverfinSupperOpen').onclick=()=>{
+  if(!window.playerCloud?.silverfinSupper)return;
+  $('foodStallDialog').close();
+  $('silverfinSupperStatus').textContent='Checking the supper…';
+  $('silverfinSupperDialog').showModal();
+  refreshSilverfinSupper();
+  clearInterval(supperRefreshTimer);
+  supperRefreshTimer=setInterval(()=>{if(!document.hidden)refreshSilverfinSupper();},12000);
+};
+$('silverfinSupperDialog').addEventListener('close',()=>clearInterval(supperRefreshTimer));
+$('silverfinSupperClose').onclick=()=>$('silverfinSupperDialog').close();
+$('silverfinSupperRefresh').onclick=()=>refreshSilverfinSupper();
+$('silverfinSupperContribute').onclick=()=>refreshSilverfinSupper('contribute');
+$('silverfinSupperGift').onclick=()=>refreshSilverfinSupper('gift');
+
 let buyingBread=false;
 function renderFoodStall(){
   $('foodStallStock').textContent=(meals[towerBread.id]??0)+' in bag · '+credits+' gold in wallet';
@@ -6468,6 +6525,7 @@ function renderFishTogether(){
   if(phase==='complete'){
     status.textContent=avatar.name+' and '+name+' each landed a fish. You both keep your catches.';
     if(!session.thanked)action('Wave thanks',()=>{if(send('thanks',{id})){close();player.waveStarted=performance.now();}});
+    if(session.supper)action('Cook together',()=>{close();setExplorationDestination('bakery');navigateHud('bakery');});
     action('Keep fishing',close);
     return;
   }

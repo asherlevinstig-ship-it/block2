@@ -1,6 +1,7 @@
 import {hallProjects} from '../public/faction-hall.js';
-import {mealRecipes} from '../public/cooking.js';
+import {mealRecipes,silverfinSupper} from '../public/cooking.js';
 
+const kitchenMeals={...mealRecipes,[silverfinSupper.id]:silverfinSupper};
 const invalid=message=>Object.assign(new Error(message),{status:400});
 const totalsSql="COALESCE(SUM(CASE WHEN d.resource='gold' THEN d.quantity END),0) AS gold,COALESCE(SUM(CASE WHEN d.resource='timber' THEN d.quantity END),0) AS timber,COALESCE(SUM(CASE WHEN d.resource='meal' THEN d.quantity END),0) AS meal";
 const meets=(totals,project)=>Object.entries(project.targets).every(([resource,target])=>totals[resource]>=target);
@@ -26,12 +27,12 @@ export async function readFactionProject(db,playerId,factionId){
   const state=JSON.parse(state_json);
   return {open:stage!==0,kitchen:stage===-1,project:current?{name:current.name,reward:current.reward,progress}:null,
     contributors:results,stock:{gold:state.credits??0,timber:state.woodcutting?.timber??0},
-    meals:Object.entries(mealRecipes).map(([id,item])=>({id,name:item.name,stock:state.meals?.[id]??0}))};
+    meals:Object.entries(kitchenMeals).map(([id,item])=>({id,name:item.name,stock:state.meals?.[id]??0}))};
 }
 
 export async function donateFactionProject(db,playerId,body,now){
   const {resource,meal,quantity,operation,id}=body;
-  const path=resource==='gold'?'$.credits':resource==='timber'?'$.woodcutting.timber':resource==='meal'&&Object.hasOwn(mealRecipes,meal)?'$.meals.'+meal:null;
+  const path=resource==='gold'?'$.credits':resource==='timber'?'$.woodcutting.timber':resource==='meal'&&Object.hasOwn(kitchenMeals,meal)?'$.meals.'+meal:null;
   if(!path||!Number.isSafeInteger(quantity)||quantity<1||quantity>800||typeof operation!=='string'||!/^[a-zA-Z0-9-]{1,80}$/.test(operation)||typeof id!=='string')throw invalid('Choose a valid faction donation.');
   const first=hallProjects[0].targets,second=hallProjects[1].targets;
   const result=await db.prepare(

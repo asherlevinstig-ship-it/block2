@@ -1,3 +1,4 @@
+import {saveSilverfinSupper} from './silverfin-supper.mjs';
 const duration=15*60*1000;
 const inviteDuration=60000;
 const nearby=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y)<=5;
@@ -65,9 +66,11 @@ export async function fishingTogetherCatch(room,ws,player,catchAt){
   ws.serializeAttachment(player);otherSocket.serializeAttachment(other);
   if(completed){
     try{
-      await room.env.TOWER_DB.batch([[player,next.catchAt],[other,otherNext.catchAt]].map(([peer,at])=>room.env.TOWER_DB.prepare(
+      await room.env.TOWER_DB.batch([saveSilverfinSupper(room.env.TOWER_DB,session.id,player.playerId,other.playerId,now),...[[player,next.catchAt],[other,otherNext.catchAt]].map(([peer,at])=>room.env.TOWER_DB.prepare(
         'INSERT INTO tower_silverfin_pairs(day,player_id,faction_id) SELECT ?,player_id,faction_id FROM tower_faction_members WHERE player_id=? AND joined_at<=? ON CONFLICT(day,player_id) DO NOTHING'
-      ).bind(Math.floor(at/86400000),peer.playerId,at)));
+      ).bind(Math.floor(at/86400000),peer.playerId,at))]);
+      next.supper=otherNext.supper=true;
+      ws.serializeAttachment(player);otherSocket.serializeAttachment(other);
     }catch(error){console.warn('Silverfin pair credit could not be recorded',error.name);}
   }
   if(player.fishTogether===next)room.send(ws,{type:'fishTogether',session:next});

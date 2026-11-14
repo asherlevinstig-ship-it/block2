@@ -1,3 +1,4 @@
+import {contributeSilverfinSupper,giftSilverfinSupper,readSilverfinSupper} from './silverfin-supper.mjs';
 import {readSilverfinWatch,silverfinContribution} from './silverfin-watch.mjs';
 import {readPublicRequests,deliverPublicRequest} from './public-requests.mjs';
 import {advanceAutoCooking} from './auto-cooking.mjs';
@@ -234,6 +235,10 @@ export async function handlePlayerApi(request,env){
       return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
+    if(path==='/api/player/silverfin-supper'&&request.method==='GET'){
+      const row=await read(env.TOWER_DB,id);
+      return row?json({...packet(row),supper:await readSilverfinSupper(env.TOWER_DB,id,Date.now())}):json({error:'Character not found.'},401);
+    }
     if(path==='/api/player/silverfin-watch'&&request.method==='GET')return json({watch:await readSilverfinWatch(env.TOWER_DB,id)});
     if(path==='/api/player/public-requests'&&request.method==='GET')return json({board:await readPublicRequests(env.TOWER_DB)});
     if(path==='/api/player/vault-coop'&&request.method==='GET'){
@@ -278,6 +283,13 @@ export async function handlePlayerApi(request,env){
       if(path==='/api/player/robbery')return json({...packet(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
       if(path==='/api/player/gameplay/campRefuel')return json({...packet(row),camp:await readTrailCamp(env.TOWER_DB)});
       return json(path==='/api/player/timber-orders'?{...packet(row),board:await readTimberOrders(env.TOWER_DB,id)}:packet(row));
+    }
+    if(path==='/api/player/silverfin-supper'){
+      const expected={...row,revision:body.revision};
+      if(body.kind==='gift')await giftSilverfinSupper(env.TOWER_DB,expected,body.id,Date.now());
+      else if(body.kind==='contribute')await contributeSilverfinSupper(env.TOWER_DB,expected,body.id,body.fish,Date.now());
+      else return json({error:'Choose a supper action.'},400);
+      return json({...packet(await read(env.TOWER_DB,id)),supper:await readSilverfinSupper(env.TOWER_DB,id,Date.now())});
     }
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     if(path==='/api/player/vault-coop'){

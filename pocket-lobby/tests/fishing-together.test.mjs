@@ -8,7 +8,7 @@ test('a nearby opt-in pair completes once from two distinct catches and waves th
   const ari={id:'a',name:'Ari',playerId:'a',room:'pond',x:4,y:5};
   const bea={id:'b',name:'Bea',playerId:'b',room:'pond',x:10,y:5};
   let credits=0,waves=0;
-  const db={prepare(){return {bind(){return this;}};},async batch(rows){credits+=rows.length;}};
+  const db={prepare(){return {bind(){return this;}};},async batch(rows){credits+=rows.length-1;}};
   const room={sessions:new Map([[a,ari],[b,bea],[observer,{id:'c',room:'pond'}]]),env:{TOWER_DB:db},send:(socket,packet)=>sent.push({socket,packet}),snapshot:()=>waves++};
   const act=(ws,p,action,details={})=>fishingTogetherAction(room,ws,p,{action,...details},now);
   act(a,ari,'invite',{target:'b'});assert.equal(bea.fishTogether,undefined);

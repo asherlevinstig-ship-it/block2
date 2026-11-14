@@ -13,7 +13,8 @@ export const mealRecipes={
 export const towerBread={id:'towerBread',name:'Tower Bread',price:3,healing:0,hunger:25,description:'A cheap ration for the road.'};
 export const foodStall={room:'bakery',x:5,y:3};
 export const bakeryLayout=[['foodStall',foodStall.x,foodStall.y],['bakeryOven',7,1],['breadRack',3,1],['table',7,6],['stool',7,7],['plant',1,2]];
-export const foodItems={...mealRecipes,[towerBread.id]:towerBread};
+export const silverfinSupper={id:'silverfinSupper',name:'Silverfin Supper',healing:25,hunger:35,description:'A meal cooked with a fishing partner at the Tower Bakery.'};
+export const foodItems={...mealRecipes,[towerBread.id]:towerBread,[silverfinSupper.id]:silverfinSupper};
 export const foodFullness=item=>item.hunger??item.healing;
 export function consumeMeal(state,id,now){
  const item=foodItems[id],mana=manaAvailable(state.vitals,now);

@@ -41,7 +41,7 @@
     });
     const data=await response.json();combatClock.sample(data.serverTime,sentAt);
     if(data.state?.autoDisconnected&&path!=='reconnect'&&!path.startsWith('learning/'))suspendForPoints(data);
-    if(response.status===409&&robberyRetry<2&&data.lastOperation?.startsWith('robbed:')&&data.characterKey===packet?.characterKey){packet=data;window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
+    if(response.status===409&&robberyRetry<2&&(data.lastOperation?.startsWith('robbed:')||data.lastOperation?.startsWith('supper:'))&&data.characterKey===packet?.characterKey){packet=data;if(data.lastOperation.startsWith('supper:'))window.towerApplySupperInventory?.(data.state);else window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -519,7 +519,18 @@
       const robberyRules=await import('./robbery-rules.js');window.towerEquipmentStats=robberyRules.equipmentStats;window.towerItemStatText=robberyRules.itemStatText;
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
-      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},readSilverfinWatch:async()=>(await request('silverfin-watch')).watch,readPublicRequests:()=>request("public-requests"),deliverPublicRequest:async id=>{await flush();return action("public-requests",{id});},readMillRaid:()=>request('mill-raid'),vaultCoop:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('vault-coop',body);}finally{gameplayBusy=false;}},millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
+      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},silverfinSupper:async(body=null)=>{
+        if(gameplayBusy||acting||presenceBusy)throw new Error('Wait for your current action.');
+        await flush();
+        gameplayBusy=true;
+        try{
+          const latest=await request('silverfin-supper');
+          if(latest.characterKey!==packet.characterKey)throw new Error('Reload your character.');
+          if(latest.revision!==packet.revision&&!latest.lastOperation?.startsWith('supper:'))throw new Error('Your character changed. Reload to continue.');
+          packet=body?await request('silverfin-supper',{...body,revision:latest.revision,operation:crypto.randomUUID()}):latest;
+          return packet;
+        }finally{gameplayBusy=false;}
+      },readSilverfinWatch:async()=>(await request('silverfin-watch')).watch,readPublicRequests:()=>request("public-requests"),deliverPublicRequest:async id=>{await flush();return action("public-requests",{id});},readMillRaid:()=>request('mill-raid'),vaultCoop:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('vault-coop',body);}finally{gameplayBusy=false;}},millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;
