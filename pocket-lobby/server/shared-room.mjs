@@ -1,4 +1,4 @@
-import {pvpRooms} from '../public/pvp.js';
+import {pvpRooms,pvpGuards,witnessRange} from '../public/pvp.js';
 import {playerMaxHealth} from '../public/food-buffs.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {factionHallAccess} from './faction-projects.mjs';
@@ -29,7 +29,7 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control
 const canMeditate=meta=>!meta.serverAuto&&!meta.auto&&!meta.seat&&!meta.activity&&!meta.fishing&&!meta.chopping&&!meta.mining;
 export function publicPeer(meta,now=Date.now()){
   const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
-  return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
 }
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
@@ -49,7 +49,7 @@ export async function handleWorldConnect(request,env){
   if(!validRoomTile(room,position.x,position.y,boxes,state.adventure))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
-    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),mining:miningPose(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
+    name:state.avatar?.name??'Guest',wantedAt:state.pvp?.wantedAt??0,outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),mining:miningPose(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
   const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:publicRoomNamespace(room);
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
@@ -122,8 +122,20 @@ export class SharedRoom{
       return json({ok:true});
     }
     if(path==='/pvp-notice'&&request.method==='POST'){
-      const {recipient,receipt}=await request.json();
-      for(const [ws,peer] of this.sessions)if(peer.playerId===recipient)this.send(ws,{type:'pvp',receipt});
+      const {recipient,receipt,attacker,wantedAt,reveal,incident,name}=await request.json();
+      for(const [ws,peer] of this.sessions){
+        if(peer.playerId===recipient){
+          if(receipt?.killed){peer.wantedAt=0;ws.serializeAttachment(peer);}
+          this.send(ws,{type:'pvp',receipt});
+        }
+        if(peer.playerId===attacker){
+          peer.wantedAt=wantedAt;if(reveal)peer.veilUntil=0;
+          ws.serializeAttachment(peer);
+          if(!recipient)this.send(ws,{type:'pvpWanted'});
+        }
+        if(incident?.witnesses.includes(peer.playerId))this.send(ws,{type:'pvpWitness',incident:{id:incident.id,until:incident.until,name}});
+      }
+      this.snapshot();
       return json({ok:true});
     }
     if(path==='/pvp-target'&&request.method==='POST'){
@@ -151,11 +163,16 @@ export class SharedRoom{
     if(!gift)for(const [id,p] of this.autoPeers)if(p.until>now)peers.set(id,p);
     const actor=peers.get(playerId),other=[...peers.values()].find(p=>p.id===target&&p.playerId!==playerId);
     if(gift&&(actor?.auto||other?.auto))return json({error:'Choose a player in Play mode.'},400);
-    if(!actor||!other||actor.room!==room||other.room!==room||room==='home'||room==='factionHall'||other.veilUntil>now||actor.veilUntil>now)return json({error:'Choose a visible player in the same public area.'},400);
+    if(!actor||!other||actor.room!==room||other.room!==room||room==='home'||room==='factionHall'||other.veilUntil>now||verb!=='attacking'&&actor.veilUntil>now)return json({error:'Choose a visible player in the same public area.'},400);
     const a=actor.walk?autoWalkPosition(actor.walk,now):actor,b=other.walk?autoWalkPosition(other.walk,now):other;
     const from={x:Math.round(a.x),y:Math.round(a.y)},to={x:Math.round(b.x),y:Math.round(b.y)};
     if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>robberyRules.reach||!reachableMove(room,from,to,roomBoxes(room),1,actor))return json({error:'Move next to this player, within one tile, before '+verb+'.'},400);
-    return json({playerId:other.playerId});
+    if(verb!=='attacking')return json({playerId:other.playerId});
+    const visible=!(actor.veilUntil>now);
+    const near=p=>Math.abs(p.x-from.x)+Math.abs(p.y-from.y)<=witnessRange&&Math.abs(p.x-to.x)+Math.abs(p.y-to.y)<=witnessRange;
+    const guard=pvpGuards[room];
+    const witnesses=visible?[...peers.values()].filter(p=>p.room===room&&!p.auto&&p.playerId!==playerId&&p.playerId!==other.playerId&&near(p)).map(p=>p.playerId):[];
+    return json({playerId:other.playerId,guardSaw:visible&&!!guard&&near(guard),witnesses});
   }
   async reserveFishingSpot(request){
     const {playerId,room,spots}=await request.json(),now=Date.now();
@@ -223,7 +240,7 @@ export class SharedRoom{
     if(!entry||actor)return json({ok:true});
     const [ws,meta]=entry;if(!Number.isInteger(revision)||revision<=(meta.activityRevision??0))return json({ok:true});
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
-    meta.activityRevision=revision;
+    meta.activityRevision=revision;meta.wantedAt=state.pvp?.wantedAt??0;
     if(state.robbery?.lastReceived?.at>Date.now()-5000)this.send(ws,{type:'robbery',receipt:state.robbery.lastReceived,revision});
     if(Number.isSafeInteger(pondCatchAt)&&room==='pond'&&state.location==='pond'&&state.fishingReceipt?.room==='pond'&&state.fishingReceipt.at===pondCatchAt)await fishingTogetherCatch(this,ws,meta,pondCatchAt);
     if(meta.room==='willowbank')meta.willowbankShortcut=state.adventure?.willowbankShortcut===true;

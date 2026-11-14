@@ -48,7 +48,7 @@
         availableActionPoints(packet.state.actionPoints)>0&&!availableActionPoints(data.state.actionPoints)){
       setTimeout(()=>{if(!conflicted&&!availableActionPoints(packet.state.actionPoints))openQuestions();},0);
     }
-    if(response.status===409&&robberyRetry<2&&(data.lastOperation?.startsWith('pvp-hit:')||data.lastOperation?.startsWith('robbed:')||data.lastOperation?.startsWith('supper:')||data.lastOperation?.startsWith('gifted:'))&&data.characterKey===packet?.characterKey){packet=data;if(data.lastOperation.startsWith('pvp-hit:')){window.towerApplyPvpHit?.(data.state,data.state.pvp?.lastHit);if(data.state.pvp?.lastHit?.killed&&body?.state)return data;}else if(!data.lastOperation.startsWith('robbed:'))window.towerApplySupperInventory?.(data.state);else window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
+    if(response.status===409&&robberyRetry<2&&(data.lastOperation?.startsWith('pvp-wanted:')||data.lastOperation?.startsWith('pvp-hit:')||data.lastOperation?.startsWith('robbed:')||data.lastOperation?.startsWith('supper:')||data.lastOperation?.startsWith('gifted:'))&&data.characterKey===packet?.characterKey){packet=data;if(data.lastOperation.startsWith('pvp-hit:')){window.towerApplyPvpHit?.(data.state,data.state.pvp?.lastHit);if(data.state.pvp?.lastHit?.killed&&body?.state)return data;}else if(data.lastOperation.startsWith('pvp-wanted:')){window.towerWantedChanged?.(data.state);}else if(!data.lastOperation.startsWith('robbed:'))window.towerApplySupperInventory?.(data.state);else window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -116,7 +116,7 @@
       const data=await request('state');
       if(data.characterKey!==packet.characterKey||data.revision<packet.revision)return;
       if(before!==packet||sending||acting){if(attempt<30)setTimeout(()=>refreshPvp(receipt,attempt+1),200);return;}
-      packet=data;window.towerApplyPvpHit?.(data.state,data.state.pvp?.lastHit??receipt);
+      packet=data;if(receipt)window.towerApplyPvpHit?.(data.state,data.state.pvp?.lastHit??receipt);
     }catch{if(attempt<30)setTimeout(()=>refreshPvp(receipt,attempt+1),200);}
   }
   async function refreshRobbery(attempt=0){
@@ -528,6 +528,7 @@
         }
       }
       if(!pausedForPoints&&(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules')&&(!packet.state.plan||packet.state.plan.source==='rules')&&!packet.state.report){await action('presence',{active:true});lastReportedInputAt=lastInputAt;}
+      const {pvpGuards}=await import('./pvp.js');window.towerPvpGuards=pvpGuards;
       const {moonwood}=await import('./moonwood.js');
       window.moonwood=moonwood;
       const rules=await import('./fishing.js');
@@ -595,6 +596,8 @@
         finally{gameplayBusy=false;}
       },setupExplorer:async()=>{await flush();await action('auto/explore/setup');pending=retryJob=null;backup(null);lastInputAt=Date.now();lastReportedInputAt=lastInputAt;window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);showReport(packet.state);schedulePresence(150);return packet.state;},get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},startSimpleAuto:async(mode,options)=>{await flush();await action('auto/simple',{mode,options});pending=retryJob=null;backup(null);window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);schedulePresence(150);return packet.state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get characterKey(){return packet.characterKey;},get initial(){return packet.state;}};
       window.playerCloud.refreshPvp=refreshPvp;
+      window.playerCloud.mostWanted=()=>request('pvp');
+      window.playerCloud.refreshWanted=async()=>{try{const latest=await request('state');if(latest.characterKey===packet.characterKey&&latest.revision>=packet.revision){packet=latest;window.towerWantedChanged?.(packet.state);}}catch{}};
       window.playerCloud.pvp=async body=>{await flush();gameplayBusy=true;try{return await action('pvp',body);}finally{gameplayBusy=false;}};
       window.playerCloud.pauseAuto=pauseAutoConnection;
       const {initializeRankings}=await import('./rankings.js');

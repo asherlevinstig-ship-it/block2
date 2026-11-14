@@ -1,4 +1,4 @@
-import {pvpStrike} from './pvp.mjs';
+import {pvpStrike,reportPvp,mostWanted} from './pvp.mjs';
 import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
 import {waystationRoom} from '../public/waystation.js';
 import {readWaystation,useWaystation} from './waystation.mjs';
@@ -218,7 +218,7 @@ export async function handlePlayerApi(request,env){
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
       if(legacy.location===overlookRoom){legacy.location=waystationRoom;legacy.position={x:10,y:3};}
       if(legacy.location==='millCellar'){legacy.location='millbrook';legacy.position={x:6,y:2};}
-      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries([...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,equipmentEffects:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
+      const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),robbery:undefined,stats:{...legacy.stats,stealthXp:0,leadershipXp:0,evil:0},adventure:{...legacy.adventure,...Object.fromEntries([...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags].map(key=>[key,false]))},vitals:undefined,equipmentEffects:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(serverStart||body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -278,6 +278,7 @@ export async function handlePlayerApi(request,env){
       const result=await changeFaction(env.TOWER_DB,id,body);
       return json(['create','donate','feastDonate','feastClaim'].includes(body.action)?{...result,...playerPacket(await read(env.TOWER_DB,id))}:result);
     }
+    if(path==='/api/player/pvp'&&request.method==='GET')return json({wanted:await mostWanted(env)});
     if(path==="/api/player/state"&&request.method==="GET"){
       const row=await settled(env,id,true);
       return row?json({...playerPacket(row),teacher:identity?.teacher===true}):json({error:"Character not found."},401);
@@ -321,6 +322,7 @@ export async function handlePlayerApi(request,env){
       else return json({error:'Choose a supper action.'},400);
       return json({...playerPacket(await read(env.TOWER_DB,id)),supper:await readSilverfinSupper(env.TOWER_DB,id,Date.now())});
     }
+    if(path==='/api/player/pvp'&&body.kind==='report')return json({...playerPacket(row),reported:await reportPvp(env,id,body.incident)});
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...playerPacket(row)},409);
     if(path==='/api/player/vault-coop'){
       const result=await writeVaultParty(env.TOWER_DB,env.ESSENCES_PAUSED===true?{...row,state_json:JSON.stringify(readPlayerState(row,env))}:row,body);if(!result)return json({error:'Your character changed. Refresh the Vault party.',...playerPacket(await read(env.TOWER_DB,id))},409);

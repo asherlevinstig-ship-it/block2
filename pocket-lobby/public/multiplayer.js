@@ -1,5 +1,5 @@
 import {socialRooms} from './shared-world.js';
-export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onWaystation=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onRobbery=()=>{},onPvp=()=>{},onGift=()=>{},onFishTogether=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
+export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onWaystation=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onRobbery=()=>{},onPvp=()=>{},onPvpWitness=()=>{},onPvpWanted=()=>{},onGift=()=>{},onFishTogether=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
   let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',lastMeditating=false,profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
   function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);onFishTogether({session:null});}
@@ -38,6 +38,8 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
         if(data.type==='fishTogether')onFishTogether(data);
         if(data.type==='gift')onGift(data.receipt);
         if(data.type==='pvp')onPvp(data.receipt);
+        if(data.type==='pvpWitness')onPvpWitness(data.incident);
+        if(data.type==='pvpWanted')onPvpWanted();
         if(data.type==='robbery')onRobbery(data.receipt);
         if(data.type==='chat')onChat(data.message);
         if(data.type==='correction')onCorrection(data);

@@ -687,7 +687,7 @@ function drawRemote(peer,time){
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
   const activity=meditating?'Meditating':chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
-  renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:meditating?35:43),familiar,familiarName:peer.familiarName});
+  renderedActors.push({id:peer.id,name:peer.name,wanted:peer.wanted,activity,x,y:y-(peer.seat?30:meditating?35:43),familiar,familiarName:peer.familiarName});
   ctx.restore();
 }
 function updateActorNameplates(){
@@ -735,6 +735,7 @@ function updateActorNameplates(){
     render(actor.id+':familiar',petName,'',pet,'familiar-label',species.color);
    }
    render(actor.id,actor.name||'Guest',actor.activity,owner,actor.id==='self'?'own-player-label':'remote-player-label');
+   actorNameplates.get(actor.id).node.dataset.wanted=String(!!actor.wanted);
   }
  }
  for(const [key,plate] of actorNameplates)if(!seen.has(key)){plate.node.remove();actorNameplates.delete(key);}
@@ -3846,6 +3847,8 @@ function draw(time){
     items.push(...willowbankFlock(wildlifeNow,[player,...[...remotePeers.values()].map(p=>({x:p.rx,y:p.ry}))]));
   }
   const travelers=currentRoom===waystationRoom?waystationRoutines(worldNow,weather,waystationBoard,reducedMotion.matches):null;
+  const guard=window.towerPvpGuards?.[currentRoom];
+  if(guard)items.push({type:'waystationVisitor',id:'watchGuard',name:'Tower Guard',outfit:3,direction:'right',...guard});
   if(currentRoom==='willowbank')items.push({type:'waystationVisitor',id:'willowbankGuide',name:'River traveler',outfit:2,x:7,y:11});
   if(travelers){
     items.push(...travelers.visitors);
@@ -3887,7 +3890,7 @@ function draw(time){
     ctx.save();if(veiled)ctx.globalAlpha=.40;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     const familiar=drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
-    renderedActors.push({id:'self',name:avatar.name,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
+    renderedActors.push({id:'self',name:avatar.name,wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
     if(veiled){
       ctx.save();ctx.strokeStyle='#a3e6eb';ctx.globalAlpha=reducedMotion.matches?.45:.38+.16*Math.sin(time/180);
@@ -3939,6 +3942,7 @@ function draw(time){
         rect(x-9,y-19,12,8,'#9d744f');rect(x-7,y-19,2,8,'#d0a978');
       }
       renderedActors.push({id:'waystation:'+item.id,enemy:true,name:item.name,detail:item.activity,x,y:y-42,action:()=>{
+        if(item.id==='watchGuard'){window.towerRobbery?.open();return;}
         if(Math.abs(item.x-player.cx)+Math.abs(item.y-player.cy)>3){note('Move closer to speak.',3500);return;}
         note(item.id==='willowbankGuide'?willowbankGuideReport(adventure.willowbankShortcut):item.id==='scout'?travelers.report:item.crate?'I’m bringing supplies from Beaconwatch.':item.activity==='Sheltering'?'I’ll wait here until the rain lets up.':'Supplies are at the counter. Bring timber to help restore the outpost.',7500);
       }});
@@ -8454,7 +8458,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
       if(!gift?.id)return;
       showTransaction('Gift from '+gift.from,[{icon:'✦',text:'+'+gift.quantity+' × '+gift.label}]);
       window.playerCloud.refreshGift?.();
-    },onFishTogether:receiveFishTogether,onPvp:receipt=>window.playerCloud.refreshPvp?.(receipt),onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
+    },onFishTogether:receiveFishTogether,onPvpWanted:()=>window.playerCloud.refreshWanted?.(),onPvpWitness:incident=>{window.towerRobbery?.witness(incident);note('You witnessed a kill. Report it in Nearby Players.',5000);},onPvp:receipt=>window.playerCloud.refreshPvp?.(receipt),onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,onAutoDisconnected:()=>window.playerCloud.pauseAuto?.(),
@@ -8563,6 +8567,7 @@ window.towerApplyPvpHit=(state,receipt)=>{
   combatArt.hurtAt=performance.now();
   note(receipt.killed?'Defeated by '+receipt.name+' · Recovering at home.':receipt.name+' hit you for '+receipt.damage+' HP.',5000);
 };
+window.towerWantedChanged=()=>note('You are wanted. Hunters can claim a bounty for defeating you.',5000);
 window.towerApplyRobberyState=state=>{credits=state.credits;Object.assign(playerStats,state.stats);$('credits').textContent=new Intl.NumberFormat().format(credits);walletTween=null;updatePlayerStats();};
 window.towerRobberyHooks={pvpReward:(state,reward)=>{
  if(!reward)return;

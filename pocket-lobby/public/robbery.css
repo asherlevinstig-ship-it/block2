@@ -15,3 +15,7 @@
 .remote-player-label{pointer-events:auto!important;cursor:pointer}
 #attribute-stealth-equipment{grid-column:1/-1;margin:0;font-size:11px;color:#c7b2ee}
 @media(max-width:540px){#robberyDialog{padding:16px;max-height:90dvh}.robbery-window .robbery-detail{padding:13px}#nearbyPlayers{min-width:44px;font-size:9px}}
+
+.player-label[data-wanted=true]{overflow:visible;color:#ffd0b7;border-color:#e08373}
+.player-label[data-wanted=true]::before{content:'☠';position:absolute;left:50%;bottom:100%;transform:translateX(-50%);color:#ff927c;font:700 16px/1 system-ui;text-shadow:0 1px 3px #1b0611;pointer-events:none}
+#pvpWitnesses{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}

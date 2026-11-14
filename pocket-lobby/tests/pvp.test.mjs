@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pvpStrike} from '../server/pvp.mjs';
+import {pvpStrike,reportPvp,mostWanted} from '../server/pvp.mjs';
 import {normalizeState} from '../server/player-state.mjs';
 import {testDatabase} from './db-helper.mjs';
 
@@ -19,6 +19,7 @@ for(const itemReward of [false,true])test('an outdoor PvP strike commits kill re
  const records=Object.fromEntries(sql.prepare('SELECT player_id,state_json FROM tower_players').all().map(r=>[r.player_id,JSON.parse(r.state_json)]));
  assert.equal(records.a.actionPoints.value,2);
  assert.equal(records.a.pvp.kills,1);
+ assert.equal(records.a.stats.evil,1);
  if(itemReward){
   assert.equal(records.a.pvp.lastStrike.reward.id,'ironSword');
   assert(records.a.combatGear.ownedWeapons.includes('ironSword'));
@@ -30,4 +31,26 @@ for(const itemReward of [false,true])test('an outdoor PvP strike commits kill re
  assert.equal(records.b.pvp.deaths,1);
  assert.equal(records.b.location,'home');
  assert.equal(records.b.credits,150);
+});
+
+test('only a recorded witness can report a murder and a bounty kill clears wanted status',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const insert=sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?)');
+ const player=(health=100)=>normalizeState({location:'beaconwatch',health,credits:100});
+ insert.run('killer',JSON.stringify(player(2)),'fixture',1);
+ insert.run('victim',JSON.stringify(player(2)),'fixture',1);
+ insert.run('hunter',JSON.stringify(player()),'fixture',1);
+ let target='victim';
+ const env={TOWER_DB:db,SHARED_ROOMS:{idFromName:id=>id,get:()=>({fetch:async()=>Response.json({playerId:target,witnesses:['hunter']})})}};
+ const strike=(id,state,revision,at)=>pvpStrike(env,{player_id:id,revision},state,{target:'a'.repeat(24),operation:'strike-'+id},at,()=>0);
+ const murder=await strike('killer',player(2),1,20000);
+ const incident=JSON.parse(murder.row.state_json).pvp.incidents[0].id;
+ await assert.rejects(reportPvp(env,'outsider',incident,20100),/did not witness/);
+ await reportPvp(env,'hunter',incident,20100);
+ assert.equal((await mostWanted(env)).length,1);
+ target='killer';
+ const bounty=await strike('hunter',player(),1,21000);
+ assert.equal(bounty.receipt.reward.bounty,75);
+ assert.equal(JSON.parse(bounty.row.state_json).stats.evil,0);
+ assert.equal((await mostWanted(env)).length,0);
 });
