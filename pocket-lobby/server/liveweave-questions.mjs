@@ -20,6 +20,8 @@ export async function curriculumRequest(env,student,options){
   if(!response.ok)throw availabilityError();
   const result=await response.json();
   if(options.questionId!==undefined)return {eligible:result.eligible===true};
+  const subjects=(Array.isArray(result.subjects)?result.subjects:[]).filter(subject=>/^[0-9]{4}$/.test(subject?.code??'')&&typeof subject.name==='string');
+  const track=subjects.find(subject=>subject.code===result.track)?.code;
   const q=result.question;
   if(q===null)return {};
   if(!positive(q?.id)||typeof q.prompt!=='string'||!q.prompt.trim()||!Array.isArray(q.choices)||q.choices.length!==4||
@@ -27,6 +29,6 @@ export async function curriculumRequest(env,student,options){
   const {id,prompt,choices,answer}=q;
   const detail={};
   for(const key of ['source','topic','course','explanation'])if(typeof q[key]==='string')detail[key]=q[key];
-  return {question:{id,prompt,choices,answer,...detail}};
+  return {subjects,track,question:{id,prompt,choices,answer,...detail}};
  }catch{throw availabilityError();}
 }

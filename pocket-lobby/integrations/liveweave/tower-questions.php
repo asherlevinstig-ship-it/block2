@@ -23,8 +23,10 @@ $studentId = $body['studentId'] ?? null;
 $schoolId = $body['schoolId'] ?? null;
 $questionId = $body['questionId'] ?? null;
 $seen = $body['seen'] ?? [];
+$track = $body['track'] ?? null;
 if (!is_int($studentId) || $studentId < 1 || !is_int($schoolId) || $schoolId < 1
     || ($questionId !== null && (!is_int($questionId) || $questionId < 1))
+    || ($track !== null && (!is_string($track) || !preg_match('/^[0-9]{4}$/D', $track)))
     || !is_array($seen) || count($seen) > 10 || array_filter($seen, static fn($id) => !is_int($id) || $id < 1)) {
     tower_question_json(['error'=>'Invalid question request.'], 400);
 }
@@ -42,7 +44,7 @@ try {
     $query->execute([$studentId, $schoolId]);
     $player = $query->fetch(PDO::FETCH_ASSOC) ?: [];
     $assignment = sn_class_practice_assignment($con, (int)($player['id'] ?? 0), $player + ['account_type'=>'student','account_id'=>$studentId]);
-    $tracks = $assignment['classTrackCodes'] ?? [$assignment['trackCode']];
+    $tracks = $assignment['eligibleTrackCodes'] ?? [$assignment['trackCode']];
     $trackSlots = implode(',', array_fill(0, count($tracks), '?'));
     $params = [$schoolId, (int)$year[1], '%|'.$year[1].'|%', ...$tracks];
     $filter = "FROM sn_questions q
@@ -55,10 +57,21 @@ try {
         tower_question_json(['eligible'=>(bool)$query->fetchColumn()]);
     }
 
+    $query = $pdo->prepare("SELECT DISTINCT q.syllabus_code $filter ORDER BY (q.syllabus_code=?) DESC, q.syllabus_code");
+    $query->execute([...$params, $assignment['trackCode']]);
+    $codes = array_map('strval', $query->fetchAll(PDO::FETCH_COLUMN));
+    $names = sn_curriculum_tracks();
+    $subjects = array_map(static fn($code) => ['code'=>(string)$code,'name'=>$names[$code]['name']], $codes);
+    if ($track !== null && !in_array($track, $codes, true)) tower_question_json(['question'=>null,'subjects'=>$subjects]);
+    if (!$codes) tower_question_json(['question'=>null,'subjects'=>[]]);
+    $track ??= $codes[0];
+    $filter .= ' AND q.syllabus_code=?';
+    $params[] = $track;
+
     // Prefer unseen questions, but allow review when a class has a small enabled pool.
     $seenOrder = $seen ? 'q.id IN ('.implode(',', array_fill(0, count($seen), '?')).'), ' : '';
-    $query = $pdo->prepare("SELECT q.* $filter ORDER BY {$seenOrder}(q.syllabus_code=?) DESC, RAND() LIMIT 12");
-    $query->execute([...$params, ...array_values($seen), $assignment['trackCode']]);
+    $query = $pdo->prepare("SELECT q.* $filter ORDER BY {$seenOrder}RAND() LIMIT 12");
+    $query->execute([...$params, ...array_values($seen)]);
     while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
         $question = sn_question_from_database_row($row);
         $options = $question['a'];
@@ -66,7 +79,7 @@ try {
             || array_filter($options, static fn($option) => !is_string($option) || trim($option) === '')) continue;
         $order = [0, 1, 2, 3];
         shuffle($order);
-        tower_question_json(['question'=>[
+        tower_question_json(['subjects'=>$subjects,'track'=>$track,'question'=>[
             'id'=>$question['id'], 'prompt'=>$question['q'], 'source'=>$question['source'],
             'topic'=>$question['topicName'], 'course'=>sn_curriculum_tracks()[$question['track']]['name'] ?? '',
             'choices'=>array_map(static fn($index) => $options[$index], $order),

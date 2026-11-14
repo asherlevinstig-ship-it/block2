@@ -118,7 +118,9 @@ test('linked students receive eligible Nights questions and Tower awards AP once
    assert.equal(request.studentId,21);assert.equal(request.schoolId,7);
    if(request.questionId)return Response.json({eligible:request.questionId===71?eligible:true});
    const id=request.seen.includes(71)?72:71;
-   return Response.json({question:available?{id,prompt:'What does this loop output?',source:'FOR i ← 1 TO 3',choices:['0','1','2','3'],answer:3,explanation:'It runs three times.',course:'Computer Science',topic:'Programming'}:null});
+   const subjects=[{code:'0478',name:'Computer Science'},{code:'0417',name:'ICT'}];
+   const track=request.track??'0478';
+   return Response.json({subjects,track,question:available&&subjects.some(subject=>subject.code===track)?{id,prompt:'What does this loop output?',source:'FOR i ← 1 TO 3',choices:['0','1','2','3'],answer:3,explanation:'It runs three times.',course:'Computer Science',topic:'Programming'}:null});
   }};
  async function call(path,body){
   const account=path.startsWith('account/');
@@ -161,7 +163,21 @@ test('linked students receive eligible Nights questions and Tower awards AP once
  assert.equal(packet.state.actionPoints.value,1);
  assert.equal((await act('answer',answer)).status,200);
  assert.equal(packet.state.actionPoints.value,1);
- available=false;
- assert.equal((await act('next')).status,422);
+ assert.equal(packet.state.learning.track,'0478');
+ assert.equal(packet.state.learning.subjects.length,2);
+ assert.equal((await act('next',{track:'0417'})).status,200);
+ const switched=packet.state.learning.attempt;
+ assert.equal(packet.state.learning.track,'0417');
+ assert.equal(packet.state.learning.session.answered,1);
  assert.equal(packet.state.actionPoints.value,1);
+ assert.equal((await act('next',{track:'9999'})).status,422);
+ assert.equal(packet.state.learning.attempt.id,switched.id);
+ assert.equal((await act('answer',{attemptId:switched.id,choice:3})).status,200);
+ assert.equal((await act('next')).status,200);
+ assert.equal(requests.at(-1).track,'0417');
+ assert.equal(packet.state.actionPoints.value,2);
+ eligible=false;
+ available=false;
+ assert.equal((await act('next',{track:'0478'})).status,422);
+ assert.equal(packet.state.actionPoints.value,2);
 });

@@ -409,14 +409,20 @@ export async function handlePlayerApi(request,env){
       case "/api/player/learning/answer":{
         const action=path.split('/').at(-1),attempt=state.learning?.attempt;
         const student=await liveWeaveStudent(env,identity?.account);
-        let curriculum=null;
+        let curriculum=null,selection=null;
+        if(action==='next'&&body.track!==undefined&&(!student||typeof body.track!=='string'||!/^\d{4}$/.test(body.track)))
+          return json({error:'Choose an available LiveWeave subject.'},400);
         if(student&&action==='next'){
-          const eligible=attempt?.questionId&&(await curriculumRequest(env,student,{questionId:attempt.questionId})).eligible;
+          const changed=body.track!==undefined&&body.track!==state.learning?.track;
+          const eligible=!changed&&state.learning?.track&&attempt?.questionId&&(await curriculumRequest(env,student,{questionId:attempt.questionId})).eligible;
           if(!eligible){
             const session=state.learning?.session;
             const seen=session?.completedAt?[]:session?.questionIds??[];
-            ({question:curriculum}=await curriculumRequest(env,student,{seen}));
-            if(!curriculum)return json({error:'No LiveWeave questions are available for your class and enabled topics right now.'},422);
+            const track=body.track??state.learning?.track;
+            selection=await curriculumRequest(env,student,{seen,track});
+            if(!selection.question&&body.track===undefined&&track)selection=await curriculumRequest(env,student,{seen});
+            curriculum=selection.question;
+            if(!curriculum)return json({error:body.track?'That subject has no enabled questions for your year group.':'No LiveWeave questions are available for your year group and enabled topics right now.'},422);
             if(attempt)delete state.learning.attempt;
           }
         }
@@ -425,6 +431,7 @@ export async function handlePlayerApi(request,env){
             return json({error:'This question is no longer available. Choose Next question to continue.',code:'curriculum-changed'},422);
         }
         learningAction(state,action,body,Date.now(),Math.random,curriculum);
+        if(selection?.track){state.learning.track=selection.track;state.learning.subjects=selection.subjects;}
         break;
       }
       case "/api/player/rankings/participation":
