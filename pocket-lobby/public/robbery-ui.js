@@ -8,7 +8,7 @@ export function initializeRobbery({doc=document,cloud,hooks}){
  <label>Item <select id="giftItem"></select></label>
  <label>Quantity <input id="giftQuantity" type="number" min="1" max="10" value="1"></label>
  <button id="giftSend" class="primary" type="button" disabled>Send gift</button>
- <p id="giftStatus" role="status"></p></section><section id="pvpPanel" class="robbery-detail" hidden><h3>Outdoor PvP</h3><p id="pvpScore"></p><button id="pvpToggle" type="button"></button> <button id="pvpStrike" type="button" class="primary">Attack · 1 AP</button><p id="pvpStatus" role="status"></p></section><details id="robberyDisclosure"><summary>Pickpocket</summary><section class="robbery-detail"><div class="eyebrow">PICKPOCKETING</div><h3 id="robberyTarget">Choose a player</h3><div class="robbery-metrics"><div><small>COST PER ATTEMPT</small><b>10 AP</b></div><div><small>SUCCESS CHANCE</small><b id="robberyChance">—</b></div></div><p id="robberyEquipment"></p><p id="robberyTerms">Your haul grows with Stealth, Luck and equipped bonuses, up to 25% of wallet gold. Banked gold and the first 50 wallet gold are safe. Success and failure both cost 10 AP. One attempt per minute; the target is protected for 10 minutes afterwards.</p><button id="robberySteal" type="button" class="primary" disabled>Attempt steal · 10 AP</button><p id="robberyResult" role="status" aria-live="polite"></p></section></details><button id="robberyRefresh" type="button">Refresh nearby players</button>`;
+ <p id="giftStatus" role="status"></p></section><section id="pvpPanel" class="robbery-detail" hidden><h3>Outdoor PvP</h3><p id="pvpScore"></p><button id="pvpStrike" type="button" class="primary">Attack · 1 AP</button><p id="pvpStatus" role="status"></p></section><details id="robberyDisclosure"><summary>Pickpocket</summary><section class="robbery-detail"><div class="eyebrow">PICKPOCKETING</div><h3 id="robberyTarget">Choose a player</h3><div class="robbery-metrics"><div><small>COST PER ATTEMPT</small><b>10 AP</b></div><div><small>SUCCESS CHANCE</small><b id="robberyChance">—</b></div></div><p id="robberyEquipment"></p><p id="robberyTerms">Your haul grows with Stealth, Luck and equipped bonuses, up to 25% of wallet gold. Banked gold and the first 50 wallet gold are safe. Success and failure both cost 10 AP. One attempt per minute; the target is protected for 10 minutes afterwards.</p><button id="robberySteal" type="button" class="primary" disabled>Attempt steal · 10 AP</button><p id="robberyResult" role="status" aria-live="polite"></p></section></details><button id="robberyRefresh" type="button">Refresh nearby players</button>`;
  doc.body.append(dialog);
  const $=id=>doc.getElementById(id);let selected=null,quote=null,busy=false,requestId=0;
  function giftOptions(){
@@ -72,10 +72,8 @@ export function initializeRobbery({doc=document,cloud,hooks}){
  function renderPvp(){
   const state=cloud.initial,mode=state.pvp,peer=hooks.peers().find(p=>p.id===selected),local=hooks.local();
   $('pvpPanel').hidden=!pvpRooms.has(state.location);
-  $('pvpScore').textContent=(mode?.kills??0)+' kills · '+(mode?.deaths??0)+' defeats · Both players must enable PvP.';
-  $('pvpToggle').textContent=mode?.enabled?'Disable PvP':'Enable PvP';
-  $('pvpToggle').disabled=busy;
-  $('pvpStrike').disabled=busy||!mode?.enabled||!peer||Math.abs(peer.x-local.x)+Math.abs(peer.y-local.y)>1;
+  $('pvpScore').textContent=(mode?.kills??0)+' kills · '+(mode?.deaths??0)+' defeats · Defeat a player to earn gold or a weapon you qualify for.';
+  $('pvpStrike').disabled=busy||!peer||Math.abs(peer.x-local.x)+Math.abs(peer.y-local.y)>1;
  }
  async function changePvp(body){
   if(busy)return;
@@ -83,11 +81,13 @@ export function initializeRobbery({doc=document,cloud,hooks}){
   try{
    hooks.pause();
    const response=await cloud.pvp(body),receipt=response.receipt;
-   $('pvpStatus').textContent=receipt?(receipt.killed?'Defeated '+receipt.name:'Hit '+receipt.name+' for '+receipt.damage+' HP.'):response.state.pvp.enabled?'PvP enabled. Nearby players who have enabled it can attack you.':'PvP disabled.';
+   if(!receipt)return;
+   const reward=receipt.reward?.kind==='item'?receipt.reward.name:receipt.reward?.amount?'+'+receipt.reward.amount+' gold':'Wallet full';
+   $('pvpStatus').textContent=receipt.killed?'Defeated '+receipt.name+' · '+reward:'Hit '+receipt.name+' for '+receipt.damage+' HP.';
+   if(receipt.killed)hooks.pvpReward?.(response.state,receipt.reward);
   }catch(error){$('pvpStatus').textContent=error.message;}
   finally{busy=false;renderPvp();}
  }
- $('pvpToggle').onclick=()=>changePvp({kind:'toggle',enabled:!cloud.initial.pvp?.enabled});
  $('pvpStrike').onclick=()=>changePvp({kind:'strike',target:selected});
  function open(id){if(busy)return;selected=id??null;$('pvpStatus').textContent='';renderPvp();quote=null;$('giftStatus').textContent='';list();$('robberyChance').textContent='—';$('robberyTarget').textContent='Choose a player';$('robberyResult').textContent='';$('robberySteal').disabled=true;if(!dialog.open){$('robberyDisclosure').open=false;dialog.showModal();}if(id)inspect(id);}
  $('nearbyPlayers').onclick=()=>open();

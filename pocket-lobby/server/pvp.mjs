@@ -1,8 +1,24 @@
 import {pvpRooms} from '../public/pvp.js';
-import {huntingAttributes,weaponProfile,armourSelection,armourProfile,boarRules} from '../public/hunting.js';
+import {huntingAttributes,weaponProfile,weaponCatalog,canUseWeapon,armourSelection,armourProfile,boarRules} from '../public/hunting.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {publicRoomNamespace} from './shared-trees.mjs';
 
+const randomRoll=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296;
+
+function rewardKill(state,random){
+ const gear=state.combatGear;
+ const items=Object.entries(weaponCatalog).filter(([id,weapon])=>
+  weapon.price&&canUseWeapon(state.stats,id)&&!gear.ownedWeapons.includes(id)&&!state.bank?.vault?.items?.['weapon:'+id]);
+ if(items.length&&(state.credits===100000000||random()<.5)){
+  const [id,weapon]=items[Math.floor(random()*items.length)];
+  gear.ownedWeapons=[...gear.ownedWeapons,id];
+  return {kind:'item',id,name:weapon.name};
+ }
+ const amount=Math.min(100000000-state.credits,10+Math.floor(random()*21));
+ state.credits+=amount;
+ state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+amount);
+ return {kind:'gold',amount};
+}
 const invalid=(message,status=400)=>Object.assign(new Error(message),{status});
 
 function ready(s){
@@ -11,15 +27,14 @@ function ready(s){
   throw invalid('Both players must be in Play mode and free of other activities.');
 }
 
-export async function pvpStrike(env,row,actor,body,now=Date.now()){
+export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomRoll){
  if(!env.SHARED_ROOMS||!pvpRooms.has(actor.location))throw invalid('PvP is available in outdoor adventuring areas.');
  if(typeof body.target!=='string'||!/^[a-f0-9]{24}$/.test(body.target))throw invalid('Choose a nearby player.');
  ready(actor);
- if(!actor.pvp?.enabled)throw invalid('Enable outdoor PvP before attacking.');
  const weapon=weaponProfile(actor.combatGear.equippedWeapon,actor.combatGear.activeSwordUpgrade,actor.combatGear.weaponEnchantments);
  if(!weapon)throw invalid('Equip a weapon before attacking.');
  const stats=huntingAttributes(actor.stats,actor.combatGear.equippedWeapon,actor.combatGear.activeSwordUpgrade,false,actor.combatGear.weaponEnchantments);
- if(now<(actor.pvp.nextStrikeAt??0))throw invalid('Your weapon is recovering.');
+ if(now<(actor.pvp?.nextStrikeAt??0))throw invalid('Your weapon is recovering.');
  requireActionPoint(actor);
 
  const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(publicRoomNamespace(actor.location)));
@@ -31,17 +46,17 @@ export async function pvpStrike(env,row,actor,body,now=Date.now()){
  if(!targetRow)throw invalid('This player has left.');
  const target=JSON.parse(targetRow.state_json);
  ready(target);
- if(target.location!==actor.location||!target.pvp?.enabled)throw invalid('This player has not enabled PvP here.');
+ if(target.location!==actor.location)throw invalid('This player has changed areas.');
 
  const armor=huntingAttributes(target.stats).armor+(armourProfile(armourSelection(target.combatGear))?.absorption??0);
  const damage=Math.min(target.health,Math.max(3,Math.round(stats.damage*.55)-armor));
  target.health-=damage;
  const killed=target.health===0;
- const receipt={id:body.operation,at:now,damage,killed,room:actor.location,name:target.avatar.name};
- actor.pvp={...actor.pvp,nextStrikeAt:now+stats.attackInterval,lastStrike:receipt,kills:(actor.pvp.kills??0)+Number(killed)};
- target.pvp={...target.pvp,deaths:(target.pvp.deaths??0)+Number(killed),lastHit:{...receipt,name:actor.avatar.name}};
+ const receipt={id:body.operation,at:now,damage,killed,room:actor.location,name:target.avatar.name,...(killed?{reward:rewardKill(actor,random)}:{})};
+ actor.pvp={...actor.pvp,nextStrikeAt:now+stats.attackInterval,lastStrike:receipt,kills:(actor.pvp?.kills??0)+Number(killed)};
+ target.pvp={...target.pvp,deaths:(target.pvp?.deaths??0)+Number(killed),lastHit:{id:receipt.id,at:now,damage,killed,room:actor.location,name:actor.avatar.name}};
  if(killed){
-  target.location='home';target.position={x:5,y:7};target.pvp.enabled=false;
+  target.location='home';target.position={x:5,y:7};
   target.hunting.recoveryUntil=now+boarRules.recovery;
  }
  spendActionPoint(actor,now);

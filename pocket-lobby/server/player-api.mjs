@@ -347,13 +347,6 @@ export async function handlePlayerApi(request,env){
       return json({...playerPacket(updated),board:await readPublicRequests(env.TOWER_DB)});
     }
     if(path==='/api/player/pvp'){
-      if(body.kind==='toggle'){
-        if(typeof body.enabled!=='boolean')return json({error:'Choose whether to enable PvP.'},400);
-        if(!body.enabled&&Date.now()-(state.pvp?.lastHit?.at??0)<15000)return json({error:'Wait 15 seconds after being hit before disabling PvP.'},400);
-        state.pvp={...state.pvp,enabled:body.enabled};
-        const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation);
-        return updated?json(playerPacket(updated)):json({error:'Your character changed. Try again.'},409);
-      }
       if(body.kind!=='strike')return json({error:'Choose a PvP action.'},400);
       const result=await pvpStrike(env,row,state,body);
       return json({...playerPacket(result.row),receipt:result.receipt});

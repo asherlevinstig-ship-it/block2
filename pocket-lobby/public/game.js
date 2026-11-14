@@ -8564,7 +8564,12 @@ window.towerApplyPvpHit=(state,receipt)=>{
   note(receipt.killed?'Defeated by '+receipt.name+' · Recovering at home.':receipt.name+' hit you for '+receipt.damage+' HP.',5000);
 };
 window.towerApplyRobberyState=state=>{credits=state.credits;Object.assign(playerStats,state.stats);$('credits').textContent=new Intl.NumberFormat().format(credits);walletTween=null;updatePlayerStats();};
-window.towerRobberyHooks={gift:state=>window.towerApplySupperInventory(state),peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};
+window.towerRobberyHooks={pvpReward:(state,reward)=>{
+ if(!reward)return;
+ applyServerGameplay(state);updateInventory();
+ if(reward.kind==='item')showTransaction('PvP reward',[{icon:'◆',text:reward.name+' · Added to Inventory'}]);
+ else if(reward.amount)showTransaction('PvP reward',[],reward.amount);
+},gift:state=>window.towerApplySupperInventory(state),peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};
 
 function currentCombatBuild(){return window.combatBuild({combatGear,wardrobe,magic:magicState,hunting});}
 window.towerBuildHooks={state:()=>({...currentGoalState(),wardrobe,magic:magicState,hunting}),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences()};
