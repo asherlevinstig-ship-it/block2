@@ -1,4 +1,5 @@
 import {recordShopPurchase} from './shop-licences.mjs';
+import {styleAbilityAction} from './style-abilities.mjs';
 import {awardTradingXp} from './activity-xp.mjs';
 import {availableActionPoints} from '../public/action-points.js';
 import {openRewardChest,chestEquipmentComparison} from '../public/dungeon-chests.js';
@@ -69,6 +70,7 @@ function location(state,rooms){
 const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
+  if(styleAbilityAction(state,action,body,now))return;
   if(action==='dungeonChestOpen'||action==='dungeonChestEquip'){
     available(state);
     if(state.fishingCast||state.timberCut||state.miningCut||state.bedRest||state.gambling?.round?.status==='playing')throw new Error('Finish your current activity before opening the chest.');
@@ -441,6 +443,7 @@ export function protectFishingState(previous,next){
   if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
   if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;
   next.familiars=previous.familiars;
+  if(previous.styleAbilities)next.styleAbilities=previous.styleAbilities;else delete next.styleAbilities;
   next.adventure={...next.adventure};for(const key of [...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;

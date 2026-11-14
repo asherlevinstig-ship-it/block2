@@ -6088,6 +6088,89 @@ function applyServerGameplay(state){
   Object.assign(huntingLoot,state.huntingLoot);
   updateEssenceHotbar();updateUpgradeGoalHud();if($('hudMapDialog').open)previewMapRoute();
 }
+let shadowstepTargeting=false,styleAbilityKey='';
+function refreshStyleAbilityBar(){
+  const bar=$('styleAbilityBar'),state=window.playerCloud?.initial;
+  if(!bar||!state||!window.styleAbilities)return;
+  const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
+  const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt[id]??0)-combatNow())/1000)));
+  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled()]);
+  if(nextKey===styleAbilityKey)return;
+  styleAbilityKey=nextKey;
+  bar.hidden=!learned.length&&!offers.length;
+  bar.replaceChildren();
+  for(const [index,id] of learned.entries()){
+    const ability=window.styleAbilities[id],button=document.createElement('button');
+    button.type='button';button.textContent=ability.icon+' '+ability.name+(seconds[index]?' · '+seconds[index]+'s':'');
+    button.disabled=seconds[index]>0||routineControlled();
+    if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):aimShadowstep();
+    bar.append(button);
+  }
+  const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
+  menu.onclick=()=>openStyleAbilities();bar.append(menu);
+}
+function openStyleAbilities(mode){
+  const dialog=$('styleAbilityDialog'),state=window.playerCloud?.initial;
+  if(!dialog||!state||!window.styleAbilities)return;
+  const contents=$('styleAbilityContents'),status=$('styleAbilityStatus');
+  contents.replaceChildren();status.textContent='';
+  $('styleAbilityTitle').textContent=mode==='waypoint'?'Choose a waypoint':'Abilities';
+  const add=(parent,tag,text)=>{
+    const element=document.createElement(tag);element.textContent=text;parent.append(element);return element;
+  };
+  const button=(parent,label,fn)=>{
+    const element=add(parent,'button',label);element.type='button';element.onclick=fn;return element;
+  };
+  if(mode==='waypoint'){
+    add(contents,'p','1 AP · 3-minute cooldown');
+    const places=Object.entries(window.waypoints).filter(([room])=>room!==currentRoom&&
+      (state.adventure.discovered.includes(room)||room==='outside'&&state.adventure.discovered.includes('trail')));
+    for(const [destination,place] of places)button(contents,place.name,()=>castStyleAbility('waypoint',{destination}));
+    if(!places.length)add(contents,'p','Discover a waypoint landmark by visiting it first.');
+  }else{
+    const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
+    add(contents,'p',learned.length+' / '+window.abilitySlots+' permanent slots used. Accepting an ability fills its slot permanently.');
+    if(learned.length)add(contents,'p','Learned · '+learned.map(id=>window.styleAbilities[id].name).join(', '));
+    if(!offers.length)add(contents,'p','No ability offers are waiting.');
+    for(const id of offers){
+      const ability=window.styleAbilities[id],card=add(contents,'section','');
+      add(card,'h3',ability.name);
+      add(card,'p',ability.description+' Costs 1 AP · '+(ability.cooldown/1000)+'s cooldown.');
+      add(card,'p',id==='waypoint'?'Earned by discovering areas and reaching Exploration 3.':'Earned by reaching Exploration 3 and Stealth 3.');
+      const decide=async decision=>{
+        try{await serverGameplay('abilityDecision',{id,decision});openStyleAbilities();refreshStyleAbilityBar();}
+        catch(error){status.textContent=error.message;}
+      };
+      button(card,'Accept '+ability.name+' permanently',()=>decide('accept'));
+      button(card,'Decline',()=>decide('decline'));
+    }
+    if(offers.length)button(contents,'Decide later',()=>dialog.close());
+  }
+  if(!dialog.open)dialog.showModal();
+}
+function aimShadowstep(){
+  shadowstepTargeting=!shadowstepTargeting;
+  note(shadowstepTargeting?'Shadowstep · Select a floor tile within four steps. Esc cancels.':'Shadowstep cancelled.');
+  refreshStyleAbilityBar();
+}
+async function castStyleAbility(id,body){
+  const dialog=$('styleAbilityDialog');
+  try{
+    const {state}=await serverGameplay('abilityCast',{id,...body});
+    if(dialog.open)dialog.close();
+    if(id==='waypoint')enterRoom(state.location,state.position);
+    else{
+      player.seat=null;
+      player.x=player.cx=state.position.x;player.y=player.cy=state.position.y;
+    }
+    note(window.styleAbilities[id].name+' · 1 AP');
+  }catch(error){
+    if(dialog.open)$('styleAbilityStatus').textContent=error.message;
+    else note(error.message);
+  }
+  refreshStyleAbilityBar();
+}
 async function serverGameplay(name,body={}){
   if(serverActionBusy)throw new Error('Wait for the current action.');
   serverActionBusy=true;
@@ -8026,6 +8109,10 @@ canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
+  if(shadowstepTargeting){
+    if(tile){shadowstepTargeting=false;castStyleAbility('shadowstep',{tile:{x:tile.x,y:tile.y}});}
+    return;
+  }
   if(!editing&&item?.type==='remotePlayer'){window.towerRobbery?.open(item.peer.id);return;}
   if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(shoalHit)(currentRoom===moonfinPool.room?useMoonfinPool:usePondShoal)();else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
@@ -8039,6 +8126,9 @@ function waveHello(){
   player.waveStarted=performance.now();multiplayer?.wave();
   note(avatar.name+' waves hello!');
 }
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&shadowstepTargeting){shadowstepTargeting=false;refreshStyleAbilityBar();}
+});
 canvas.addEventListener('keydown',e=>{
   if(e.code==='Space'&&woodSession){e.preventDefault();return;}
   if(e.code==='Space'&&fishingSession){
@@ -8268,6 +8358,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   }
   if(currentRoom!==next)willowbankFlock(0,null);
   if(next!==currentRoom&&$('venueLicenceDialog')?.open)$('venueLicenceDialog').close();
+  shadowstepTargeting=false;
   currentRoom=next;refreshShopLicence();selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;
@@ -8579,6 +8670,10 @@ if(window.playerCloud?.initial?.fishingCast&&(isFishingRoom(currentRoom)||curren
 if(window.playerCloud?.readShopLicences){
   refreshShopLicence();
   setInterval(()=>{if(!document.hidden)refreshShopLicence();},60000);
+}
+if(window.playerCloud&&window.styleAbilities){
+  refreshStyleAbilityBar();
+  setInterval(()=>{if(!document.hidden)refreshStyleAbilityBar();},500);
 }
 requestAnimationFrame(animation);
 

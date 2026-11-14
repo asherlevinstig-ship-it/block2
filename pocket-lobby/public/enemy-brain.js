@@ -85,6 +85,8 @@ function coverBetween(a,b){const dx=b.x-a.x,dy=b.y-a.y,d=dx*dx+dy*dy;return dung
 export function brainThinkEvent(state,enemy,move,now){
  const e=state.hunting.encounter,p=arenaPlayer(e),from=arenaEnemy(e),next={...e};
  const warning=e.nextBoarAt-move.tell;
+ const quietUntil=state.styleAbilities?.quietUntil??0;
+ if(now<quietUntil){next.brainNextThinkAt=quietUntil;return {action:'enemyThink',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};}
  if(now<(e.staggerUntil??0)||now<(e.brainRecoveryUntil??0)||now>=warning){next.brainNextThinkAt=now<Math.max(e.staggerUntil??0,e.brainRecoveryUntil??0)?Math.max(e.staggerUntil??0,e.brainRecoveryUntil??0):e.nextBoarAt+1;return {action:'enemyThink',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};}
  const caster=enemy.archetype==='caster',distance=Math.hypot(p.x-from.x,p.y-from.y);
  const valid=q=>!(e.adds??[]).some(a=>a.x===q.x&&a.y===q.y)&&q.x>=1&&q.x<=10&&q.y>=1&&q.y<=8&&dungeonFloor(state.location,q.x,q.y)&&!(q.x===p.x&&q.y===p.y)&&!(e.arenaSolids??[]).some(s=>s.x===q.x&&s.y===q.y)&&!(state.location==='depthsGate'&&q.x===8);

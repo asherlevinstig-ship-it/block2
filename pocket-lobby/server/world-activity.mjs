@@ -16,7 +16,7 @@ export async function publishWorldActivity(env,playerId,before,after,revision,{f
  // shared-tree changes require a separate activity delivery in that path.
  if(autoRelay&&!treesChanged&&!events.length)return;
  const fishingChanged=JSON.stringify(sharedFishingPose(before))!==JSON.stringify(sharedFishingPose(after))||JSON.stringify(miningPose(before))!==JSON.stringify(miningPose(after));
- if(before.adventure?.willowbankShortcut===after.adventure?.willowbankShortcut&&pondCatchAt===null&&!treesChanged&&!events.length&&!fishingChanged&&JSON.stringify(choppingPose(before))===JSON.stringify(choppingPose(after))&&outfitVeilUntil(before)===outfitVeilUntil(after)&&before.location===after.location&&before.health===after.health&&sharedActivity(before)===sharedActivity(after)&&(before.plan?.source==='rules')===auto&&(!auto||before.position?.x===after.position?.x&&before.position?.y===after.position?.y))return;
+ if(before.styleAbilities?.lastBlinkAt===after.styleAbilities?.lastBlinkAt&&before.adventure?.willowbankShortcut===after.adventure?.willowbankShortcut&&pondCatchAt===null&&!treesChanged&&!events.length&&!fishingChanged&&JSON.stringify(choppingPose(before))===JSON.stringify(choppingPose(after))&&outfitVeilUntil(before)===outfitVeilUntil(after)&&before.location===after.location&&before.health===after.health&&sharedActivity(before)===sharedActivity(after)&&(before.plan?.source==='rules')===auto&&(!auto||before.position?.x===after.position?.x&&before.position?.y===after.position?.y))return;
  const rooms=new Set([before.location,after.location].filter(room=>Object.hasOwn(socialRooms,room)));
  await Promise.all([...rooms].map(async room=>{
   try{

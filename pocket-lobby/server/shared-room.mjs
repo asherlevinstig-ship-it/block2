@@ -251,6 +251,11 @@ export class SharedRoom{
     recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});
     if(leaving){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
     meta.health=Math.max(0,Math.min(playerMaxHealth(state),state.health??100));meta.activity=sharedActivity(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
+    const blinkAt=state.styleAbilities?.lastBlinkAt??0;
+    if(blinkAt>(meta.lastBlinkAt??0)&&Date.now()-blinkAt<5000&&state.position){
+      meta.lastBlinkAt=blinkAt;meta.x=state.position.x;meta.y=state.position.y;
+      meta.lastMoveAt=Date.now();meta.seat=null;meta.meditationRequested=false;
+    }
     // Connected avatars report bounded visual movement; activity rewards use the saved server position.
     if(meta.auto)meta.seat=null;
     ws.serializeAttachment(meta);this.snapshot();
