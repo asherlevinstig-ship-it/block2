@@ -90,8 +90,30 @@ function drawTool(ctx,kind,angle,x,y){
     p(-1,-25,2,33,'#3b3441');p(0,-23,1,30,'#b38a5a');p(-2,-27,4,8,'#a7c7ce');p(0,-28,1,9,'#e4ecda');p(-3,-19,6,2,kind==='breakerSpear'?'#c7a7f5':'#cbad70');if(kind==='breakerSpear')p(-4,-25,8,2,'#d8b8ff');
   }else if(['quickDagger','quickfang'].includes(kind)){
     p(-2,-11,4,9,'#354252');p(-1,-11,2,9,'#dae6dc');p(-3,-3,6,2,kind==='quickfang'?'#c4a6ff':'#8abbbb');p(-1,-1,2,5,'#83616a');
+  }else if(kind==='vampiricSword'){
+    // A forked silver blade, crimson blood channel and a bat-wing guard.
+    p(-3,-22,6,19,'#34243f');p(-2,-21,4,17,'#c7b9d8');
+    p(-2,-23,2,4,'#e8dbef');p(1,-23,2,4,'#e8dbef');p(-1,-19,2,13,'#9d3965');p(0,-18,1,10,'#ef83a6');
+    p(-6,-5,12,2,'#37223e');p(-6,-7,2,3,'#9d70b8');p(4,-7,2,3,'#9d70b8');p(-4,-4,8,2,'#79548f');
+    p(-1,-5,2,3,'#f3a4bf');p(-1,-2,2,6,'#51313e');p(-2,4,4,2,'#d8b17b');p(-1,3,2,2,'#b94572');
+  }else if(kind==='wardenSword'){
+    // Broad pale-green steel and unmistakable gold, wing-shaped quillons.
+    p(-3,-19,6,15,'#354c51');p(-2,-18,4,14,'#b8d6c5');p(-1,-21,2,4,'#eff3d9');p(-2,-17,1,12,'#f0f1d6');
+    p(-6,-5,12,2,'#8d603b');p(-5,-6,3,2,'#f4d484');p(2,-6,3,2,'#f4d484');p(-4,-4,8,2,'#dba94e');p(-1,-5,2,3,'#e5f2c7');
+    p(-1,-2,2,6,'#405d59');p(-2,4,4,2,'#efca74');p(-1,3,2,1,'#fff0b2');
+  }else if(kind==='ironSword'){
+    // A heavy, squared shoulder separates this workhorse from starter steel.
+    p(-3,-18,6,14,'#253847');p(-2,-18,4,14,'#92aebc');p(-1,-20,2,3,'#e4ece7');p(-2,-17,1,12,'#edf2e8');p(1,-16,1,11,'#526b7d');
+    p(-5,-4,10,3,'#394d5d');p(-4,-4,8,1,'#bbd1d7');p(-1,-1,2,6,'#684838');p(-1,0,2,1,'#b68e6a');p(-2,5,4,2,'#9eb7c4');
+  }else if(kind==='duelistBlade'){
+    // Long, slender violet steel with a swept asymmetric guard.
+    p(-1,-25,3,22,'#514064');p(0,-27,1,24,'#e9dfff');p(1,-23,1,18,'#af94d5');
+    p(-4,-4,9,2,'#bd9ee9');p(-5,-3,2,5,'#755b9d');p(-4,1,4,1,'#cbb1ef');p(4,-5,2,2,'#e4cef9');
+    p(0,-2,2,6,'#4a355d');p(0,0,2,1,'#d7bce9');p(-1,4,4,2,'#bca4dc');
   }else{
-    p(-2,-17,4,14,'#344155');p(-1,-17,2,13,kind==='duelistBlade'?'#ddd0ff':kind==='wardenSword'?'#c9e0c8':'#b3cad3');p(-1,-17,1,11,'#f0f1dc');p(-3,-4,6,2,kind==='wardenSword'?'#f3d284':'#cbaa75');p(-1,-2,2,5,'#8e6652');p(-2,2,4,2,'#cbaa75');
+    // The issued sword remains short, plain and visibly less ornate.
+    p(-2,-15,4,12,'#344155');p(-1,-15,2,11,'#b3cad3');p(-1,-17,1,3,'#e3eadd');p(-1,-14,1,10,'#f0f1dc');
+    p(-3,-4,6,2,'#ac8856');p(-1,-2,2,5,'#8e6652');p(-2,3,4,2,'#ac8856');
   }
   ctx.restore();
 }
@@ -103,15 +125,31 @@ export function carriedTowerEquipment(metadata,x,y,options={}){
   if(['huntingSpear','breakerSpear'].includes(options.weaponTier)){anchor.y+=15;anchor.x+=side*4;anchor.angle=side*.12;}
   return anchor;
 }
+const carriedWeaponStyles={
+    trainingSword:{length:12,width:3,case:'#745a46',edge:'#a1845a',metal:'#b79861',grip:'#a77d55',guard:7},
+    ironSword:{length:15,width:4,case:'#344b5e',edge:'#8eacba',metal:'#c4d5dc',grip:'#73503e',guard:10},
+    wardenSword:{length:16,width:4,case:'#345b50',edge:'#88b59b',metal:'#f0ce7f',grip:'#486c60',guard:12},
+    duelistBlade:{length:20,width:2,case:'#4a355f',edge:'#b69ad7',metal:'#d5b7ee',grip:'#775185',guard:9},
+    vampiricSword:{length:18,width:4,case:'#44263d',edge:'#a34870',metal:'#b78acb',grip:'#713451',guard:12},
+    quickDagger:{length:8,width:3,case:'#355858',edge:'#81aeac',metal:'#a7ccbf',grip:'#775343',guard:6},
+    quickfang:{length:10,width:3,case:'#403051',edge:'#b091d4',metal:'#d1b5ee',grip:'#624174',guard:7}
+  };
 function drawCarriedEquipment(ctx,kind,anchor){
   if(['huntingSpear','breakerSpear'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
-  const length=['quickDagger','quickfang'].includes(kind)?8:14;
+  const dagger=['quickDagger','quickfang'].includes(kind);
+
+  const t=carriedWeaponStyles[kind]??carriedWeaponStyles.trainingSword;
   ctx.save();ctx.translate(anchor.x,anchor.y);ctx.rotate(anchor.angle);
-  // Grip at the shoulder, enclosed blade pointing down along the back.
-  p(-1,-4,3,6,'#302d3b');p(0,-3,1,4,'#a77d55');p(-1,-5,3,1,'#d4b779');
-  p(-3,1,7,2,'#453c3e');p(-2,1,5,1,kind==='wardenSword'?'#f0ce7f':'#c6a66e');
-  p(-1,3,3,length,'#292b38');p(0,3,2,length-1,'#745a46');p(0,4,1,length-3,'#a1845a');p(-1,length+2,3,2,'#b79861');
+  // Each scabbard shares its drawn weapon's proportions and signature fittings.
+  p(-1,-4,3,6,'#302d3b');p(0,-3,1,4,t.grip);p(-1,-5,3,1,t.metal);
+  p(-Math.floor(t.guard/2),1,t.guard,2,'#292734');p(-Math.floor(t.guard/2)+1,1,t.guard-2,1,t.metal);
+  const left=-Math.floor(t.width/2);
+  p(left-1,3,t.width+2,t.length,'#222536');p(left,3,t.width,t.length-1,t.case);p(left,4,1,t.length-3,t.edge);p(left-1,t.length+2,t.width+2,2,t.metal);
+  if(kind==='vampiricSword'){p(-6,-1,2,3,t.metal);p(4,-1,2,3,t.metal);p(0,2,2,2,'#f08bad');p(0,8,1,6,'#b94c79');}
+  if(kind==='wardenSword'){p(-5,0,3,2,t.metal);p(3,0,3,2,t.metal);p(0,2,2,2,'#d1f1c4');p(left,10,t.width,2,t.metal);}
+  if(kind==='duelistBlade'){p(-5,3,2,4,t.metal);p(-4,6,4,1,t.metal);}
+  if(dagger&&kind==='quickfang')p(0,5,1,3,'#e4d2ff');
   ctx.restore();
 }
 // Tailoring uses the authored material masks, so details stay attached to every action frame.

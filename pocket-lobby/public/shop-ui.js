@@ -1,4 +1,11 @@
 export function shopItemArt(id){
+ const swords={
+ trainingSword:'<path d="m30 10 4-4 2 5v27h-6z" fill="#b3cad3"/><path d="M24 36h18v4H24zM31 40h4v12h-4zM28 52h10v4H28z" fill="#ac8856"/>',
+ ironSword:'<path d="m29 8 4-5 4 5 2 29H27z" fill="#92aebc"/><path d="M29 11h3v25h-3z" fill="#edf2e8"/><path d="M21 36h24v5H21z" fill="#394d5d"/><path d="M30 41h6v13h-6z" fill="#684838"/><path d="M27 54h12v4H27z" fill="#9eb7c4"/>',
+ wardenSword:'<path d="m28 9 5-6 5 6v27H28z" fill="#b8d6c5"/><path d="M29 11h3v23h-3z" fill="#f0f1d6"/><path d="m17 31 11 5h10l11-5-4 10H21z" fill="#f4d484"/><path d="M30 40h6v14h-6z" fill="#405d59"/><path d="M27 53h12v5H27z" fill="#efca74"/><path d="m33 34 4 4-4 4-4-4z" fill="#e5f2c7"/>',
+ duelistBlade:'<path d="m32 2 3 5-1 33h-3z" fill="#e9dfff"/><path d="m22 35 22-4-2 5-18 3v9h8v3H20V38z" fill="#bd9ee9"/><path d="M31 38h5v16h-5z" fill="#4a355d"/><path d="M28 54h11v4H28z" fill="#bca4dc"/>'
+ };
+ if(swords[id])return '<svg viewBox="0 0 64 64" shape-rendering="crispEdges" aria-hidden="true">'+swords[id]+'</svg>';
  if(id==='prospectorsGloves')return '<svg viewBox="0 0 64 64" shape-rendering="crispEdges" aria-hidden="true"><path d="M9 16h17v22l6 7-5 11H7V36zM38 16h17v20l4 9-5 11H34l-3-11 7-7z" fill="#785c43" stroke="#242b3c" stroke-width="2"/><path d="M10 17h15v8H10zM39 17h15v8H39z" fill="#d2ac70"/><path d="m16 30 6 7-6 8-6-8zm29 0 6 7-6 8-6-8z" fill="#8be3d7"/></svg>';
  if(id==='vampiricSword')return '<svg viewBox="0 0 64 64" shape-rendering="crispEdges" aria-hidden="true"><path d="m32 3 6 9-2 25h-8l-2-25z" fill="#d3c6dc"/><path d="M31 8h3v28h-3z" fill="#a84e7c"/><path d="m18 34 14 4 14-4-4 10-10-3-10 3z" fill="#79548f"/><path d="M29 42h6v12h-6zM26 54h12v5H26z" fill="#dbb476"/><path d="m32 24 4 6-4 5-4-5z" fill="#e272a3"/></svg>';
 
