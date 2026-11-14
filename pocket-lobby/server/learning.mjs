@@ -23,14 +23,21 @@ function explainMaths(prompt,answer){
 export function publicLearning(learning){
  if(!learning)return undefined;
  const {attempt,...progress}=learning;
- return {...progress,...(attempt?{attempt:{id:attempt.id,prompt:attempt.prompt,choices:attempt.choices}}:{})};
+ return {...progress,...(attempt?{attempt:{id:attempt.id,prompt:attempt.prompt,choices:attempt.choices,source:attempt.source,topic:attempt.topic,course:attempt.course}}:{})};
 }
 
-export function learningAction(state,action,body={},now=Date.now(),random=Math.random){
+export function learningAction(state,action,body={},now=Date.now(),random=Math.random,curriculum=null){
  const learning=state.learning??={answered:0,correct:0};
  if(action==='next'){
   ensureSession(learning,now,{next:!learning.attempt});
   if(learning.attempt)return;
+  if(curriculum){
+   const {id:questionId,...question}=curriculum;
+   learning.attempt={...question,id:crypto.randomUUID(),questionId};
+   const seen=learning.session.questionIds??=[];
+   if(!seen.includes(questionId))learning.session.questionIds=[...seen,questionId].slice(-HOMEWORK_QUESTIONS);
+   return;
+  }
   const n=max=>Math.floor(random()*max),a=2+n(19),b=2+n(11),kind=n(4);
   const [prompt,answer]=kind===0?[`${a} + ${b} = ?`,a+b]:kind===1?[`${a+b} − ${b} = ?`,a]:kind===2?[`${a} × ${b} = ?`,a*b]:[`${a*b} ÷ ${b} = ?`,a];
   const choices=[answer,answer+1,answer+3,Math.max(0,answer-2)];
@@ -50,7 +57,7 @@ export function learningAction(state,action,body={},now=Date.now(),random=Math.r
  state.actionPoints={...state.actionPoints,value,at:now};
  if(before===0&&state.hunting?.encounter)state.hunting.encounter.nextPlayerAt=Math.max(now,state.hunting.encounter.nextPlayerAt);
  learning.answered++;if(correct)learning.correct++;
- learning.last={id:attempt.id,correct,choice:body.choice,correctChoice:attempt.answer,prompt:attempt.prompt,choices:attempt.choices,explanation:explainMaths(attempt.prompt,attempt.choices[attempt.answer]),awarded:value-before,balance:value};
+ learning.last={id:attempt.id,correct,choice:body.choice,correctChoice:attempt.answer,prompt:attempt.prompt,choices:attempt.choices,explanation:attempt.questionId?(attempt.explanation||'The correct answer is '+attempt.choices[attempt.answer]+'.'):explainMaths(attempt.prompt,attempt.choices[attempt.answer]),awarded:value-before,balance:value};
  delete learning.attempt;
  // Earning points does not reconnect a depleted player or restart saved Auto.
 }

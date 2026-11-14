@@ -19,3 +19,9 @@ The first link preserves the guest character or existing password account. Subse
 - Fetch current production files, back up the dashboard before editing, and record changes in LiveWeave's `AGENT_EDIT_LOG.md`. Do not deploy an old dashboard copy from this repository.
 
 Codes, flow cookies, shared keys, passwords and session tokens must never be written to logs or committed. The bridge contains no public testing bypass.
+
+## Nights curriculum questions
+
+Install `tower-questions.php` in the same LiveWeave document root as `tower-auth.php`. It reuses the existing bridge secret and the Nights server code under `survive/api/v1`. It reads the student's current school and year, class curriculum, and teacher-enabled topics. It also checks question eligibility again before Tower awards AP.
+
+The question bridge only reads LiveWeave. Tower saves its own attempts and rewards in D1, and sends the question's answer and explanation to the player after submission. Unlinked accounts and teacher accounts use Tower's maths practice.

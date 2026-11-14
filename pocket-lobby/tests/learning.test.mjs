@@ -5,6 +5,7 @@ import {normalizeState} from '../server/player-state.mjs';
 import {protectFishingState} from '../server/gameplay.mjs';
 import {stopForActionPoints} from '../server/action-points.mjs';
 import {availableActionPoints} from '../public/action-points.js';
+import {handleAccountApi} from '../server/accounts.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
 import {boot} from './helpers/game-client.mjs';
@@ -103,4 +104,64 @@ test('the world character meditates while the question screen is open and stands
  g.context.towerCharacterArt.draw=(ctx,x,y,appearance,options)=>{if(appearance.name==='Guest')poses.push(options);return draw(ctx,x,y,appearance,options);};
  g.context.towerLearning={active:true};g.run('draw(2000)');assert(poses.at(-1).meditating);
  g.context.towerLearning.active=false;g.run('draw(2100)');assert(!poses.at(-1).meditating);
+});
+
+test('linked students receive eligible Nights questions and Tower awards AP once',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ let packet,cookie='',eligible=true,available=true;
+ const requests=[];
+ const env={TOWER_DB:db,SERVER_CHARACTER_STARTS:true,LIVEWEAVE_AUTH_URL:'https://liveweave.test/tower-auth.php',
+  LIVEWEAVE_AUTH_SECRET:'a'.repeat(64),LIVEWEAVE_FETCH:async(url,init)=>{
+   assert.equal(url.pathname,'/tower-questions.php');
+   assert.equal(init.headers.Authorization,'Bearer '+'a'.repeat(64));
+   const request=JSON.parse(init.body);requests.push(request);
+   assert.equal(request.studentId,21);assert.equal(request.schoolId,7);
+   if(request.questionId)return Response.json({eligible:request.questionId===71?eligible:true});
+   const id=request.seen.includes(71)?72:71;
+   return Response.json({question:available?{id,prompt:'What does this loop output?',source:'FOR i ← 1 TO 3',choices:['0','1','2','3'],answer:3,explanation:'It runs three times.',course:'Computer Science',topic:'Programming'}:null});
+  }};
+ async function call(path,body){
+  const account=path.startsWith('account/');
+  const response=await (account?handleAccountApi:handlePlayerApi)(new Request('https://tower.test/api/'+path,{
+   method:body?'POST':'GET',headers:{Origin:'https://tower.test','Content-Type':'application/json',Cookie:cookie},
+   body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined
+  }),env);
+  for(const header of response.headers.getSetCookie()){
+   const pair=header.split(';')[0];
+   if(!pair.endsWith('='))cookie=pair;
+  }
+  const data=await response.json();
+  if(response.ok&&data.characterKey)packet=data;
+  return {status:response.status,data};
+ }
+ const act=(path,body={})=>call('player/learning/'+path,{revision:packet.revision,operation:crypto.randomUUID(),...body});
+ await call('player/session',{});
+ await act('next');
+ const maths=packet.state.learning.attempt;
+ assert.equal((await call('account/register',{username:'LinkedLearner',password:'a sufficiently long passphrase'})).status,200);
+ const account=sql.prepare('SELECT account_id FROM tower_accounts').get();
+ sql.prepare('INSERT INTO tower_external_accounts VALUES (?,?,?,?,?)').run('liveweave','student:21',7,account.account_id,1);
+ await call('player/state');
+ assert.equal((await act('answer',{attemptId:maths.id,choice:0})).status,422);
+ assert.equal((await act('next',{studentId:999,schoolId:999})).status,200);
+ const first=packet.state.learning.attempt;
+ assert.equal(first.topic,'Programming');
+ assert.equal(first.source,'FOR i ← 1 TO 3');
+ assert(!('answer' in first));assert(!('explanation' in first));
+ eligible=false;
+ assert.equal((await act('answer',{attemptId:first.id,choice:0})).data.code,'curriculum-changed');
+ assert.equal((await act('next')).status,200);
+ assert.deepEqual(requests.at(-1).seen,[71]);
+ const second=packet.state.learning.attempt;
+ assert.notEqual(second.id,first.id);
+ const answer={attemptId:second.id,choice:0};
+ assert.equal((await act('answer',answer)).status,200);
+ assert.equal(packet.state.learning.last.correct,false);
+ assert.equal(packet.state.learning.last.explanation,'It runs three times.');
+ assert.equal(packet.state.actionPoints.value,1);
+ assert.equal((await act('answer',answer)).status,200);
+ assert.equal(packet.state.actionPoints.value,1);
+ available=false;
+ assert.equal((await act('next')).status,422);
+ assert.equal(packet.state.actionPoints.value,1);
 });

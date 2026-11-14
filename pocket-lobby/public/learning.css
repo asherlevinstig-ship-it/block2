@@ -10,3 +10,5 @@
 
 .homework-actions button{margin:0!important}
 .hud-bottom #hotbarQuestions{min-width:65px;color:#eedcff;background:linear-gradient(145deg,#55407488,#27334b);border-color:#a58ac580}.hud-bottom #hotbarQuestions .hud-icon{stroke:#dfc7ff;fill:#a585ce33}.hud-bottom #hotbarQuestions:hover,.hud-bottom #hotbarQuestions[aria-expanded=true]{border-color:#e8c784;background:#65513e}.hud-bottom #hotbarQuestions:focus-visible{outline:2px solid #f2d28c;outline-offset:2px}@media(max-width:520px){.hud-bottom #hotbarQuestions{min-width:46px}.hud-bottom #hotbarQuestions .dock-label{font-size:8px}}
+
+.learning-source{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 16px}

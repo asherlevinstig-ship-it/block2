@@ -11,6 +11,7 @@ import {cellarFlags} from '../public/mill-cellar.js';
 import {normalizeActionPoints,availableActionPoints} from '../public/action-points.js';
 import {autoHasNoPoints,requireActionPoint,spendActionPoint,stopForActionPoints} from './action-points.mjs';
 import {learningAction} from './learning.mjs';
+import {liveWeaveStudent,curriculumRequest} from './liveweave-questions.mjs';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
 import {readVaultParty,writeVaultParty} from './vault-coop.mjs';
@@ -405,9 +406,27 @@ export async function handlePlayerApi(request,env){
         else delete state.actionPoints.unlimited;
         break;
       case "/api/player/learning/next":
-      case "/api/player/learning/answer":
-        learningAction(state,path.split('/').at(-1),body);
+      case "/api/player/learning/answer":{
+        const action=path.split('/').at(-1),attempt=state.learning?.attempt;
+        const student=await liveWeaveStudent(env,identity?.account);
+        let curriculum=null;
+        if(student&&action==='next'){
+          const eligible=attempt?.questionId&&(await curriculumRequest(env,student,{questionId:attempt.questionId})).eligible;
+          if(!eligible){
+            const session=state.learning?.session;
+            const seen=session?.completedAt?[]:session?.questionIds??[];
+            ({question:curriculum}=await curriculumRequest(env,student,{seen}));
+            if(!curriculum)return json({error:'No LiveWeave questions are available for your class and enabled topics right now.'},422);
+            if(attempt)delete state.learning.attempt;
+          }
+        }
+        if(student&&action==='answer'&&attempt?.id===body.attemptId){
+          if(!attempt.questionId||!(await curriculumRequest(env,student,{questionId:attempt.questionId})).eligible)
+            return json({error:'This question is no longer available. Choose Next question to continue.',code:'curriculum-changed'},422);
+        }
+        learningAction(state,action,body,Date.now(),Math.random,curriculum);
         break;
+      }
       case "/api/player/rankings/participation":
         if(!identity.account)return json({error:"Create an account to join the rankings."},400);
         if(typeof body.joined!=="boolean")return json({error:"Choose whether to join the rankings."},400);
@@ -542,6 +561,7 @@ export async function handlePlayerApi(request,env){
   }catch(error){
     if(error.status===402)return json({error:error.message,code:'action-points'},402);
     if(error.status===409&&path==='/api/player/robbery')return json({error:error.message,...packet(await read(env.TOWER_DB,(await resolveIdentity(request,env))?.playerId))},409);
+    if(path.startsWith('/api/player/learning/')&&error.status===503)return json({error:error.message},503);
     if(error.status===400||error.status===409)return json({error:error.message},error.status);
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
     if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Rune Channeler|Defeat the Ironhide Guardian|Defeat the Thornblade Duelist|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
