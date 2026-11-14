@@ -35,7 +35,7 @@ export function prepareRobbery(actor,target,operation,now,random=()=>crypto.getR
  b.lastReceived={...receipt,name:actor.avatar?.name??'Player'};
  return receipt;
 }
-const breakInCost=20;
+const breakInCost=10;
 const breakInProtection=1800000;
 function breakInQuote(actor,target){
  if(actor.location!=='hub')throw invalid('Use Lockbreaker in the Grand Lobby.');
@@ -49,7 +49,7 @@ function prepareBreakIn(actor,target,operation,now,random){
  if(quote.cooldownUntil>now)throw invalid('Lockbreaker is still recharging.');
  if(quote.protectedUntil>now)throw invalid('This homeowner is temporarily protected.');
  const points=normalizeActionPoints(actor.actionPoints);
- if(!points.unlimited&&points.value<breakInCost)throw invalid('A break-in costs 20 AP.',402);
+ if(!points.unlimited&&points.value<breakInCost)throw invalid('A break-in costs 10 AP.',402);
  const success=random()*100<quote.chance,xp=success?15:5;
  const receipt={id:operation,at:now,success,gold:0,xp,ap:breakInCost,room:'hub',breakIn:true};
  if(!points.unlimited)actor.actionPoints={...points,value:points.value-breakInCost,spent:Math.min(Number.MAX_SAFE_INTEGER,(points.spent??0)+breakInCost),at:now};

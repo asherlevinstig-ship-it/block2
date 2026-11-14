@@ -17,13 +17,13 @@ export function initializeRobbery({doc=document,cloud,hooks}){
  function renderTechniques(){
   const select=$('robberyTechnique'),old=select.value;select.replaceChildren();
   select.hidden=breakingIn;
-  $('robberyCost').textContent=breakingIn?'20 AP':'10 AP';
+  $('robberyCost').textContent='10 AP';
   $('robberyTerms').hidden=breakingIn;
   $('robberyEquipment').hidden=breakingIn;
   doc.querySelector('label[for="robberyTechnique"]').hidden=breakingIn;
   if(breakingIn){
-   $('robberyPowerInfo').textContent='20 AP · 5-minute cooldown · The homeowner receives a notice.';
-   $('robberySteal').textContent='Attempt break-in · 20 AP';return;
+   $('robberyPowerInfo').textContent='10 AP · 5-minute cooldown · The homeowner receives a notice.';
+   $('robberySteal').textContent='Attempt break-in · 10 AP';return;
   }
   for(const power of ['',...(cloud.initial.styleAbilities?.learned??[]).filter(id=>theftPowers.includes(id))]){
    const option=doc.createElement('option');option.value=power;option.textContent=power?styleAbilities[power].name:'Standard pickpocket';select.append(option);
@@ -145,7 +145,16 @@ export function initializeRobbery({doc=document,cloud,hooks}){
   }
   const trail=state.styleAbilities?.pursuit;
   $('pvpFollow').hidden=!(trail?.until>Date.now());
-  $('pvpFollow').onclick=()=>{if(trail.until<=Date.now()){renderPvp();$('pvpStatus').textContent='The trail has faded.';return;}dialog.close();hooks.pursue?.(trail.room,trail.name);};
+  $('pvpFollow').onclick=async()=>{
+   if(busy)return;
+   busy=true;
+   try{
+    const result=await cloud.pvp({kind:'strike',power:'shadowPursuit',refresh:true});
+    const latest=result.receipt.trail;
+    dialog.close();hooks.pursue?.(latest.room,latest.name);
+   }catch(error){$('pvpStatus').textContent=error.message;}
+   finally{busy=false;renderPvp();}
+  };
  }
  async function changePvp(body){
   if(busy)return;

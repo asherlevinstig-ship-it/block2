@@ -41,7 +41,8 @@ export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomR
  if(power&&!['deathmark','siphon','shadowPursuit'].includes(power))throw invalid('Choose a PvP power.');
  actor.styleAbilities=normalizeStyleAbilities(actor.styleAbilities);
  if(power&&!actor.styleAbilities.learned.includes(power))throw invalid('Accept this ability before using it.');
- if(power&&(actor.styleAbilities.readyAt[power]??0)>now)throw invalid('This ability is still recharging.');
+ if(power&&!(power==='shadowPursuit'&&body.refresh===true)&&(actor.styleAbilities.readyAt[power]??0)>now)throw invalid('This ability is still recharging.');
+ const refreshing=power==='shadowPursuit'&&body.refresh===true;
  const striking=power!=='shadowPursuit';
  if(power!=='shadowPursuit'&&(typeof body.target!=='string'||!/^[a-f0-9]{24}$/.test(body.target)))throw invalid('Choose a nearby player.');
  ready(actor);
@@ -49,13 +50,18 @@ export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomR
  if(striking&&!weapon)throw invalid('Equip a weapon before attacking.');
  const stats=huntingAttributes(actor.stats,actor.combatGear.equippedWeapon,actor.combatGear.activeSwordUpgrade,false,actor.combatGear.weaponEnchantments);
  if(striking&&now<(actor.pvp?.nextStrikeAt??0))throw invalid('Your weapon is recovering.');
- requireActionPoint(actor);
+ if(!refreshing)requireActionPoint(actor);
 
  const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(publicRoomNamespace(actor.location)));
  let nearby;
  if(power==='shadowPursuit'){
+  if(refreshing){
+   if(!(actor.pvp?.pursuit?.until>now))throw invalid('The trail has faded.');
+   nearby={playerId:actor.pvp.pursuit.id};
+  }else{
   if(!actor.pvp?.lastOpponent||actor.pvp.lastOpponent.until<=now)throw invalid('Fight a player first. Their trail lasts two minutes.');
   nearby={playerId:actor.pvp.lastOpponent.id};
+  }
  }else{
   const proximity=await stub.fetch(new Request('https://room.internal/pvp-target',{method:'POST',body:JSON.stringify({playerId:row.player_id,target:body.target,room:actor.location})}));
   nearby=await proximity.json();
@@ -84,6 +90,7 @@ export async function pvpStrike(env,row,actor,body,now=Date.now(),random=randomR
   actor.pvp=remember(actor,targetRow.player_id);target.pvp=remember(target,row.player_id);
  }
  if(power==='shadowPursuit'){
+  if(refreshing)return {row,receipt:{trail:{room:target.location,name:target.avatar.name,until:actor.pvp.pursuit.until}}};
   abilities.pursuit={room:target.location,name:target.avatar.name,until:now+120000+(stage-1)*30000};
   actor.pvp={...actor.pvp,pursuit:{id:targetRow.player_id,from:actor.location,until:abilities.pursuit.until}};
  }else{

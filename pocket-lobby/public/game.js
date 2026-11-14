@@ -1560,6 +1560,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
   if(result.weakened)combatMessage+=(combatMessage?' ':'')+'Shadow prevented '+result.weakened+' damage.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
+  if(result.faultbreaker)combatMessage+=' Faultbreaker bypassed the armour.';
   if(result.bloodPriceBroken)combatMessage+=' Blood Price shattered'+(result.staggered?' and staggered nearby creatures.':'.');
   else if(result.bloodPriceBlocked)combatMessage+=' Blood Price absorbed '+result.bloodPriceBlocked+' damage.';
   if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
@@ -4033,6 +4034,10 @@ function draw(time){
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
     if(undead){const [ux,uy]=point(player.x+1.25,player.y+1.25);drawUndeadAlly(ctx,ux,uy,undead,time,reducedMotion.matches,{attackAge:combatNow()-(undead.lastStrikeAt??0),flipped:player.direction==='left'});}
+    if(hunting.encounter?.sanctuaryWard&&hunting.encounter.magicWardUntil>combatNow()){
+      ctx.save();ctx.strokeStyle='#91ffe1';ctx.lineWidth=1.4;
+      ctx.beginPath();ctx.ellipse(x,y,16,7,0,0,Math.PI*2);ctx.stroke();ctx.restore();
+    }
     if(hunting.encounter?.bloodShieldUntil>combatNow()&&hunting.encounter.bloodShield>0){
       ctx.save();ctx.strokeStyle='#ff748f';ctx.lineWidth=1.4;
       ctx.beginPath();ctx.ellipse(x,y-15,15,21,0,0,Math.PI*2);ctx.stroke();
@@ -6213,7 +6218,7 @@ window.towerApplyHearth=state=>{
   if(previousMeals!==JSON.stringify(meals))updateInventory();
 };
 function openHearth(){
-  if(!atHearth(player)){note('Stand beside the restored Waystation campfire to share a meal.');return;}
+  if(!atHearth(player)&&!(currentRoom===moonwood.trailCamp.room&&Math.abs(player.cx-moonwood.trailCamp.x)+Math.abs(player.cy-moonwood.trailCamp.y)===1)){note('Stand beside the Waystation or Moonwell trail campfire.');return;}
   const dialog=$('hearthDialog');$('hearthStatus').textContent='';
   if(!dialog.open)dialog.showModal();
   renderHearth();refreshHearth();
@@ -6226,7 +6231,7 @@ function renderHearth(){
   const text=value=>{const p=document.createElement('p');p.textContent=value;contents.append(p);};
   const button=(label,body)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.onclick=()=>refreshHearth(body);contents.append(el);};
   const recovery=20+((window.abilityMastery?.(window.playerCloud.initial,'shareHearth')?.stage??1)-1)*10;
-  text('Share one cooked meal and recover up to '+recovery+' HP each over 5 seconds.');
+  text((atHearth(player)?'Share one cooked meal and recover up to ':'Eat one cooked meal and recover up to ')+recovery+' HP over 5 seconds.');
   for(const invite of hearthBoard?.incoming??[]){
     text(invite.from+' invites you to share '+invite.meal+'.');
     button('Accept meal',{kind:'accept',id:invite.id});button('Decline',{kind:'decline',id:invite.id});
@@ -6362,8 +6367,8 @@ function refreshStyleAbilityBar(){
       else if(id==='shareHearth')openHearth();
       else if(id==='ambush')useAmbush();
       else if(id==='appraise')openAppraisalMarket();
-      else if(id==='faultbreaker'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.faultbreaker();else note('Faultbreaker is available during a co-op Vault fight.');}
-      else if(id==='sanctuary'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.sanctuary();else note('Sanctuary is available during a co-op Vault fight.');}
+      else if(id==='faultbreaker'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.faultbreaker();else castStyleAbility(id,{});}
+      else if(id==='sanctuary'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.sanctuary();else castStyleAbility(id,{});}
       else if(id==='bloodlust'||id==='packTactics')openStyleAbilities();
       else if(['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id))window.towerRobbery?.openPower(id);
       else castStyleAbility(id,{});
@@ -6440,6 +6445,10 @@ async function castStyleAbility(id,body){
     }
     if(id==='patientCast'){
       note('Patient Cast ready · Your next manual cast has an empowered bobber.');
+      refreshStyleAbilityBar();return;
+    }
+    if(id==='sanctuary'||id==='faultbreaker'){
+      note(id==='sanctuary'?'Sanctuary · Your ward is active for eight seconds.':'Faultbreaker · Armour cracked for your next strikes.');
       refreshStyleAbilityBar();return;
     }
     if(id==='bloodPrice'){

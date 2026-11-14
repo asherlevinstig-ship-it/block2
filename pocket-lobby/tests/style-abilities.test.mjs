@@ -195,3 +195,17 @@ test('Blood Price buys a persistent shield that staggers on depletion and cannot
  assert(state.hunting.encounter.staggerUntil>at);
  assert.equal(state.hunting.encounter.bloodShield,undefined);
 });
+
+test('solo Sanctuary retains unused protection after a creature hit',async()=>{
+ const {startCombatEncounter,advanceServerCombat}=await import('../server/activities.mjs');
+ const {huntEnemies}=await import('../public/hunting.js');
+ const state=make({location:'clearing',styleAbilities:{learned:['sanctuary']}});
+ startCombatEncounter(state,huntEnemies.boar,10000);
+ act(state,'abilityCast',{id:'sanctuary'},10100);
+ const at=state.hunting.encounter.nextBoarAt;
+ state.hunting.encounter.nextPlayerAt=at+1000;
+ const [hit]=advanceServerCombat(state,at,()=>.99);
+ assert(hit.warded>0&&hit.warded<30);
+ assert.equal(hit.taken,0);
+ assert.equal(normalizeState(state).hunting.encounter.magicWard,30-hit.warded);
+});

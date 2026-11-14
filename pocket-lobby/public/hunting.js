@@ -280,6 +280,15 @@ export function normalizeHunting(input={}){
       result.encounter.bloodShield=Math.min(40,input.encounter.bloodShield);
       result.encounter.bloodShieldUntil=time(input.encounter.bloodShieldUntil);
     }
+    if([10,15,20].includes(input.encounter.bloodlustPercent)){
+      result.encounter.bloodlustPercent=input.encounter.bloodlustPercent;
+      result.encounter.bloodlustUntil=time(input.encounter.bloodlustUntil);
+    }
+    if(input.encounter.sanctuaryWard===true)result.encounter.sanctuaryWard=true;
+    if(Number.isInteger(input.encounter.faultHits)&&input.encounter.faultHits>0){
+      result.encounter.faultHits=Math.min(5,input.encounter.faultHits);
+      result.encounter.faultUntil=time(input.encounter.faultUntil);
+    }
     if(input.encounter.stoneguardUntil!==undefined){
       result.encounter.stoneguardUntil=time(input.encounter.stoneguardUntil);
       if(![30,40,50].includes(input.encounter.stoneguardReduction))throw new Error('Invalid Stoneguard protection.');
@@ -362,11 +371,20 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
     if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2)result.encounter.nextPlayerAt=now+350;return result;}
     result.damage=Math.ceil((attributes.damage+Math.floor(random()*5))*openingMultiplier);
-    if(enemy.shellArmor){
+    const fractured=!encounter.addActor&&encounter.faultHits>0&&now<encounter.faultUntil&&enemy.shellArmor;
+    if(fractured){
+      result.damage=Math.ceil(result.damage*1.2);
+      result.encounter.faultHits--;
+      result.faultbreaker=true;
+    }else if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
       const plating=physicalPlating(encounter,result.damage,enemy.shellArmor,enemy.exposedBonus,now);
       if(plating)Object.assign(result,plating);
       else{result.damage=exposed?result.damage+(enemy.exposedBonus??0):Math.max(1,Math.floor((result.damage-enemy.shellArmor)*(enemy.archetype==='armoured'?.5:1)));result.shellGuarded=!exposed;}
+    }
+    if(encounter.bloodlustPercent&&now<encounter.bloodlustUntil){
+      result.damage=Math.ceil(result.damage*(1+encounter.bloodlustPercent/100));
+      result.bloodlust=true;
     }
     if(now<(encounter.counterUntil??0)){
       result.counter=true;result.counterBonus=Math.ceil(result.damage*((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)+build.counter));result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
@@ -425,8 +443,12 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(result.taken&&encounter.magicWardUntil>now){
       result.warded=Math.min(encounter.magicWard,result.taken);
       result.taken-=result.warded;
-      delete result.encounter.magicWard;
-      delete result.encounter.magicWardUntil;
+      if(encounter.sanctuaryWard&&encounter.magicWard>result.warded)result.encounter.magicWard-=result.warded;
+      else{
+        delete result.encounter.magicWard;
+        delete result.encounter.magicWardUntil;
+        delete result.encounter.sanctuaryWard;
+      }
     }
     if(encounter.brainVersion===2){result.encounter.brainMisses=result.spatialAvoided?(encounter.brainMisses??0)+1:0;result.encounter.brainBlockedCount=result.covered?(encounter.brainBlockedCount??0)+1:0;}
     const response=scheduleEnemyResponse(result.encounter,enemy,move,result.timedDodge,now);

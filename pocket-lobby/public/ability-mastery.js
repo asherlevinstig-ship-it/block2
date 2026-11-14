@@ -11,7 +11,7 @@ export const masteryBenefits={
  cutpurse:['20% larger haul · 25% wallet cap','30% larger haul · 25% wallet cap','40% larger haul · 25% wallet cap'],
  raiseFallen:['Base undead strength and lifetime','+1 strike damage · +5s lifetime, up to 60s','+2 strike damage · +10s lifetime, up to 60s'],
  deathmark:['25% marked strike bonus','35% marked strike bonus','45% marked strike bonus'],
- bloodlust:['10% PvP damage bonus','15% PvP damage bonus','20% PvP damage bonus'],
+ bloodlust:['10% weapon damage bonus','15% weapon damage bonus','20% weapon damage bonus'],
  shadowPursuit:['2-minute trail','150-second trail','3-minute trail'],
  siphon:['Heal 25% of damage dealt','Heal 35% of damage dealt','Heal 45% of damage dealt'],
  patientCast:['50% wider reel window','75% wider reel window','100% wider reel window'],
@@ -25,10 +25,10 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
- faultbreaker:'Crack the armoured Vault Guardian’s plating.',
+ faultbreaker:'Crack an armoured creature’s plating.',
  bloodPrice:'Let a creature break the shield.',
  bindBeast:'Have a bound beast land a strike in another fight.',
- sanctuary:'Place a Sanctuary during a co-op Vault fight.',
+ sanctuary:'Cast Sanctuary in creature combat.',
  packTactics:'Trigger Pack Tactics with a perfect dodge and an equipped familiar.',
  lockbreaker:'Successfully enter another player’s room.',
  lightFingers:'Complete a successful Light Fingers steal. One use per attempt.',

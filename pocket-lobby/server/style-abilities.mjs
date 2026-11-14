@@ -1,7 +1,8 @@
+import {arenaPlayer,arenaEnemy} from '../public/dungeon-arena.js';
 import {moonbackSite} from '../public/moonback.js';
 import {huntEnemy} from '../public/hunting.js';
 import {activeRaised,raisedProfile,raisableBeasts} from '../public/necromancy.js';
-import {bloodPriceRules,styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
+import {sanctuaryRules,bloodPriceRules,styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
@@ -106,8 +107,29 @@ export function styleAbilityAction(state,action,body,now){
   spendActionPoint(state,now);
   return true;
  }
- if(id==='faultbreaker')throw invalid('Use Faultbreaker from the hotbar against the armoured co-op Vault Guardian.');
- if(id==='sanctuary')throw invalid('Use Sanctuary from the hotbar during a co-op Vault fight.');
+ if(id==='faultbreaker'||id==='sanctuary'){
+  if(!encounter)throw invalid('Use this ability during a creature fight.');
+  const stage=abilityMastery(state,id).stage;
+  if(id==='faultbreaker'){
+   const enemy=huntEnemy(encounter);
+   if(!enemy.shellArmor)throw invalid('Faultbreaker needs an armoured creature.');
+   if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>2)throw invalid('Move within two tiles of the armoured creature.');
+  }
+  requireActionPoint(state);
+  if(id==='faultbreaker'){
+   encounter.faultHits=2+stage;encounter.faultUntil=now+8000;
+   awardAbilityUse(state,id);
+  }else{
+   if(encounter.magicWardUntil>now&&encounter.magicWard>0)throw invalid('Wait for your current ward to fade.');
+   encounter.magicWard=sanctuaryRules.capacity+(stage-1)*10;
+   encounter.magicWardUntil=now+sanctuaryRules.duration;
+   encounter.sanctuaryWard=true;
+   awardAbilityUse(state,id);
+  }
+  state.styleAbilities=normalizeStyleAbilities(state.styleAbilities);
+  state.styleAbilities.readyAt[id]=now+styleAbilities[id].cooldown;
+  spendActionPoint(state,now);return true;
+ }
  if(id==='packTactics')throw invalid('Pack Tactics activates automatically after a perfect dodge with your familiar equipped.');
  if(id==='lockbreaker')throw invalid('Use Lockbreaker from the hotbar in the Grand Lobby.');
  if(['lightFingers','cutpurse'].includes(id))throw invalid('Choose a nearby player and use this technique in Pickpocket. Each attempt costs 10 AP.');

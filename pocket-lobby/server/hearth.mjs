@@ -3,6 +3,8 @@ import {abilityMastery} from '../public/ability-mastery.js';
 import {mealRecipes} from '../public/cooking.js';
 import {waystationRoom,waystationSites} from '../public/waystation.js';
 import {styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
+import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
+import {readTrailCamp} from './trail-camp.mjs';
 import {readWaystation} from './waystation.mjs';
 import {publicRoomNamespace} from './shared-trees.mjs';
 import {playerMaxHealth} from '../public/food-buffs.js';
@@ -10,7 +12,8 @@ import {playerMaxHealth} from '../public/food-buffs.js';
 const {x,y,target}=waystationSites.fire;
 const fail=message=>Object.assign(new Error(message),{status:400});
 export const besideHearth=(room,p)=>room===waystationRoom&&!!p&&Math.abs(p.x-x)+Math.abs(p.y-y)===1;
-const ready=s=>besideHearth(s.location,s.position)&&s.characterCreated!==false&&s.health>0&&s.controlMode!=='auto'&&
+const atSoloFire=s=>s.location===trailCamp.room&&besideTrailCamp(s.position);
+const ready=(s,solo=false)=>(besideHearth(s.location,s.position)||solo&&atSoloFire(s))&&s.characterCreated!==false&&s.health>0&&s.controlMode!=='auto'&&
  !s.styleAbilities?.hearth&&!s.plan&&!s.report&&!s.hunting?.encounter&&!s.hunting?.recoveryUntil&&!s.fishingCast&&!s.timberCut&&!s.miningCut&&!s.bedRest&&!s.campRest&&!s.vaultCoop;
 const view=row=>({id:row.id,from:row.sender_name,meal:mealRecipes[row.meal].name,expiresAt:row.expires_at,status:row.status});
 
@@ -26,11 +29,13 @@ export async function changeHearth(env,row,body,now=Date.now()){
  const db=env.TOWER_DB,id=row.player_id,state=JSON.parse(row.state_json);
  if(body.kind==='solo'){
   if(row.last_request===body.operation)return;
-  if(!ready(state)||!state.styleAbilities?.learned?.includes('shareHearth'))throw fail('Learn Share a Hearth and stand beside the campfire.');
+  if(!ready(state,true)||!state.styleAbilities?.learned?.includes('shareHearth'))throw fail('Learn Share a Hearth and stand beside the campfire.');
   if((state.styleAbilities.readyAt?.shareHearth??0)>now)throw fail('Share a Hearth is recharging.');
   if(state.health>=playerMaxHealth(state,now))throw fail('Your health is already full.');
   if(!Object.hasOwn(mealRecipes,body.meal)||!state.meals?.[body.meal])throw fail('Choose a cooked meal from your bag.');
-  if((await readWaystation(db)).fire<target)throw fail('Restore the Waystation campfire first.');
+  if(atSoloFire(state)){
+   if((await readTrailCamp(db)).litUntil<now+5000)throw fail('Light the Moonwell trail camp before eating.');
+  }else if((await readWaystation(db)).fire<target)throw fail('Restore the Waystation campfire first.');
   const recovery=20+(abilityMastery(state,'shareHearth').stage-1)*10;
   state.meals[body.meal]--;
   state.styleAbilities=normalizeStyleAbilities(state.styleAbilities);

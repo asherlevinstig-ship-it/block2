@@ -69,7 +69,7 @@ test('Lockbreaker requires a learned ability in the lobby and atomically records
  for(const meta of f.room.sessions.values())meta.room='hub';
  f.sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(f.b),idB);
  const preview=await robberyAction(f.env,f.row(idA),f.a,{...body,kind:'breakInPreview'},now);
- assert.equal(preview.preview.ap,20);assert.equal(preview.preview.visit,undefined);
+ assert.equal(preview.preview.ap,10);assert.equal(preview.preview.visit,undefined);
  const result=await robberyAction(f.env,f.row(idA),f.a,body,now,()=>0);
  assert.deepEqual(result.receipt.visit.furniture,[{type:'bed',x:2,y:2,rot:0}]);
  assert.equal(result.receipt.visit.until,now+30000);
@@ -78,7 +78,7 @@ test('Lockbreaker requires a learned ability in the lobby and atomically records
  assert.equal(owner.robbery.lastBreakIn.visit,undefined);
  assert.equal(owner.credits,200);
  const updated=JSON.parse(result.updated.state_json);
- assert.equal(updated.actionPoints.value,5);assert.equal(updated.location,'hub');
+ assert.equal(updated.actionPoints.value,15);assert.equal(updated.location,'hub');
  const retry=await robberyAction(f.env,result.updated,updated,body,now+1,()=>0);
  assert.equal(retry.updated.revision,2);
 });
@@ -93,5 +93,5 @@ test('A failed Lockbreaker attempt charges AP and notifies the homeowner without
  const homeowner=JSON.parse(f.row(idB).state_json);
  assert.equal(homeowner.robbery.lastBreakIn.success,false);
  assert(homeowner.robbery.protectedUntil>now);
- assert.equal(JSON.parse(result.updated.state_json).actionPoints.value,5);
+ assert.equal(JSON.parse(result.updated.state_json).actionPoints.value,15);
 });

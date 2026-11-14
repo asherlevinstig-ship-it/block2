@@ -63,6 +63,11 @@ export function startCombatEncounter(state,enemy,now){
   if(state.outfitMagic)state.outfitMagic.veilUntil=0;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
+  const bloodlust=state.styleAbilities?.bloodlustUntil;
+  if(state.styleAbilities?.learned?.includes('bloodlust')&&bloodlust>now){
+    state.hunting.encounter.bloodlustUntil=bloodlust;
+    state.hunting.encounter.bloodlustPercent=5+abilityMastery(state,'bloodlust').stage*5;
+  }
   const guard=state.styleAbilities?.stoneguard;
   if(guard?.until>now)Object.assign(state.hunting.encounter,{stoneguardUntil:guard.until,stoneguardReduction:guard.reduction});
   if(state.vitals?.mealBuff)state.hunting.encounter.mealBuff=state.vitals.mealBuff;
@@ -103,6 +108,7 @@ function result(state,event,now,random=Math.random){
       state.styleAbilities.readyAt.packTactics=now+styleAbilities.packTactics.cooldown;
     }
   }
+  if(event.bloodlust)awardAbilityUse(state,'bloodlust','bloodlust:'+encounter.bloodlustUntil);
   if(event.counter){summary.counters++;summary.counterBonus+=event.counterBonus??0;}
   if(event.bloodPriceBroken&&event.encounter){
     const next=event.encounter,player=next.arenaPlayer??state.position;
@@ -139,6 +145,12 @@ function result(state,event,now,random=Math.random){
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=queueBossAdds(event.encounter,now);event.encounter=state.hunting.encounter;state.health=event.health;
   if(event.outcome==='victory'){
+    const abilities=state.styleAbilities;
+    if(abilities?.learned?.includes('bloodlust')&&(abilities.readyAt?.bloodlust??0)<=now){
+      abilities.readyAt??={};
+      abilities.readyAt.bloodlust=now+styleAbilities.bloodlust.cooldown;
+      abilities.bloodlustUntil=now+45000;
+    }
     rememberFallen(state,enemy,encounter,now);
     useHunger(state,2);
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
