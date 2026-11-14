@@ -563,3 +563,5 @@
 @media(max-width:900px){.style-ability-bar{bottom:62px}}
 
 .scouted-keeper-label{border-color:#f4cb75;box-shadow:0 0 12px #edb85d66;color:#fff0bd}
+
+#hearthDialog{width:min(500px,94vw)}#hearthContents label{display:block;margin:10px 0}#hearthContents button{margin:4px 8px 4px 0;min-height:38px}#hearthStatus{color:#f3d397}

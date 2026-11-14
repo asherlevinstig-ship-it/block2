@@ -1,3 +1,4 @@
+import {readHearth,changeHearth} from './hearth.mjs';
 import {pvpStrike,reportPvp,mostWanted} from './pvp.mjs';
 import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
 import {waystationRoom} from '../public/waystation.js';
@@ -272,6 +273,13 @@ export async function handlePlayerApi(request,env){
       return json({raid:(await readVaultParty(env.TOWER_DB,code,id)).public});
     }
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
+    if(path==='/api/player/hearth'&&request.method==='GET'){
+      const row=await read(env.TOWER_DB,id);
+      if(!row)return json({error:'Character not found.'},401);
+      const state=JSON.parse(row.state_json);
+      const current=state.styleAbilities?.hearth?await settled(env,id,true):row;
+      return json({...playerPacket(current),hearth:await readHearth(env.TOWER_DB,id)});
+    }
     if(path==='/api/player/waystation'&&request.method==='GET')return json({waystation:await readWaystation(env.TOWER_DB)});
     if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/mining'&&request.method==='GET')return json({deposits:await readOreDeposits(env.TOWER_DB),serverTime:Date.now()});
@@ -323,6 +331,11 @@ export async function handlePlayerApi(request,env){
       const result=await sendGift(env,row,body);
       if(result.stub)await result.stub.fetch(new Request('https://room.internal/gift-notice',{method:'POST',body:JSON.stringify({recipient:result.recipient,receipt:result.receipt})})).catch(()=>{});
       return json({...playerPacket(result.updated),gift:result.receipt});
+    }
+    if(path==='/api/player/hearth'){
+      if(row.revision!==body.revision&&row.last_request!==body.operation)return json({error:'Your character changed. Try again.',...playerPacket(row)},409);
+      await changeHearth(env,row,body);
+      return json({...playerPacket(await read(env.TOWER_DB,id)),hearth:await readHearth(env.TOWER_DB,id)});
     }
     if(row.last_request===body.operation){
       if(path==='/api/player/market-stalls')return json({...playerPacket(row),board:await readMarketStalls(env.TOWER_DB,id,body.filter)});

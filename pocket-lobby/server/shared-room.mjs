@@ -1,3 +1,4 @@
+import {besideHearth} from './hearth.mjs';
 import {pvpRooms,pvpGuards,witnessRange} from '../public/pvp.js';
 import {playerMaxHealth} from '../public/food-buffs.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
@@ -142,6 +143,12 @@ export class SharedRoom{
       const target=await request.json();
       if(!pvpRooms.has(target.room))return json({error:'PvP is disabled here.'},400);
       return this.robberyTarget(target,true,'attacking');
+    }
+    if(path==='/hearth-target'&&request.method==='POST'){
+      const {playerId,target,targetPlayerId}=await request.json();
+      const peers=[...this.sessions.values()].filter(p=>!p.auto&&!p.serverAuto&&!(p.veilUntil>Date.now())&&besideHearth(p.room,p));
+      const other=peers.find(p=>p.playerId!==playerId&&(targetPlayerId?p.playerId===targetPlayerId:p.id===target));
+      return other&&peers.some(p=>p.playerId===playerId)?json({playerId:other.playerId}):json({error:'Stand beside the campfire.'},400);
     }
     if(path==='/gift-target'&&request.method==='POST')return this.robberyTarget(await request.json(),true);
     if(path==='/robbery-target'&&request.method==='POST')return this.robberyTarget(await request.json());

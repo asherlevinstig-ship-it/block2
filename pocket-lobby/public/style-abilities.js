@@ -23,7 +23,8 @@ export const styleAbilities={
  waypoint:{name:'Waypoint',icon:'◇',cooldown:180000,description:'Travel to a discovered landmark from safety.',requirements:{exploration:3}},
  shadowstep:{name:'Shadowstep',icon:'◈',cooldown:45000,description:'Blink up to four reachable tiles. In arena combat, briefly delay the creature’s pursuit.',requirements:{exploration:3,stealth:3}},
  trackPrey:{name:'Track Prey',icon:'⁙',cooldown:180000,cost:0,description:'Reveal a trail in Bramble Clearing that leads to a Dusktusk Boar.',requirements:{hunting:2,exploration:2},discovery:'Earned through successful wild hunts and new discoveries.'},
- scoutAhead:{name:'Scout Ahead',icon:'✧',cooldown:180000,cost:0,description:'Send your equipped familiar to find a Lantern Keeper clue.',requirements:{familiarConnection:2,exploration:2},discovery:'Earned by caring for a familiar and discovering new areas.'}
+ scoutAhead:{name:'Scout Ahead',icon:'✧',cooldown:180000,cost:0,description:'Send your equipped familiar to find a Lantern Keeper clue.',requirements:{familiarConnection:2,exploration:2},discovery:'Earned by caring for a familiar and discovering new areas.'},
+ shareHearth:{name:'Share a Hearth',icon:'♨',cooldown:180000,cost:0,description:'Share a cooked meal at the Waystation campfire. Both players recover up to 20 HP over five seconds.',requirements:{cooking:2,kindness:2},discovery:'Earned by cooking and caring for a familiar.'}
 };
 export const waypoints={
  outside:{name:'Tower Courtyard',x:2,y:5},
@@ -42,11 +43,13 @@ export function normalizeStyleAbilities(input){
  const tracked=learned.includes('trackPrey')&&Number.isSafeInteger(trail?.until)&&trail.until>0&&Number.isInteger(trail.step)&&trail.step>=0&&trail.step<=preyTrail.tracks.length;
  const scout=input?.scout;
  const scouting=learned.includes('scoutAhead')&&['willowbank','waystation'].includes(scout?.room)&&Number.isSafeInteger(scout.at)&&scout.at>0;
- return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
+ const hearth=input?.hearth;
+ const warming=Number.isSafeInteger(hearth?.nextAt)&&hearth.nextAt>0&&Number.isInteger(hearth.ticks)&&hearth.ticks>0&&hearth.ticks<=5;
+ return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
- return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(id!=='scoutAhead'||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (state.adventure?.discovered?.length??0)>0&&Object.entries(ability.requirements).every(([stat,level])=>skillLevel(state.stats?.[stat+'Xp'])>=level)).map(([id])=>id);
+ return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
+   (id==='shareHearth'||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>skillLevel(state.stats?.[stat+'Xp'])>=level)).map(([id])=>id);
 }

@@ -44,6 +44,7 @@ export function styleAbilityAction(state,action,body,now){
   state.styleAbilities=abilities;
   return true;
  }
+ if(id==='shareHearth')throw invalid('Invite a player from the Share a Hearth panel.');
  requireActionPoint(state);
  if(id==='waypoint'){
   const room=body.destination,arrival=Object.hasOwn(waypoints,room)?waypoints[room]:null;

@@ -1,3 +1,4 @@
+import {settleHearth} from './hearth.mjs';
 import {awardHuntingXp} from './activity-xp.mjs';
 import {recordDungeonChest} from '../public/dungeon-chests.js';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
@@ -187,9 +188,10 @@ export function advanceServerCombat(state,now,random=Math.random){
   return events;
 }
 export function settleActivities(state,now,random=Math.random){
-  let changed=settleBedRest(state,now);
+  let changed=settleHearth(state,now);
+  if(settleBedRest(state,now))changed=true;
   if(settleTrailCampRest(state,now))changed=true;
-  if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0;
+  if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0||changed;
   if(state.hunting?.recoveryUntil&&now>=state.hunting.recoveryUntil){state.hunting.recoveryUntil=0;state.health=playerMaxHealth(state,now);changed=true;}
   const capped=Math.min(state.health,playerMaxHealth(state,now));if(capped!==state.health){state.health=capped;changed=true;}
   return changed;

@@ -3613,7 +3613,7 @@ function updateWorldLabels(){
   const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
   const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
   const scout=scoutedKeeperClue();
-  const labelKey=key+'|'+(scout?.room??'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  const labelKey=key+'|'+(scout?.room??'')+'|'+(currentRoom===waystationRoom&&atHearth(player)?hearthBoard?.incoming[0]?.id??'':'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   worldLabelBounds=[];
@@ -3760,6 +3760,8 @@ function updateWorldLabels(){
     }
   }
   if(currentRoom===waystationRoom){
+    const fire=roomFurniture().find(item=>item.type==='waystationFire');
+    if(fire&&hearthBoard?.incoming.length&&atHearth(player))add('Meal invitation',...point(fire.x+.5,fire.y+.5,31),'npc',openHearth);
     const sign=roomFurniture().find(item=>item.type==='waystationSign');
     add('Restoration sign',...point(sign.x+.5,sign.y+.5,42),'npc',()=>use(sign));
     for(const [site,project] of Object.entries(waystationSites)){
@@ -4063,6 +4065,10 @@ function draw(time){
   }
   if(!drawn)drawPlayer();
   drawFamiliarScout(time);
+  if(time-hearthFxAt<750){
+    const [x,y]=point(player.x+.5,player.y+.5,14);
+    window.drawScoutSignal?.(ctx,x,y,time,reducedMotion.matches);
+  }
   if(abilityBursts.length){
     abilityBursts=abilityBursts.filter(effect=>time-effect.started<920);
     window.drawAbilityBursts?.(ctx,point,abilityBursts,currentRoom,time,reducedMotion.matches);
@@ -6128,6 +6134,69 @@ function applyServerGameplay(state){
   Object.assign(huntingLoot,state.huntingLoot);
   updateEssenceHotbar();updateUpgradeGoalHud();if($('hudMapDialog').open)previewMapRoute();
 }
+let hearthBoard=null,hearthBusy=false,hearthAnnounced=null,hearthFxAt=-Infinity;
+function atHearth(p){
+  const fire=waystationSites.fire;
+  return currentRoom===waystationRoom&&Math.abs((p.cx??p.x)-fire.x)+Math.abs((p.cy??p.y)-fire.y)===1;
+}
+window.towerApplyHearth=state=>{
+  const prior=health,previousMeals=JSON.stringify(meals);
+  health=state.health;meals={...state.meals};
+  if(health!==prior){if(health>prior)hearthFxAt=performance.now();updatePlayerStats();}
+  if(previousMeals!==JSON.stringify(meals))updateInventory();
+};
+function openHearth(){
+  if(!atHearth(player)){note('Stand beside the restored Waystation campfire to share a meal.');return;}
+  const dialog=$('hearthDialog');$('hearthStatus').textContent='';
+  if(!dialog.open)dialog.showModal();
+  renderHearth();refreshHearth();
+}
+function renderHearth(){
+  const dialog=$('hearthDialog');
+  if(!dialog?.open)return;
+  const contents=$('hearthContents'),prior=[...contents.querySelectorAll('select')].map(select=>select.value);
+  contents.replaceChildren();
+  const text=value=>{const p=document.createElement('p');p.textContent=value;contents.append(p);};
+  const button=(label,body)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.onclick=()=>refreshHearth(body);contents.append(el);};
+  text('Share one cooked meal and recover up to 20 HP each over 5 seconds.');
+  for(const invite of hearthBoard?.incoming??[]){
+    text(invite.from+' invites you to share '+invite.meal+'.');
+    button('Accept meal',{kind:'accept',id:invite.id});button('Decline',{kind:'decline',id:invite.id});
+  }
+  const state=window.playerCloud.initial;
+  if(hearthBoard?.outgoing?.status==='pending')text('Waiting for your guest to accept.');
+  if(!state.styleAbilities?.learned?.includes('shareHearth')||hearthBoard?.outgoing?.status==='pending')return;
+  if((state.styleAbilities.readyAt?.shareHearth??0)>combatNow()){text('Share a Hearth is recharging.');return;}
+  const guests=[...remotePeers.values()].filter(peer=>!peer.auto&&atHearth(peer));
+  const food=Object.entries(mealRecipes).filter(([id])=>meals[id]>0);
+  if(!guests.length||!food.length){text(!food.length?'Bring a cooked meal in your bag.':'Ask a player to stand on another side of the campfire.');return;}
+  const select=(label,choices,selected)=>{
+    const wrap=document.createElement('label'),el=document.createElement('select');wrap.append(label,el);
+    for(const [value,name] of choices){const choice=document.createElement('option');choice.value=value;choice.textContent=name;el.append(choice);}
+    if(choices.some(([value])=>value===selected))el.value=selected;
+    contents.append(wrap);return el;
+  };
+  const guest=select('Guest ',guests.map(peer=>[peer.id,peer.name]),prior[0]);
+  const meal=select('Meal ',food.map(([id,item])=>[id,item.name]),prior[1]);
+  const invite=document.createElement('button');invite.type='button';invite.textContent='Invite to share';invite.onclick=()=>refreshHearth({kind:'invite',peer:guest.value,meal:meal.value});contents.append(invite);
+}
+async function refreshHearth(body){
+  if(hearthBusy||!window.playerCloud?.hearth)return;
+  hearthBusy=true;
+  try{
+    if(body)savePlayerState();
+    const result=await window.playerCloud.hearth(body);
+    if(!result){if(body)$('hearthStatus').textContent='Wait for your current action, then try again.';return;}
+    hearthBoard=result.hearth;
+    window.towerApplyHearth(result.state);
+    const invite=hearthBoard.incoming[0];
+    if(invite&&invite.id!==hearthAnnounced&&atHearth(player)){
+      hearthAnnounced=invite.id;note(invite.from+' invited you to share a meal. Select Meal invitation.');
+    }
+    if(body)$('hearthStatus').textContent=body.kind==='invite'?'Invitation sent.':body.kind==='accept'?'Meal shared. Recovery has started.':'Invitation declined.';
+  }catch(error){if(body)$('hearthStatus').textContent=error.message;}
+  finally{hearthBusy=false;renderHearth();}
+}
 let scoutAnimation=null;
 function scoutedKeeperClue(){
   const state=window.playerCloud?.initial;
@@ -6184,7 +6253,7 @@ function refreshStyleAbilityBar(){
     button.type='button';button.textContent=ability.icon+' '+ability.name+(seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=seconds[index]>0||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():castStyleAbility(id,{});
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():castStyleAbility(id,{});
     bar.append(button);
   }
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
@@ -8471,6 +8540,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   if(currentRoom!==next)willowbankFlock(0,null);
   if(next!==currentRoom&&$('venueLicenceDialog')?.open)$('venueLicenceDialog').close();
   shadowstepTargeting=false;
+  if(next!==currentRoom&&$('hearthDialog')?.open)$('hearthDialog').close();
   currentRoom=next;refreshShopLicence();selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;
@@ -8785,6 +8855,10 @@ if(window.playerCloud?.readShopLicences){
 }
 if(window.playerCloud&&window.styleAbilities){
   refreshStyleAbilityBar();
+  setInterval(()=>{
+    const state=window.playerCloud.initial;
+    if(!document.hidden&&(atHearth(player)||state.styleAbilities?.hearth))refreshHearth();
+  },1500);
   setInterval(()=>{if(!document.hidden)refreshStyleAbilityBar();},500);
 }
 requestAnimationFrame(animation);
