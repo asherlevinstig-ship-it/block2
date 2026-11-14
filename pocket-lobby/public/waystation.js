@@ -9,11 +9,18 @@ export const waystationArea={
  palette:['#425562','#5b6d73','#b6a189'],
  authored:[...Object.values(waystationSites).map(({type,x,y})=>[type,x,y]),
  ['riverCypress',2,1],['riverCypress',9,1],['riverCypress',10,8],['riverRock',2,3],['riverRock',7,1],
- ['riverCrates',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8]]
+ ['riverCrates',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8],['waystationAwning',8,7]]
 };
 
-export function drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced},board){
+export function drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced,weather},board){
  const {x,y,type}=item;
+ if(type==='waystationAwning'){
+  const wood=['#a9845a','#574843','#765849'];
+  for(const [u,v] of [[.04,.04],[.86,.04],[.04,.86],[.86,.86]])block(x+u,y+v,.09,.09,0,37,wood);
+  surface(x-.09,y-.08,1.16,1.16,39,'#698d91','#b4cbc5');
+  for(let i=0;i<4;i++)surface(x-.075+i*.28,y-.05,.12,1.12,39.3,'#88aaa4');
+  return;
+ }
  const fire=type===waystationSites.fire.type;
  const site=fire?'fire':'supplies';
  const count=board?.[site]??0;
@@ -33,10 +40,14 @@ export function drawWaystationProject(item,time,{point,polygon,surface,block,rec
   }
   if(complete){
    const pulse=reduced?0:Math.sin(time/130)*3;
+   const wind=reduced?0:weather?.wind??0;
    surface(x-.3,y-.3,1.6,1.6,.31,'#f5a75530');
-   polygon([[px-11,py-4],[px-9,py-14],[px-4,py-10],[px+1,py-28-pulse],[px+9,py-12],[px+11,py-4],[px+2,py]],'#e67542');
+   polygon([[px-11,py-4],[px-9,py-14],[px-4,py-10],[px+1+wind*8,py-28-pulse],[px+9,py-12],[px+11,py-4],[px+2,py]],'#e67542');
    polygon([[px-5,py-4],[px-2,py-12],[px+1,py-19-pulse],[px+6,py-5],[px+1,py-1]],'#ffe09b');
-   if(!reduced)for(let i=0;i<4;i++)rect(px-8+i*5,py-12-(time/42+i*9)%22,2,2,'#ffd088');
+   if(!reduced)for(let i=0;i<7;i++){
+    const rise=(time/42+i*9)%28;
+    rect(px-8+i*3+rise*wind,py-12-rise,2,2,'#ffd088');
+   }
   }
   return;
  }

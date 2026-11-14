@@ -63,7 +63,7 @@ export function drawRiverWater(id,time,{point,surface,block,ctx,reduced,progress
   const [px,py]=point(10.6,3.2,4);for(let i=0;i<5;i++){const t=(phase*1.7+i*.21)%1;ctx.fillStyle='#c8f6df99';ctx.fillRect(px-5+i*3,py-6-Math.sin(t*Math.PI)*8,2,2);}
  }
 }
-export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced}){
+export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,weather}){
  const {type,x,y}=item,[px,py]=point(x+.5,y+.5),part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
  if(type==='willowLatch'){
   part(.18,.2,.64,.6,0,14,stone);
@@ -91,7 +91,7 @@ export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,re
   return;
  }
  if(type==='riverReeds'){
-  for(let i=0;i<8;i++){const dx=(i*7%19)-9,dy=(i*3%7),sway=reduced?0:Math.sin(time/1000+i)*2;ctx.strokeStyle=i%2?'#8bab69':'#b6c184';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px+dx,py+dy);ctx.quadraticCurveTo(px+dx-2,py-9,px+dx+sway,py-15-i%3*3);ctx.stroke();if(i%2)rect(px+dx+sway-1,py-17-i%3*3,2,6,'#ad8958');}return;
+  for(let i=0;i<8;i++){const dx=(i*7%19)-9,dy=(i*3%7),sway=reduced?0:Math.sin(time/1000+i)*2+(weather?.wind??0)*(3+Math.sin(time/340+i)*4);ctx.strokeStyle=i%2?'#8bab69':'#b6c184';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px+dx,py+dy);ctx.quadraticCurveTo(px+dx-2,py-9,px+dx+sway,py-15-i%3*3);ctx.stroke();if(i%2)rect(px+dx+sway-1,py-17-i%3*3,2,6,'#ad8958');}return;
  }
  if(type==='riverFlowers'){
   for(let i=0;i<10;i++){const dx=i*11%29-14,dy=i*7%11-4;rect(px+dx,py+dy-4,1,5,'#769f68');rect(px+dx-1,py+dy-6,3,2,i%3===0?'#f2d98e':i%3===1?'#d7b8d4':'#f0edd1');}return;

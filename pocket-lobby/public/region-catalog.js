@@ -1,4 +1,5 @@
 export * from './waystation.js';
+export * from './outdoor-weather.js';
 export {watchAreas,watchRooms,watchMapPositions,watchDimensions,watchFlags,watchGuidance,watchWater,watchInteractLabel} from './watch-expedition.js';
 export const willowbankView={width:680,height:425,cols:18,rows:16,originX:309,originY:100};
 export const willowbankLatch={x:7,y:6};

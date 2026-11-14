@@ -2805,9 +2805,9 @@ function dimensions(item) {
   if(item.type==='fountain')return [2,2];
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
-function object(item,highlight=false,time=0) {
-  if(item.type==='waystationFire'||item.type==='waystationSupplies'){
-    drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced:reducedMotion.matches},waystationBoard);
+function object(item,highlight=false,time=0,weather=null) {
+  if(['waystationFire','waystationSupplies','waystationAwning'].includes(item.type)){
+    drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced:reducedMotion.matches,weather},waystationBoard);
     return;
   }
   if(item.type==='dungeonRewardChest'){
@@ -2921,7 +2921,7 @@ function object(item,highlight=false,time=0) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -3603,7 +3603,9 @@ function updateWorldLabels(){
     }
   }
   if(willowmereRooms.includes(currentRoom)){
-    for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
+    for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)
+      &&!(item.type==='riverBench'&&player.seat===item)
+      &&!(currentRoom==='willowbank'&&item.type==='fishingPost'&&canvas.clientWidth<520&&Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y)>3))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
   }
   if(watchRooms.includes(currentRoom)){
     for(const item of roomFurniture()){
@@ -3665,6 +3667,7 @@ function updateWorldLabels(){
   }
 }
 function draw(time){
+  const weather=outdoorWeather(currentRoom,combatNow());
   window.courtyardEnvironment?.update();
   renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
@@ -3715,6 +3718,7 @@ function draw(time){
     ctx.save();ctx.globalAlpha=1-age/950;ctx.strokeStyle='#c8f0e6';ctx.beginPath();ctx.ellipse(px,py,span,span*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();
    }
   }
+  drawOutdoorWeather(currentRoom,weather,{ctx,point,surface,rect,reduced:reducedMotion.matches});
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
@@ -3744,6 +3748,7 @@ function draw(time){
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
   const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
+  if(currentRoom===waystationRoom)items.push({type:'waystationTraveler',...waystationTraveler(weather,reducedMotion.matches)});
   if(enemy&&victory){
     const monster=stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
     if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
@@ -3814,11 +3819,16 @@ function draw(time){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
     if(item.type==='remotePlayer'){drawRemote(item.peer,time);const [px,py]=point(item.peer.rx+.5,item.peer.ry+.5);hitboxes.push({item,shape:[[px-9,py+3],[px+9,py+3],[px+9,py-38],[px-9,py-38]]});continue;}
     if(item.type==='wildAnimal'){drawWildAnimal(item,time);continue;}
+    if(item.type==='waystationTraveler'){
+      const [x,y]=point(item.x+.5,item.y+.5);
+      sprite(ctx,x,y,{outfit:3,hair:2,trousers:1,boots:1},{direction:item.direction,back:item.back,cycle:item.moving?weather.age/STEP_MS:0,time});
+      continue;
+    }
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
     const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
     if(['millRaidMob','millRaidMerchant','millRaidBarricade'].includes(item.type))window.millRaidClient?.drawMob(item,{ctx,point,time,reduced:reducedMotion.matches,actors:renderedActors});
-    else object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
+    else object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time,weather);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
