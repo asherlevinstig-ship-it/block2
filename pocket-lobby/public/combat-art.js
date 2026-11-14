@@ -35,6 +35,6 @@ export function boarCombatPose({time,now,encounter,events,reduced=false,defeated
     squash:staggered?.82:reduced?1:defeated?1-death*.6:1-windup*.1,
     fall:reduced?0:defeated?death*5:0,
     alpha:defeated?1-clamp((age-750)/550):1,
-    defeated,hit:time-events.boarHitAt>=0&&time-events.boarHitAt<200
+    defeated,death,hit:time-events.boarHitAt>=0&&time-events.boarHitAt<200
   };
 }

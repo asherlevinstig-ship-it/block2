@@ -2873,7 +2873,7 @@ function object(item,highlight=false,time=0) {
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat||item.coopBoss?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       let facing=player;
-      if(['crystalGuardian','depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
+      if(['crystalGuardian','depthsSkitter','depthsSeer','depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
         pose.now=combatNow();
         pose.lastAttack=item.coopBoss?window.towerVaultCoop?.lastAttack():(combatArt.bursts??[]).findLast(effect=>effect.action==='enemy'&&!effect.targetId);
         if(type==='depthsColossus'&&pose.lastAttack?.time<combatArt.phaseAt)pose.lastAttack=null;

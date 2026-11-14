@@ -1,3 +1,4 @@
+import {drawDungeonCreature} from './dungeon-creature-art.js';
 import {drawDungeonGuardian} from './dungeon-guardian-art.js';
 import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,isDungeonMob} from './dungeon-arena.js';
 export const dungeonHeights={depthsSkitter:29,depthsWarden:77,depthsSeer:61,depthsSentinel:76,depthsColossus:93,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
@@ -57,37 +58,8 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
   polygon([[px,py-z-10],[px+4,py-z-3],[px,py-z+5],[px-4,py-z-3]],core);
   ink(-1,-z-7,2,6,'#fff8ec');return;
  }
- if(type==='depthsSkitter'){
-  const shell=hit?'#e7aa94':'#46857f',highlight=hit?'#ffe2bd':'#9dcfb2',low=hit?'#9c5f70':'#224f59',eye=wind>.35?'#ffd28a':'#eaffaa';
-  const poly=(points,color,edge)=>polygon(points.map(([x,y])=>[px+x,py+y]),color,edge);
-  const legs=(side)=>{for(let i=0;i<3;i++){
-   const stride=reduced?0:Math.round(Math.sin(time/110+i*1.9)*1.6),k=i*4;
-   poly([[side*6,-13+k],[side*(14+i),-16+k+stride],[side*(21+i),-8+k],[side*(22+i),-5+k],[side*(19+i),-6+k],[side*(13+i),-11+k+stride],[side*5,-9+k]],i===1?low:'#253e49','#192e3c');
-   poly([[side*8,-13+k],[side*(14+i),-15+k+stride],[side*(18+i),-11+k],[side*(14+i),-13+k+stride]],shell);
-  }};
-  legs(-1);
-  poly([[-18,-12],[-15,-21],[-8,-27],[2,-29],[12,-24],[17,-16],[14,-9],[3,-5],[-10,-6]],low,'#152f3d');
-  poly([[-16,-16],[-12,-23],[-4,-27],[4,-26],[12,-21],[15,-15],[9,-12],[0,-14],[-10,-10]],shell);
-  poly([[-13,-20],[-8,-25],[0,-26],[4,-23],[-2,-20],[-9,-18]],highlight);
-  for(let i=0;i<3;i++)poly([[-8+i*6,-24],[-5+i*6,-24],[-3+i*6,-18],[-6+i*6,-14],[-9+i*6,-14],[-6+i*6,-19]],low);
-  legs(1);
-  poly([[9,-18],[15,-18],[20,-13],[19,-7],[13,-4],[9,-7],[7,-12]],'#2a4552','#192f40');
-  poly([[9,-17],[14,-18],[19,-14],[13,-13]],shell);
-  ink(12,-13,2,2,eye);ink(16,-12,3,2,eye);ink(13,-13,1,1,'#fffbd9');
-  const jaw=wind*3;
-  poly([[16,-7],[22,-8-jaw],[25,-4-jaw],[23,-1-jaw],[22,-5-jaw],[17,-4]],'#d4cd9f','#4e665f');
-  poly([[13,-5],[18,-3],[20,1+jaw],[17,3+jaw],[17,0+jaw],[12,-2]],'#a6b7a1');
-  for(const [a,b] of [[-14,-13],[-9,-10],[-3,-9],[4,-11]])ink(a,b,2,1,highlight);
- }else if(type==='depthsSeer'){
-  const z=float+wind*4,c=hit?'#d8b6de':'#9b82d0';
-  for(let i=0;i<5;i++)polygon([[px-14+i*6,py-17-z],[px-10+i*6,py-1+Math.sin(time/310+i)*3],[px-5+i*6,py-18-z]],i%2?'#413a73':'#5b5089');
-  polygon([[px-17,py-15-z],[px-12,py-42-z],[px,py-55-z],[px+14,py-43-z],[px+18,py-14-z]],'#453965');
-  polygon([[px-12,py-24-z],[px-8,py-42-z],[px,py-50-z],[px+9,py-40-z],[px+10,py-24-z]],c);
-  polygon([[px-7,py-40-z],[px+6,py-40-z],[px+8,py-30-z],[px,py-25-z],[px-8,py-30-z]],'#14273e');
-  ink(-5,-36-z,3,2,'#f0c1ff');ink(3,-36-z,3,2,'#f0c1ff');ink(-1,-29-z,2,5,'#c6b1df');
-  ctx.strokeStyle='#b49e83';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px+24,py-1);ctx.lineTo(px+24,py-48);ctx.stroke();
-  polygon([[px+24,py-60-wind*6],[px+31,py-50],[px+24,py-42],[px+17,py-50]],'#d4b8ff');ink(23,-54,2,8,'#f5e1ff');
-  for(const side of [-1,1]){const ox=px+side*(20+wind*7),oy=py-26-z;ctx.fillStyle='#c4a2eb';ctx.beginPath();ctx.arc(ox,oy,3,0,Math.PI*2);ctx.fill();if(wind>.15){ctx.strokeStyle='#c4a2eb';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(ox,oy,5+wind*4,5+wind*4,0,0,Math.PI*2);ctx.stroke();}}
+ if(type==='depthsSkitter'||type==='depthsSeer'){
+  drawDungeonCreature(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat});
  }else{
   drawDungeonGuardian(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat});
  }

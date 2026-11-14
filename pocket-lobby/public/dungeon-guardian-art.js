@@ -63,13 +63,20 @@ function warden(draw, cue, hit) {
   const hand=moveHand(rest,targets[gesture]??rest,strength);
   const raised=gesture==='stomp'&&!release ? strength*15 : 0;
   const footX=gesture==='stomp'&&release ? 20 : 15;
-  const open=exposed?4:0;
+  const open=exposed?5:cue.recovery?2:0;
   const bow=staggered?5:0;
 
   poly([[-22,-14],[-12,-20],[-8,-10],[-10,0],[-28,0],[-29,-5]],dark,'#263c41');
   poly([[9,-18-raised],[footX+7,-13-raised],[footX+12,-3-raised],[footX+8,1-raised],[6,1-raised],[5,-5-raised]],stone,'#263c41');
   poly([[-28,-7],[-15,-10],[-11,-6],[-13,-3],[-26,-3]],light);
   poly([[8,-7-raised],[footX+5,-9-raised],[footX+8,-5-raised],[footX+4,-3-raised],[7,-3-raised]],light);
+  // A broad overlapping carapace separates the Shell Warden from armoured knights.
+  poly([[-30,-43+bow],[-26,-60+bow],[-15,-66+bow],[3,-64+bow],[22,-55+bow],[29,-40+bow],[16,-35+bow],[-18,-34+bow]],dark,'#1b303b');
+  for(const side of [-1,1]){
+    poly([[side*5,-61+bow],[side*17,-61+bow],[side*26,-51+bow],[side*28,-43+bow],[side*17,-44+bow],[side*9,-50+bow]],stone,'#233c43');
+    line([[side*9,-59+bow],[side*17,-58+bow],[side*23,-51+bow]],light,2);
+    line([[side*17,-53+bow],[side*19,-48+bow],[side*24,-47+bow]],'#385b56');
+  }
   limb([-16,-36+bow],[-30,-15+bow],7,dark);
   poly([[-29,-49+bow],[-20,-55+bow],[-11,-49+bow],[-10,-34+bow],[-24,-23+bow],[-34,-32+bow]],stone,'#223c42');
   poly([[-31,-39+bow],[-28,-47+bow],[-20,-51+bow],[-15,-46+bow],[-21,-38+bow]],light);
@@ -78,7 +85,7 @@ function warden(draw, cue, hit) {
   poly([[2+open,-40+bow],[11,-47+bow],[21,-38],[19,-25],[12,-16],[3+open,-22],[6+open,-32]],stone,'#293e43');
   poly([[-18,-42+bow],[-13,-45+bow],[-4-open,-39+bow],[-9-open,-34],[-19,-34]],light);
   poly([[7+open,-40+bow],[12,-44+bow],[18,-37],[14,-32],[8+open,-32]],light);
-  if(exposed){
+  if(open){
     poly([[-2,-42+bow],[5,-35],[1,-29],[5,-20],[-4,-24],[-6,-34]],'#62d8c4');
     line([[-3,-43+bow],[1,-37],[-2,-32],[2,-26],[1,-20]],'#dcfff0',2);
     line([[-4,-32],[-12,-30],[-17,-33]],'#9af0d8');
@@ -222,7 +229,19 @@ export function drawDungeonGuardian(type,time,options) {
   const cue=guardianCue(combat,pose,time,reduced);
   const lean=cue.gesture==='rush'&&!reduced ? cue.strength*(cue.release?12:7) : 0;
   const draw=drawing(options,cue.recovery&&!cue.gesture&&!cue.staggered ? 2 : 0,lean);
-  if(type==='depthsWarden')warden(draw,cue,pose.hit);
+  if(type==='depthsWarden'){
+    if(pose.defeated){
+      // The core goes dark and the shell breaks into a recognisable stone heap.
+      const spread=reduced?5:5+(pose.death??0)*13;
+      const {poly,line}=draw;
+      for(let i=0;i<7;i++){
+        const x=(i-3)*spread*.55,y=-3-(i%3)*5;
+        poly([[x-7,y],[x-8,y-7],[x-2,y-12],[x+6,y-9],[x+9,y-2],[x+4,y+2]],i%2?'#627d72':'#344f51','#20343e');
+        line([[x-5,y-6],[x-1,y-9],[x+4,y-7]],'#aab79a');
+      }
+      poly([[-4,-8],[0,-14],[4,-8],[0,-3]],'#477477');
+    }else warden(draw,cue,pose.hit);
+  }
   else if(type==='depthsSentinel')sentinel(draw,cue,pose.hit);
   else if(type==='depthsColossus')vaultGuardian(draw,cue,pose.hit,vaultPhase(combat)?.index??1);
 }
