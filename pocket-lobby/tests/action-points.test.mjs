@@ -6,7 +6,6 @@ import {normalizeState,settlePlan} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
 import {startRoutineQueue} from '../server/routine-queue.mjs';
 import {advanceFishingWork,settleFishingBatch} from '../server/fishing-work.mjs';
-import {createActionPointGate} from '../public/action-point-gate.js';
 import {createRoomConnection} from '../public/multiplayer.js';
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
@@ -86,16 +85,6 @@ test('reconnect preserves rules and resumes manual play without refilling points
  await call('reconnect',{revision:packet.revision,operation:crypto.randomUUID()});
  assert.equal(packet.state.actionPoints.value,0);assert(!packet.state.autoDisconnected);
  assert.equal(packet.state.controlMode,'play');assert(!packet.state.plan);assert.deepEqual(packet.state.characterRules,rules);
-});
-
-test('depletion screen requires a deliberate reconnect and keeps failures visible',async()=>{
- const gate={dataset:{},open:false,showModal(){this.open=true;},close(){this.open=false;}},text={},button={},title={};
- let stopped=0,applied=0,reconnected=0,fail=true;
- const ui=createActionPointGate({gate,text,button,title,stop:()=>stopped++,apply:()=>applied++,status:()=>{},reconnect:async()=>{reconnected++;if(fail)throw Error('Please retry');}});
- ui.suspend({});assert.equal(stopped,1);assert.equal(applied,1);assert.equal(reconnected,0);assert(gate.open);
- let prevented=false;gate.oncancel({preventDefault(){prevented=true;}});assert(prevented);
- await button.onclick();assert.equal(text.textContent,'Please retry');assert(gate.open);assert(!button.disabled);
- fail=false;await button.onclick();assert.equal(reconnected,2);assert(!gate.open);
 });
 
 test('AP socket shutdown notifies once and never schedules a reconnect',async()=>{

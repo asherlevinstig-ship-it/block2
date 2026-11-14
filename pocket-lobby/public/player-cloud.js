@@ -1,7 +1,8 @@
 'use strict';
 (async()=>{
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
-  const {createActionPointGate}=await import('./action-point-gate.js');let pointGate=null,apFeedback=null;
+  const {availableActionPoints}=await import('./action-points.js');
+  let apFeedback=null;
   const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const {playerMaxHealth}=await import('./food-buffs.js');
@@ -41,7 +42,12 @@
       signal:AbortSignal.timeout(15000)
     });
     const data=await response.json();combatClock.sample(data.serverTime,sentAt);
-    if(data.state?.autoDisconnected&&path!=='reconnect'&&!path.startsWith('learning/'))suspendForPoints(data);
+    if(path!=='reconnect'&&!path.startsWith('learning/')&&data.state?.autoDisconnected&&(!packet||data.characterKey===packet.characterKey)){
+      suspendForPoints(data);
+    }else if(response.ok&&path!=='reconnect'&&packet&&packet.characterKey===data.characterKey&&data.state&&
+        availableActionPoints(packet.state.actionPoints)>0&&!availableActionPoints(data.state.actionPoints)){
+      setTimeout(()=>{if(!conflicted&&!availableActionPoints(packet.state.actionPoints))openQuestions();},0);
+    }
     if(response.status===409&&robberyRetry<2&&(data.lastOperation?.startsWith('robbed:')||data.lastOperation?.startsWith('supper:')||data.lastOperation?.startsWith('gifted:'))&&data.characterKey===packet?.characterKey){packet=data;if(!data.lastOperation.startsWith('robbed:'))window.towerApplySupperInventory?.(data.state);else window.towerApplyRobberyState?.(data.state);return request(path,{...body,revision:data.revision},allowPaused,robberyRetry+1);}
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
@@ -58,7 +64,7 @@
       localStorage.removeItem('pocket-lobby:cloud-pending');
     }catch{}
     window.towerMultiplayer?.disconnect();
-    conflicted=true;setStatus('Another tab changed your character');
+    conflicted=true;document.getElementById('cloudTitle').textContent='Your character';setStatus('Another tab changed your character');
     gateText.textContent=message+' Reload to use the latest server save. Your pending changes are backed up in this browser.';
     retry.textContent='Reload latest character';retry.onclick=()=>location.reload();
     retry.hidden=false;
@@ -87,6 +93,7 @@
           setStatus(pending?'Saving…':'Server saved');
           if(!pending)backup(null);
         }catch(error){
+          if(pausedForPoints)return;
           if(error.status===402){await recoverActionPoints();return;}
           retryJob=job;
           if(error.status===409||error.status===401){conflict(error.message);return;}
@@ -130,7 +137,7 @@
     pending=retryJob=null;backup(null);clearTimeout(timer);
     packet=await request('state',undefined,true);
     window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true});
-    setStatus('Action Points needed · Answer a question');window.towerLearning?.open();
+    openQuestions();
   }
   async function performAction(path,body={}){
     const operation=crypto.randomUUID();
@@ -140,6 +147,7 @@
         return packet;
       }catch(error){
         // Durable Auto alarms can commit between our last packet and this request.
+        if(pausedForPoints&&path!=='reconnect'&&!path.startsWith('learning/'))throw error;
         if(error.status===402){await recoverActionPoints();throw error;}
         // Retry only server settlement revisions; another window still triggers conflict handling.
         if((['presence','control'].includes(path)||path.startsWith('learning/'))&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
@@ -353,24 +361,37 @@
     dialog.oncancel=event=>{if(plan.source!=='rules')event.preventDefault();};
     if(!dialog.open)dialog.showModal();
   }
-  function suspendForPoints(latest){
-    if(latest?.state)packet=latest;
-    pointGate??=createActionPointGate({gate,text:gateText,button:retry,title:document.getElementById('cloudTitle'),
-      stop:()=>{pausedForPoints=true;pending=retryJob=null;backup(null);clearTimeout(timer);clearTimeout(presenceTimer);clearTimeout(shiftTimer);window.towerMultiplayer?.disconnect();},
-      apply:()=>window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true}),status:setStatus,
-      reconnect:async()=>{
-        await action('reconnect');pausedForPoints=false;
-        window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true});
-        setStatus('Server saved');lastInputAt=Date.now();lastReportedInputAt=lastInputAt;
-        renderAutoPanel(packet.state);window.towerJoinRoom?.();schedulePresence();
-      }});
-    pointGate.suspend(packet);
+  function openQuestions(){
+    if(!window.towerLearning||conflicted)return;
+    setStatus('Action Points needed · Answer a question');
+    gate.close();
+    window.towerLearning.openForPoints();
   }
+  function suspendForPoints(latest){
+    if(packet&&latest.revision<packet.revision)return;
+    packet=latest;
+    if(!pausedForPoints){
+      pausedForPoints=true;pending=retryJob=null;backup(null);
+      clearTimeout(timer);clearTimeout(presenceTimer);clearTimeout(shiftTimer);
+      window.towerMultiplayer?.disconnect();
+      window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true});
+    }
+    openQuestions();
+  }
+  let checkingDepletion=false;
   async function pauseAutoConnection(){
-    if(pausedForPoints)return;
-    pausedForPoints=true;window.towerMultiplayer?.disconnect();
-    try{suspendForPoints(await request('state',undefined,true));}
-    catch{suspendForPoints(packet);}
+    if(pausedForPoints||checkingDepletion)return;
+    checkingDepletion=true;
+    try{await request('state',undefined,true);}
+    catch{setStatus('Checking connection…');}
+    finally{checkingDepletion=false;}
+  }
+  async function returnFromQuestions(){
+    if(!pausedForPoints)return;
+    await action('reconnect');pausedForPoints=false;
+    window.towerApplyRoutineState?.(packet.state,{handoff:true,reconcile:true});
+    setStatus('Server saved');lastInputAt=Date.now();lastReportedInputAt=lastInputAt;
+    renderAutoPanel(packet.state);window.towerJoinRoom?.();schedulePresence();
   }
   function attach(){
     window.towerRefreshAutoStatus=()=>renderAutoPanel(packet.state);
@@ -444,7 +465,7 @@
       if(pending||retryJob||sending||packet.state.plan)return;
       const revision=packet.revision;
       request('state').then(latest=>{
-        if(packet.revision===revision&&latest.revision!==revision)conflict('Your server character changed while this tab was away.');
+        if(!pausedForPoints&&packet.revision===revision&&latest.revision!==revision)conflict('Your server character changed while this tab was away.');
       }).catch(()=>setStatus('Checking connection…'));
     });
     window.addEventListener('pagehide',()=>recap.leave());
@@ -480,18 +501,19 @@
         }
       }
       const recovery=readLocal('cloud-pending',null);
-      if(recovery?.state&&!packet.state.plan&&!packet.state.report){
+      if(recovery?.state&&!pausedForPoints&&!packet.state.plan&&!packet.state.report){
         if(recovery.characterKey&&recovery.characterKey!==packet.characterKey){conflict("Pending changes belong to a different character.");return;}
         const ownWrite=recovery.operations?.includes(packet.lastOperation);
         if(packet.revision===recovery.baseRevision||ownWrite){
-          packet=await request('save',{state:recovery.state,revision:packet.revision,operation:crypto.randomUUID()});
+          try{packet=await request('save',{state:recovery.state,revision:packet.revision,operation:crypto.randomUUID()});}
+          catch(error){if(!pausedForPoints&&error.status!==402)throw error;}
           backup(null);
         }else{
           conflict('There are pending local changes and a newer server save.');
           return;
         }
       }
-      if((packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules')&&(!packet.state.plan||packet.state.plan.source==='rules')&&!packet.state.report){await action('presence',{active:true});lastReportedInputAt=lastInputAt;}
+      if(!pausedForPoints&&(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules')&&(!packet.state.plan||packet.state.plan.source==='rules')&&!packet.state.report){await action('presence',{active:true});lastReportedInputAt=lastInputAt;}
       const {moonwood}=await import('./moonwood.js');
       window.moonwood=moonwood;
       const rules=await import('./fishing.js');
@@ -610,7 +632,7 @@
         const {initializeBuildUI}=await import('./combat-build-ui.js');window.towerBuildUI=initializeBuildUI({doc:document,hooks:window.towerBuildHooks});
         const {initializeRobbery}=await import('./robbery-ui.js');window.towerRobbery=initializeRobbery({doc:document,cloud:window.playerCloud,hooks:window.towerRobberyHooks});
         const {initializeLearning}=await import('./learning-ui.js');
-        window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,isTeacher:()=>verifiedTeacher,onAdventure:async()=>{if(pausedForPoints)await retry.onclick?.();},change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
+        window.towerLearning=initializeLearning({doc:document,renderer:towerCharacterArt,getState:()=>packet.state,isTeacher:()=>verifiedTeacher,isPausedForPoints:()=>pausedForPoints,onAdventure:returnFromQuestions,change:async(name,body={})=>{if(!pausedForPoints)await flush();await action('learning/'+name,body);return packet.state;}});
         const {initializeActionPointFeedback}=await import('./action-point-feedback.js');
         apFeedback=initializeActionPointFeedback({doc:document,initial:packet,onEarn:()=>window.towerLearning.open()});
         const {initializeMillRaid}=await import('./mill-raid-ui.js');
@@ -618,6 +640,7 @@
 
         if(!(pending||retryJob||sending))setStatus('Server saved');
         if(packet.state.autoDisconnected)suspendForPoints(packet);
+        else if(!availableActionPoints(packet.state.actionPoints))openQuestions();
         else{gate.close();recap?.resume({initial:true});}
       };
       script.onerror=()=>{

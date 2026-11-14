@@ -1,8 +1,8 @@
 import {availableActionPoints} from './action-points.js';
 import {armourSelection} from './hunting.js';
-export function initializeLearning({doc=document,change,getState,renderer=null,isTeacher=()=>false,onAdventure=async()=>{}}){
+export function initializeLearning({doc=document,change,getState,renderer=null,isTeacher=()=>false,isPausedForPoints=()=>false,onAdventure=async()=>{}}){
  const dialog=doc.createElement('dialog');dialog.className='game-window learning-window';dialog.id='learningDialog';dialog.setAttribute('aria-labelledby','learningTitle');
- dialog.innerHTML=`<header class="learning-head"><div><span class="eyebrow">THE TOWER ACADEMY</span><h2 id="learningTitle">Homework powers adventure.</h2></div><button class="close" type="button" aria-label="Close learning">×</button></header><div class="learning-banner"><span class="learning-gem" aria-hidden="true">ϟ</span><div><b>10 questions. One clear goal.</b><p>Each submitted answer earns 1 AP, up to 100 stored. Your progress is saved.</p></div><strong id="learningBalance"></strong></div><section class="learning-session" aria-label="Homework session progress"><div><b>Your homework</b><span id="learningSessionCount">0 / 10 answered</span></div><progress id="learningSessionBar" max="10" value="0" aria-label="Homework progress"></progress></section><form id="learningForm"><label id="learningSubjectField" class="learning-subject" hidden>Subject<select id="learningSubject"></select></label><fieldset><legend id="learningPrompt">Preparing your question…</legend><p id="learningTopic" class="eyebrow" hidden></p><pre id="learningSource" class="learning-feedback learning-source" hidden></pre><div id="learningChoices" class="learning-choices"></div></fieldset><section id="learningFeedback" class="learning-feedback" role="status" hidden></section><p id="learningError" class="learning-error" role="alert"></p><footer><span id="learningProgress"></span><button id="learningSubmit" class="primary" type="submit" disabled>Submit answer · +1 AP</button><button id="learningNext" class="primary" type="button" hidden>Next question</button></footer></form><article id="learningComplete" class="learning-complete" hidden aria-labelledby="homeworkCompleteTitle"><span class="homework-complete-mark" aria-hidden="true">✓</span><span class="eyebrow">TEN QUESTIONS ANSWERED</span><h3 id="homeworkCompleteTitle">Homework complete!</h3><p id="homeworkSummary"></p><p id="homeworkAvailable"></p><div class="homework-actions"><button id="homeworkAdventure" class="primary" type="button">Back to adventure</button><button id="homeworkAgain" type="button">Start another 10</button></div><small>You can return to questions whenever you want more AP.</small><p id="homeworkError" class="learning-error" role="alert"></p></article>`;
+ dialog.innerHTML=`<header class="learning-head"><div><span class="eyebrow">THE TOWER ACADEMY</span><h2 id="learningTitle">Homework powers adventure.</h2></div><button class="close" type="button" aria-label="Close learning">×</button></header><div class="learning-banner"><span class="learning-gem" aria-hidden="true">ϟ</span><div><b>10 questions. One clear goal.</b><p>Each submitted answer earns 1 AP, up to 100 stored. Your progress is saved.</p></div><strong id="learningBalance"></strong></div><section class="learning-session" aria-label="Homework session progress"><div><b>Your homework</b><span id="learningSessionCount">0 / 10 answered</span></div><progress id="learningSessionBar" max="10" value="0" aria-label="Homework progress"></progress></section><form id="learningForm"><label id="learningSubjectField" class="learning-subject" hidden>Subject<select id="learningSubject"></select></label><fieldset><legend id="learningPrompt">Preparing your question…</legend><p id="learningTopic" class="eyebrow" hidden></p><pre id="learningSource" class="learning-feedback learning-source" hidden></pre><div id="learningChoices" class="learning-choices"></div></fieldset><section id="learningFeedback" class="learning-feedback" role="status" hidden></section><p id="learningError" class="learning-error" role="alert"></p><footer><span id="learningProgress"></span><button id="learningSubmit" class="primary" type="submit" disabled>Submit answer · +1 AP</button><button id="learningNext" class="primary" type="button" hidden>Next question</button></footer></form><article id="learningComplete" class="learning-complete" hidden aria-labelledby="homeworkCompleteTitle"><span class="homework-complete-mark" aria-hidden="true">✓</span><span class="eyebrow">TEN QUESTIONS ANSWERED</span><h3 id="homeworkCompleteTitle">Homework complete!</h3><p id="homeworkSummary"></p><p id="homeworkAvailable"></p><div class="homework-actions"><button id="homeworkAdventure" class="primary" type="button">Back to adventure</button><button id="homeworkAgain" type="button">Start another 10</button></div><small>You can return to questions whenever you want more AP.</small></article><div id="learningResume" class="homework-actions" hidden><button class="primary" type="button">Back to adventure</button></div><p id="homeworkError" class="learning-error" role="alert"></p>`;
  doc.body.append(dialog);
  const el=id=>dialog.querySelector('#'+id),form=el('learningForm'),submit=el('learningSubmit'),next=el('learningNext'),choices=el('learningChoices'),feedback=el('learningFeedback');
  let current=null,selected=null,busy=false,animation=null,goalTrip=null;
@@ -10,7 +10,7 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
  trip.hidden=true;trip.className='learning-feedback';tripStatus.setAttribute('role','status');
  tripContinue.type='button';tripContinue.textContent='Back to your upgrade goal';
  trip.append(tripStatus,tripContinue);dialog.append(trip);
- tripContinue.onclick=()=>{if(!busy&&goalTrip){const resume=goalTrip.onContinue;dialog.close();resume();}};
+ tripContinue.onclick=()=>{if(!busy&&!isPausedForPoints()&&goalTrip){const resume=goalTrip.onContinue;dialog.close();resume();}};
  const teacherPanel=doc.createElement('section');
  teacherPanel.className='learning-feedback';
  teacherPanel.hidden=true;
@@ -40,14 +40,17 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
  function stopAnimation(){if(animation!==null)cancelAnimationFrame(animation);animation=null;}
  dialog.addEventListener('close',()=>{if(!dialog.open){stopAnimation();for(const trigger of triggers)trigger.setAttribute('aria-expanded','false');}});
  const finished=()=>{const session=getState().learning?.session;return session&&session.answered>=session.target;};
+ const close=dialog.querySelector('.close'),resume=el('learningResume'),resumeButton=resume.querySelector('button');
  function summary(){
   const s=getState(),session=s.learning?.session,answered=session?.answered??0,target=session?.target??10;
   const unlimited=s.actionPoints?.unlimited===true;
   el('learningBalance').textContent=unlimited?'Unlimited AP':(s.actionPoints?.value??0)+' / 100 AP';
+  close.hidden=isPausedForPoints();
+  resume.hidden=!isPausedForPoints()||!el('learningComplete').hidden;
   teacherPanel.hidden=!isTeacher();
   toggle.textContent=unlimited?'Turn off Unlimited AP':'Enable Unlimited AP';
   toggle.setAttribute('aria-pressed',String(unlimited));
-  trip.hidden=!goalTrip;
+  trip.hidden=!goalTrip||isPausedForPoints();
   if(goalTrip){
    tripContinue.textContent=goalTrip.continueLabel??'Back to your upgrade goal';
    const remaining=Math.max(0,goalTrip.travelAP-availableActionPoints(s.actionPoints));
@@ -116,11 +119,18 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
  el('learningSubject').onchange=event=>load(false,event.target.value);
  next.onclick=()=>{if(finished())showComplete();else load();};
  el('homeworkAgain').onclick=()=>load(true);
- el('homeworkAdventure').onclick=async()=>{if(busy)return;busy=true;try{dialog.close();await onAdventure();}finally{busy=false;}};
- dialog.querySelector('.close').onclick=()=>dialog.close();
- const open=(options)=>{goalTrip=typeof options?.onContinue==='function'?options:null;stopAnimation();if(dialog.open)dialog.close();dialog.showModal();summary();for(const trigger of triggers)trigger.setAttribute('aria-expanded','true');if(renderer)drawMeditation(performance.now());load();};
+ async function resumeAdventure(){
+  if(busy)return;
+  busy=true;resumeButton.disabled=true;el('homeworkAdventure').disabled=true;
+  el('homeworkError').textContent='';
+  try{await onAdventure();dialog.close();}
+  catch(error){el('homeworkError').textContent=error.message;}
+  finally{busy=false;resumeButton.disabled=false;el('homeworkAdventure').disabled=false;summary();}
+ }
+ el('homeworkAdventure').onclick=resumeButton.onclick=resumeAdventure;
+ close.onclick=()=>{if(!isPausedForPoints())dialog.close();};
+ dialog.oncancel=event=>{if(isPausedForPoints())event.preventDefault();};
+ const open=(options,forPoints=false)=>{goalTrip=typeof options?.onContinue==='function'?options:null;stopAnimation();if(dialog.open)dialog.close();dialog.showModal();summary();for(const trigger of triggers)trigger.setAttribute('aria-expanded','true');if(renderer)drawMeditation(performance.now());load(forPoints&&!!finished());};
  const triggers=['openLearning','hotbarQuestions'].map(id=>doc.getElementById(id)).filter(Boolean);for(const trigger of triggers)trigger.onclick=open;
- const gate=doc.getElementById('cloudGate');
- if(gate){const button=doc.createElement('button');button.type='button';button.id='cloudLearn';button.className='primary';button.textContent='Answer questions · Earn AP';button.onclick=open;gate.insertBefore(button,doc.getElementById('cloudRetry'));}
- return {open,dialog,get active(){return dialog.open;}};
+ return {open,openForPoints(){if(dialog.open)summary();else open(undefined,true);},dialog,get active(){return dialog.open;}};
 }
