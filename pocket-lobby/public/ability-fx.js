@@ -107,3 +107,16 @@ export function drawPreyTracks(ctx,point,tile,time,reduced,first){
  }
  ctx.restore();
 }
+
+export function drawScoutSignal(ctx,x,y,time,reduced){
+ const phase=reduced?0:time/280;
+ const radius=12+Math.sin(phase)*2;
+ const aura=ctx.createRadialGradient(x,y,1,x,y,22);
+ aura.addColorStop(0,'#ffda867d');aura.addColorStop(1,'#ffd17000');
+ ctx.save();
+ ctx.fillStyle=aura;ctx.fillRect(x-23,y-23,46,46);
+ ellipse(ctx,x,y,radius,'#f6c265',1);
+ diamond(ctx,x,y-13-Math.sin(phase)*3,3,6);
+ ctx.fillStyle='#fff2bd';ctx.fill();
+ ctx.restore();
+}

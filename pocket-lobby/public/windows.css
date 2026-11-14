@@ -561,3 +561,5 @@
 
 .style-ability-bar{position:absolute;left:50%;bottom:0;transform:translateX(-50%);display:flex;gap:5px;padding:5px;border:1px solid #8172a7;border-radius:9px;background:#151d36f2;max-width:95%;flex-wrap:wrap;justify-content:center}.style-ability-bar[hidden]{display:none}.style-ability-bar button{padding:7px 10px;font-size:12px;color:#f0e7ff;background:#2b2850;border:1px solid #706590;border-radius:6px}.style-ability-bar button[aria-pressed=true]{border-color:#ffd785}#styleAbilityDialog{width:min(520px,94vw)}#styleAbilityContents section{border:1px solid #6e608e;padding:12px;border-radius:8px;margin:10px 0;background:#242442}#styleAbilityContents h3{margin:0}#styleAbilityContents button{margin:4px 6px 4px 0;min-height:38px;white-space:normal}#styleAbilityStatus{color:#ffcf83}
 @media(max-width:900px){.style-ability-bar{bottom:62px}}
+
+.scouted-keeper-label{border-color:#f4cb75;box-shadow:0 0 12px #edb85d66;color:#fff0bd}

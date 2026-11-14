@@ -70,3 +70,25 @@ test('Track Prey reveals the Dusktusk only after reading three tracks in order',
  assert.equal(saved.hunting.encounter.enemy,'dusktusk');
  assert.equal(normalizeState(saved).hunting.encounter.enemy,'dusktusk');
 });
+
+test('Scout Ahead requires care and an equipped familiar, and leaves discovery to the existing clues',()=>{
+ const state=make({location:'willowbank',position:{x:4,y:11},stats:{familiarConnectionXp:50,explorationXp:50},familiars:{owned:['owl']}});
+ assert.deepEqual(styleAbilityOffers(state),[]);
+ act(state,'familiarCare',{id:'owl'});
+ assert.deepEqual(styleAbilityOffers(state),['scoutAhead']);
+ accept(state,'scoutAhead');
+ assert.throws(()=>act(state,'abilityCast',{id:'scoutAhead'}),/Equip a familiar/);
+ state.familiars.equipped='owl';
+ act(state,'abilityCast',{id:'scoutAhead'});
+ assert.equal(state.actionPoints.value,5);
+ assert.equal(state.adventure.keeperMarkerRead,false);
+ assert.equal(normalizeState(state).styleAbilities.scout.room,'willowbank');
+ act(state,'keeperClue',{id:'keeperMarker'});
+ assert.equal(state.adventure.keeperRouteFound,false);
+ state.location='waystation';state.position={x:9,y:5};
+ assert.throws(()=>act(state,'abilityCast',{id:'scoutAhead'},2000),/recharging/);
+ act(state,'abilityCast',{id:'scoutAhead'},181000);
+ assert.equal(state.styleAbilities.scout.room,'waystation');
+ act(state,'keeperClue',{id:'keeperCrate'},181001);
+ assert.equal(state.adventure.keeperRouteFound,true);
+});

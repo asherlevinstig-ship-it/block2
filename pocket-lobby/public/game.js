@@ -3612,7 +3612,8 @@ function updateWorldLabels(){
   const owner=currentShopLicence();
   const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
   const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
-  const labelKey=key+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  const scout=scoutedKeeperClue();
+  const labelKey=key+'|'+(scout?.room??'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   worldLabelBounds=[];
@@ -3752,7 +3753,11 @@ function updateWorldLabels(){
   for(const [type,clue] of Object.entries(keeperSites)){
     if(clue.room!==currentRoom)continue;
     const item=roomFurniture().find(item=>item.type===type);
-    if(item)add(clue.label,...point(clue.x+.5,clue.y+.5,38),'npc',()=>use(item));
+    if(item){
+      const marked=scout===clue;
+      const label=add(marked?'Scouted clue':clue.label,...point(clue.x+.5,clue.y+.5,38),'npc',()=>use(item),marked?clue.label:'');
+      if(marked)label.classList.add('scouted-keeper-label');
+    }
   }
   if(currentRoom===waystationRoom){
     const sign=roomFurniture().find(item=>item.type==='waystationSign');
@@ -3985,7 +3990,7 @@ function draw(time){
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
-    const familiar=drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
+    const familiar=scoutAnimationActive(time)?null:drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
     renderedActors.push({id:'self',name:avatar.name,wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
     if(veiled){
@@ -4057,6 +4062,7 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  drawFamiliarScout(time);
   if(abilityBursts.length){
     abilityBursts=abilityBursts.filter(effect=>time-effect.started<920);
     window.drawAbilityBursts?.(ctx,point,abilityBursts,currentRoom,time,reducedMotion.matches);
@@ -6122,6 +6128,35 @@ function applyServerGameplay(state){
   Object.assign(huntingLoot,state.huntingLoot);
   updateEssenceHotbar();updateUpgradeGoalHud();if($('hudMapDialog').open)previewMapRoute();
 }
+let scoutAnimation=null;
+function scoutedKeeperClue(){
+  const state=window.playerCloud?.initial;
+  if(!state||routineControlled())return null;
+  return window.activeScoutClue?.({...state,location:currentRoom},combatNow());
+}
+function scoutAnimationActive(time){
+  return scoutAnimation?.room===currentRoom&&scoutAnimation.id===familiarState.equipped&&scoutAnimation.started+scoutAnimation.duration>time&&!reducedMotion.matches;
+}
+function drawFamiliarScout(time){
+  const clue=scoutedKeeperClue(),animation=scoutAnimation;
+  if(clue){
+    const [x,y]=point(clue.x+.5,clue.y+.5,22);
+    window.drawScoutSignal?.(ctx,x,y,time,reducedMotion.matches);
+  }
+  if(!scoutAnimationActive(time))return;
+  const {id,path,started,travel}=animation,age=time-started;
+  const progress=Math.min(path.length-1,Math.max(0,age/travel*(path.length-1)));
+  const a=path[Math.floor(progress)],b=path[Math.min(path.length-1,Math.ceil(progress))],step=progress%1;
+  const [x,y]=point(a.x+(b.x-a.x)*step+.5,a.y+(b.y-a.y)*step+.5);
+  drawFamiliar(ctx,id,x,y,time,{flipped:b.x-a.x<b.y-a.y,pose:age<travel?(id==='owl'?'fly':'walk'):'bond',flightBlend:id==='owl'?1:0});
+}
+function animateFamiliarScout(site){
+  const from={x:player.cx,y:player.cy};
+  const routes=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>walkingPath(from,{x:site.x+dx,y:site.y+dy})).filter(Boolean);
+  routes.sort((a,b)=>a.length-b.length);
+  const path=[from,...(routes[0]??[])],travel=Math.max(240,Math.min(2350,path.length*155));
+  scoutAnimation={id:familiarState.equipped,room:currentRoom,path,started:performance.now(),travel,duration:travel+750};
+}
 let shadowstepTargeting=false,styleAbilityKey='',abilityTransition=false,abilityBursts=[];
 let shadowstepPreview={key:'',tiles:[]};
 function shadowstepTargets(){
@@ -6212,6 +6247,12 @@ async function castStyleAbility(id,body){
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
     if(dialog.open)dialog.close();
+    if(id==='scoutAhead'){
+      const site=scoutedKeeperClue();
+      if(site)animateFamiliarScout(site);
+      worldLabelKey='';note('Your familiar found a crest. Follow the gold signal and read the clue.');
+      refreshStyleAbilityBar();return;
+    }
     if(id==='trackPrey'){
       worldLabelKey='';note('Fresh tracks. Walk to the glowing pawprints and read them.');
       refreshStyleAbilityBar();return;

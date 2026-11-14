@@ -1,4 +1,4 @@
-import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail} from '../public/style-abilities.js';
+import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {shadowstepTiles} from '../public/shadowstep-tiles.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
@@ -28,6 +28,15 @@ export function styleAbilityAction(state,action,body,now){
   return true;
  }
  if((abilities.readyAt[id]??0)>now)throw invalid('This ability is still recharging.');
+ if(id==='scoutAhead'){
+  if(!state.familiars?.owned?.includes(state.familiars.equipped))throw invalid('Equip a familiar before scouting.');
+  if(encounter||state.depthsRun)throw invalid('Finish combat before scouting.');
+  if(!scoutAheadSite(state))throw invalid(state.adventure?.keeperRouteFound?'You already found the path to Keepers’ Overlook.':state.adventure?.keeperMarkerRead?'Use Scout Ahead at the Waystation to find the matching crest.':'Use Scout Ahead in Willowbank to find the faded crest.');
+  abilities.scout={room:state.location,at:now};
+  abilities.readyAt[id]=now+styleAbilities[id].cooldown;
+  state.styleAbilities=abilities;
+  return true;
+ }
  if(id==='trackPrey'){
   if(state.location!==preyTrail.room||encounter||state.depthsRun)throw invalid('Use Track Prey in Bramble Clearing outside combat.');
   abilities.preyTrail={until:now+preyTrail.duration,step:0,cleared:false};
