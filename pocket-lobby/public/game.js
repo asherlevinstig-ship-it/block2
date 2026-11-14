@@ -6322,14 +6322,26 @@ function refreshStyleAbilityBar(){
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
   bar.replaceChildren();
+  const teacher=state.styleAbilities?.teacherAccess===true;
+  const controls=teacher?document.createElement('select'):null;
+  if(controls){
+    controls.setAttribute('aria-label','Teacher abilities');
+    const prompt=document.createElement('option');prompt.value='';prompt.textContent='Teacher abilities';controls.append(prompt);
+    bar.append(controls);
+  }
+  const teacherActions=new Map();
   for(const [index,id] of learned.entries()){
     const ability=window.styleAbilities[id],button=document.createElement('button');button.title=ability.description;
     button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
     button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():id==='bloodlust'?openStyleAbilities():['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id)?window.towerRobbery?.openPower(id):castStyleAbility(id,{});
-    bar.append(button);
+    if(controls){
+      const option=document.createElement('option');option.value=id;option.textContent=button.textContent;option.disabled=button.disabled;controls.append(option);
+      teacherActions.set(id,button.onclick);
+    }else bar.append(button);
   }
+  if(controls)controls.onchange=()=>{const use=teacherActions.get(controls.value);controls.value='';use?.();};
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
   menu.onclick=()=>openStyleAbilities();bar.append(menu);
 }

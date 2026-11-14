@@ -6,15 +6,17 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   const el=doc.createElement(tag);if(text!==undefined)el.textContent=text;
   el.className=cls;parent.append(el);return el;
  };
+ const teacher=state.styleAbilities?.teacherAccess===true;
  const learned=state.styleAbilities?.learned??[];
+ const permanent=teacher?state.styleAbilities.permanentLearned??[]:learned;
  create('p','Choose the powers that shape your character.',contents,'offer-intro');
  const slotRow=create('ol',undefined,contents,'permanent-slots');
  for(let i=0;i<slots;i++){
-  const ability=catalog[learned[i]],slot=create('li',undefined,slotRow,ability?'filled':'empty');
+  const ability=catalog[permanent[i]],slot=create('li',undefined,slotRow,ability?'filled':'empty');
   create('span',ability?.icon??'◇',slot);
   create('strong',ability?.name??'Open slot',slot);
  }
- create('p',learned.length+' of '+slots+' slots filled · Accepted abilities are permanent.',contents,'offer-commitment');
+ create('p',teacher?'Teacher access · All learnable abilities available. '+permanent.length+' of '+slots+' permanent slots filled.':learned.length+' of '+slots+' slots filled · Accepted abilities are permanent.',contents,'offer-commitment');
  for(const id of learned){
   const progress=mastery(state,id),card=create('section',undefined,contents,'ability-mastery-card');
   create('strong',catalog[id].name+' · Mastery '+progress.stage+' / 3',card);

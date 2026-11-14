@@ -126,3 +126,31 @@ test('only verified LiveWeave teachers can enable Unlimited AP without changing 
   assert.equal((await change('save',{state:{...packet.state,location:'home',position:{x:5,y:7}}})).status,402);
  }
 });
+
+test('teacher ability access is verified per session and preserves permanent slots',async t=>{
+ const {db,sql}=testDatabase(),env={TOWER_DB:db};t.after(()=>sql.close());
+ const player=client(env);
+ await player.call('player/session',{});
+ assert.equal((await player.call('account/register',{username:'AbilityFixture',password:'a sufficiently long passphrase'})).status,200);
+ const account=sql.prepare('SELECT account_id,player_id FROM tower_accounts WHERE username=?').get('AbilityFixture');
+ const save=sql.prepare('SELECT state_json FROM tower_players WHERE player_id=?').get(account.player_id);
+ const state=JSON.parse(save.state_json);
+ state.characterCreated=true;
+ state.styleAbilities={learned:['waypoint']};
+ sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(state),account.player_id);
+ const read=async()=>(await player.call('player/state')).data;
+ assert.deepEqual((await read()).state.styleAbilities.learned,['waypoint']);
+ sql.prepare('INSERT INTO tower_external_accounts VALUES (?,?,?,?,?)').run('liveweave','teacher:77',77,account.account_id,Date.now());
+ const packet=await read();
+ assert(packet.state.styleAbilities.learned.includes('stoneguard'));
+ assert.deepEqual(packet.state.styleAbilities.permanentLearned,['waypoint']);
+ const result=await player.call('player/gameplay/abilityCast',{id:'patientCast',revision:packet.revision,operation:crypto.randomUUID()});
+ assert.equal(result.status,200);
+ assert.equal(result.data.state.styleAbilities.patientCastReady,true);
+ sql.prepare('DELETE FROM tower_external_accounts WHERE account_id=?').run(account.account_id);
+ const ordinary=await read();
+ assert.deepEqual(ordinary.state.styleAbilities.learned,['waypoint']);
+ const forged=await player.call('player/save',{state:packet.state,revision:ordinary.revision,operation:crypto.randomUUID()});
+ assert.equal(forged.status,200);
+ assert.deepEqual(forged.data.state.styleAbilities.learned,['waypoint']);
+});

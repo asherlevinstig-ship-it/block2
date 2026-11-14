@@ -1,3 +1,4 @@
+import {normalizeStyleAbilities} from '../public/style-abilities.js';
 import {setAutoAbilityMotion} from './auto-abilities.mjs';
 import {readHearth,changeHearth} from './hearth.mjs';
 import {pvpStrike,reportPvp,mostWanted} from './pvp.mjs';
@@ -66,8 +67,15 @@ const enablePhysicalWork=(state,env)=>{
 const touchPresence=(state,now,options,env)=>updatePresence(state,now,{...options,physicalTimber:!!(env.SHARED_ROOMS&&env.TOWER_DB.batch),physicalFishing:physicalFishing(env)});
 const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
-function readPlayerState(row,env){
+function readPlayerState(row,env,teacher){
   const state=JSON.parse(row.state_json);
+  if(teacher&&state.characterCreated!==false){
+    const stored=state.styleAbilities;
+    state.styleAbilities=normalizeStyleAbilities({...stored,teacherAccess:true,permanentLearned:stored?.teacherAccess?stored.permanentLearned:stored?.learned});
+  }else if(teacher===false&&state.styleAbilities?.teacherAccess){
+    const {teacherAccess,permanentLearned,...stored}=state.styleAbilities;
+    state.styleAbilities=normalizeStyleAbilities({...stored,learned:permanentLearned});
+  }
   state.actionPoints=normalizeActionPoints(state.actionPoints);
   state.mining=normalizeMining(state.mining);
   migrateProgression(state);
@@ -88,7 +96,7 @@ function readPlayerState(row,env){
   if(state.report)delete state.report.deepRoots;
   return state;
 }
-export const packet=(row,env)=>({state:publicPlayerState(readPlayerState(row,env)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
+export const packet=(row,env,teacher=false)=>({state:publicPlayerState(readPlayerState(row,env,teacher)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
@@ -138,7 +146,14 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
     if(!row)return null;
-    const state=readPlayerState(row,env);
+    const stored=JSON.parse(row.state_json);
+    let teacher;
+    if(stored.styleAbilities?.teacherAccess){
+      const role=await db.prepare(`SELECT 1 AS verified FROM tower_accounts a JOIN tower_external_accounts e ON e.account_id=a.account_id
+        WHERE a.player_id=? AND e.provider='liveweave' AND e.subject GLOB 'teacher:[0-9]*' LIMIT 1`).bind(id).first();
+      teacher=role?.verified===1;
+    }
+    const state=readPlayerState(row,env,teacher);
     const now=Date.now();
     setAutoAbilityMotion(state,motion,now);
     if(!idle&&state.plan?.fishingWork?.batchUntil)return row;
@@ -204,7 +219,8 @@ async function bodyOf(request){
 export async function handlePlayerApi(request,env){
   if(!env.TOWER_DB)return json({error:"Player storage is temporarily unavailable."},503);
   const path=new URL(request.url).pathname;
-  const playerPacket=row=>packet(row,env);
+  let verifiedTeacher=false;
+  const playerPacket=row=>packet(row,env,verifiedTeacher);
   if(path==="/api/player/health"&&request.method==="GET"){
     await env.TOWER_DB.prepare("SELECT 1 AS ready").first();
     return json({ok:true,service:"tower-player-saves"});
@@ -219,6 +235,7 @@ export async function handlePlayerApi(request,env){
   try{
     const identity=await resolveIdentity(request,env);
     if(identity?.expired)return json({error:"Your account session expired. Sign in to continue.",reauthenticate:true},401);
+    verifiedTeacher=identity?.teacher===true;
     let id=identity?.playerId;
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env,id,true);
@@ -336,7 +353,7 @@ export async function handlePlayerApi(request,env){
     }
     if(path==='/api/player/hearth'){
       if(row.revision!==body.revision&&row.last_request!==body.operation)return json({error:'Your character changed. Try again.',...playerPacket(row)},409);
-      await changeHearth(env,row,body);
+      await changeHearth(env,{...row,state_json:JSON.stringify(readPlayerState(row,env,verifiedTeacher))},body);
       return json({...playerPacket(await read(env.TOWER_DB,id)),hearth:await readHearth(env.TOWER_DB,id)});
     }
     if(row.last_request===body.operation){
@@ -362,13 +379,13 @@ export async function handlePlayerApi(request,env){
     if(path==='/api/player/pvp'&&body.kind==='report')return json({...playerPacket(row),reported:await reportPvp(env,id,body.incident)});
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...playerPacket(row)},409);
     if(path==='/api/player/vault-coop'){
-      const result=await writeVaultParty(env.TOWER_DB,env.ESSENCES_PAUSED===true?{...row,state_json:JSON.stringify(readPlayerState(row,env))}:row,body);if(!result)return json({error:'Your character changed. Refresh the Vault party.',...playerPacket(await read(env.TOWER_DB,id))},409);
+      const result=await writeVaultParty(env.TOWER_DB,{...row,state_json:JSON.stringify(readPlayerState(row,env,verifiedTeacher))},body);if(!result)return json({error:'Your character changed. Refresh the Vault party.',...playerPacket(await read(env.TOWER_DB,id))},409);
       await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(result.updated.state_json),result.updated.revision,{fresh:true});
       return json({...playerPacket(result.updated),raid:result.raid,receipt:result.receipt});
     }
     if(JSON.parse(row.state_json).vaultCoop&&!['/api/player/save','/api/player/presence'].includes(path)&&!path.startsWith('/api/player/learning/'))return json({error:'Leave the co-op Vault party before starting another activity.'},400);
     if(path==='/api/player/mill-raid'){
-      const result=await writeMillRaid(env.TOWER_DB,env.ESSENCES_PAUSED===true?{...row,state_json:JSON.stringify(readPlayerState(row,env))}:row,body);
+      const result=await writeMillRaid(env.TOWER_DB,{...row,state_json:JSON.stringify(readPlayerState(row,env,verifiedTeacher))},body);
       if(!result)return json({error:'Your character changed. Refresh the mill event.',...playerPacket(await read(env.TOWER_DB,id))},409);
       const before=JSON.parse(row.state_json),after=JSON.parse(result.updated.state_json),at=Date.now(),extraEvents=[];
       for(const [kind,amount,label] of [['damage',Math.max(0,before.health-after.health),'HP'],['heal',Math.max(0,after.health-before.health),'HP'],['gold',Math.max(0,after.credits-before.credits),'gold'],['loss',Math.max(0,before.credits-after.credits),'gold']])if(amount)extraEvents.push({id:'raid:'+body.operation+':'+kind,kind,amount,label:(['damage','loss'].includes(kind)?'-':'+')+amount+' '+label,at,room:'millbrook'});
@@ -379,7 +396,7 @@ export async function handlePlayerApi(request,env){
       }
       return json({...playerPacket(result.updated),raid:result.raid,receipt:result.receipt});
     }
-    let state=readPlayerState(row,env),factionId=null,treeMutation=null,pondCatchAt=null;
+    let state=readPlayerState(row,env,verifiedTeacher),factionId=null,treeMutation=null,pondCatchAt=null;
     if(path==='/api/player/public-requests'){
       const updated=await deliverPublicRequest(env.TOWER_DB,row,state,body.id,body.operation,Date.now());
       if(!updated)return json({error:'The board changed. Refresh it and try again.',...playerPacket(await read(env.TOWER_DB,id))},409);
