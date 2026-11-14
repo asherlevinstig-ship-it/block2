@@ -1,9 +1,10 @@
+import {recordShopPurchase} from './shop-licences.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
 import {beginAutoCooking} from './auto-cooking.mjs';
 import {spendAutoPoint} from './action-points.mjs';
 import {isSmartlyDressed} from '../public/wardrobe.js';
 import {autoBankGold} from './banking.mjs';
-import {gamblingAction,handTotal} from './gambling.mjs';
+import {gamblingAction,handTotal,loungeRevenue} from './gambling.mjs';
 export const AUTO_GAMBLE_INTERVAL=30000;
 export function startAutoGambling(state,rules,now,metadata){
  state.plan={...metadata,kind:'gambling',policy:{...rules.gambling},startedAt:now,endAt:metadata.routineCapAt,nextRoundAt:now+AUTO_GAMBLE_INTERVAL,rounds:0,wins:0,losses:0,pushes:0,totalLost:0,goldEarned:0,goldSpent:0,xp:0,recent:[]};
@@ -26,6 +27,7 @@ export function settleAutoGambling(state,now,{stop=false,random=Math.random}={})
   if(c.game==='roulette')gamblingAction(table,'gambleMove',{roundId:round.id,move:'reveal'},at,random===Math.random?undefined:random);
   else for(let n=0;n<12&&round.status==='playing';n++)gamblingAction(table,'gambleMove',{roundId:round.id,move:handTotal(round.player)<17?'hit':'stand'},at,random===Math.random?undefined:random);
   state.credits=table.credits;state.goldEarned=table.goldEarned;state.gambling=table.gambling;
+  recordShopPurchase(state,'lounge',loungeRevenue(round),round.finishedAt);
   const net=round.payout-round.bet;p.rounds++;p[round.outcome==='win'?'wins':round.outcome==='push'?'pushes':'losses']++;
   p.goldSpent+=round.bet;p.goldEarned+=round.payout;p.totalLost+=Math.max(0,-net);p.xp+=(state.stats.luckXp??0)-before;
   p.recent=[...p.recent,{at,outcome:round.outcome,net,bet:round.bet,...(c.game==='roulette'?{number:round.number,color:round.resultColor}:{player:handTotal(round.player),dealer:handTotal(round.dealer)})}].slice(-8);

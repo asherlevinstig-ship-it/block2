@@ -8,10 +8,10 @@ const reject=(message,status=400)=>Object.assign(new Error(message),{status});
 const committed='changes()>0 AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=? AND last_request=?)';
 
 // Keep pending sales outside player snapshots. They only settle with the matching player revision.
-export function recordShopPurchase(state,shop,gold,at){
+export function recordShopPurchase(state,shop,gold,at,otherParty=null){
   if(!gold)return;
   const sales=purchases.get(state)??[];
-  sales.push({shop,gold,at});
+  sales.push({shop,gold,at,otherParty});
   purchases.set(state,sales);
 }
 
@@ -20,18 +20,18 @@ export function shopSaleStatements(db,state,id,revision,operation){
   if(!sales?.length)return [];
   const payload=JSON.stringify(sales);
   const salesQuery=`SELECT json_extract(value,'$.shop') AS shop, json_extract(value,'$.gold') AS gold,
-    json_extract(value,'$.at') AS at FROM json_each(?)`;
+    json_extract(value,'$.at') AS at, json_extract(value,'$.otherParty') AS other_party FROM json_each(?)`;
   return [
     db.prepare(`WITH sales AS (${salesQuery})
       INSERT INTO tower_shop_sales (shop,day,gold)
-      SELECT shop,at/?,SUM(gold) FROM sales WHERE ${committed} GROUP BY shop,at/?
+      SELECT shop,CAST(at/? AS INTEGER),SUM(gold) FROM sales WHERE ${committed} GROUP BY shop,CAST(at/? AS INTEGER)
       ON CONFLICT(shop,day) DO UPDATE SET gold=gold+excluded.gold RETURNING shop`)
       .bind(payload,dayMs,id,revision,operation,dayMs),
     db.prepare(`WITH sales AS (${salesQuery})
       INSERT INTO tower_shop_earnings (owner_id,tenths)
       SELECT owner_id,SUM(gold)*?/10 FROM sales
       JOIN tower_shop_licences AS licences ON sales.shop=licences.shop AND at>=starts_at AND at<ends_at
-      WHERE owner_id<>? AND ${committed} GROUP BY owner_id
+      WHERE owner_id<>? AND owner_id IS NOT other_party AND ${committed} GROUP BY owner_id
       ON CONFLICT(owner_id) DO UPDATE SET tenths=tenths+excluded.tenths RETURNING owner_id`)
       .bind(payload,shopCommissionPercent,id,id,revision,operation)
   ];
@@ -55,8 +55,8 @@ export async function shopLicenceBoard(db,id,now=Date.now()){
 
 export async function changeShopLicence(db,row,state,{kind,operation},now=Date.now()){
   const id=row.player_id,shop=state.location,offer=Object.hasOwn(shopLicences,shop)?shopLicences[shop]:null;
-  if(!offer||state.characterCreated===false||state.controlMode==='auto'||state.plan||state.report||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0){
-    throw reject('Visit the bakery or fishing shop in Play mode to manage licences.');
+  if(!offer||state.characterCreated===false||state.controlMode==='auto'||state.plan||state.report||state.gambling?.round?.status==='playing'||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0){
+    throw reject('Visit a licensed venue in Play mode and finish your current activity first.');
   }
   const revisionGuard='EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?)';
   let change;
@@ -91,4 +91,3 @@ export async function changeShopLicence(db,row,state,{kind,operation},now=Date.n
   }
   return saved.results[0];
 }
-

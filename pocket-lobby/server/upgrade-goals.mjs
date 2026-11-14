@@ -10,7 +10,7 @@ export function resolveQueueGoal(state,plan,at){
   else if(state.credits-item.price<plan.queue.reserveGold)receipt.reason='gold-reserve';
   else{
    state.credits-=item.price;plan.goldSpent+=item.price;plan.goalSpent=item.price;
-   if(item.kind==='weapon'){state.combatGear.ownedWeapons.push(item.id);state.combatGear.equippedWeapon=item.id;}
+   if(item.kind==='weapon'){recordShopPurchase(state,'armory',item.price,at);state.combatGear.ownedWeapons.push(item.id);state.combatGear.equippedWeapon=item.id;}
    else{recordShopPurchase(state,'store',item.price,at);state.fishingGear.ownedRods.push(item.id);state.fishingGear.equippedRod=item.id;}
    receipt.status='purchased';receipt.spent=item.price;
   }

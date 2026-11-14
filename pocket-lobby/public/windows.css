@@ -554,3 +554,5 @@
 .activity-skill-details{margin-top:18px}.activity-skill-details summary{color:#f1dfb7;font-weight:750;cursor:pointer}.activity-skill-details .attribute-grid{margin-top:10px}
 
 .shop-licence{margin-top:14px;padding:12px 15px;background:#14233a;border:1px solid #435b7c;border-radius:9px}.shop-licence summary{cursor:pointer;color:#f0d38d;font-weight:750}.shop-licence>div{padding-top:10px}.shop-licence p{margin:5px 0 9px;color:#b8c9de}.shop-licence button{margin:5px 8px 0 0;min-height:38px;width:auto;max-width:100%;white-space:normal}
+
+#venueLicenceDialog{width:min(440px,92vw)}#venueLicenceDialog .shop-licence{margin-top:0}button.world-label-sign{pointer-events:auto;cursor:pointer}

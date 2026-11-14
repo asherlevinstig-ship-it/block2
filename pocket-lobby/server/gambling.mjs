@@ -3,6 +3,8 @@ import {publicLearning} from './learning.mjs';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {roomBoxes} from '../public/shared-world.js';
 
+export const loungeRevenue=round=>round?.status==='complete'?Math.max(0,round.bet-round.payout):0;
+
 export const luckRules={xp:2,interval:30000,levelXp:50};
 const stakes=[5,10,25];
 const red=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);

@@ -3521,7 +3521,11 @@ function currentShopLicence(){
   return window.shopLicences?.[currentRoom]?shopBoard?.shops[currentRoom]:null;
 }
 function renderShopLicence(){
-  const room=currentRoom,offer=currentShopLicence(),panel=$(room==='bakery'?'bakeryLicence':'fishingLicence');
+  const room=currentRoom,offer=currentShopLicence();
+  const panels=[$('venueLicenceDetails'),$(room==='bakery'?'bakeryLicence':'fishingLicence')].filter(panel=>panel&&(panel.id==='venueLicenceDetails'||['bakery','store'].includes(room)));
+  for(const panel of panels)renderLicencePanel(panel,offer,room);
+}
+function renderLicencePanel(panel,offer,room){
   if(!panel||!window.shopLicences?.[room])return;
   const content=panel.querySelector('div');content.replaceChildren();
   const text=(value,tag='p')=>{const element=document.createElement(tag);element.textContent=value;content.append(element);return element;};
@@ -3530,9 +3534,9 @@ function renderShopLicence(){
   text(active?'Licensed to '+offer.owner:'Available to license','strong');
   if(active)text('Expires '+new Date(offer.endsAt).toLocaleString());
   const percent=window.shopCommissionPercent;
-  text(window.shopLicenceDays+' days · '+percent+'% of other players’ purchases.');
+  text(window.shopLicenceDays+' days · '+percent+'% of other players’ '+(offer.revenue??'purchases')+'.');
   text(offer.price.toLocaleString()+' gold · Trading level '+offer.trading);
-  text(offer.recentSales.toLocaleString()+' gold in sales over the last seven calendar days · '+Math.ceil(offer.price*100/percent).toLocaleString()+' in eligible sales to break even.');
+  text(offer.recentSales.toLocaleString()+' gold in '+(offer.volume??'sales')+' over the last seven calendar days · '+Math.ceil(offer.price*100/percent).toLocaleString()+' gold in eligible volume to break even.');
   const action=(label,kind,disabled)=>{
     const button=document.createElement('button');button.type='button';button.textContent=label;
     button.disabled=disabled||shopLicenceBusy;button.onclick=()=>submitShopLicence(kind);content.append(button);
@@ -3566,6 +3570,13 @@ async function submitShopLicence(kind){
 }
 let worldLabelKey='';
 
+function openVenueLicence(){
+  const dialog=$('venueLicenceDialog'),offer=window.shopLicences?.[currentRoom];
+  if(!dialog||!offer||routineControlled())return;
+  $('venueLicenceTitle').textContent=offer.name+' licence';
+  shopLicenceError='';renderShopLicence();refreshShopLicence();
+  if(!dialog.open)dialog.showModal();
+}
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
@@ -3659,7 +3670,12 @@ function updateWorldLabels(){
       add(label,...point(item.x+.5,item.y+.5,height),'npc',()=>use(item));
     }
   }
-  if(shopOwner)add('SHOP OWNER',...point(currentRoom==='bakery'?4:3.4,0,48),'sign',null,shopOwner,{side:'right',width:66,font:6});
+  if(window.shopLicences?.[currentRoom]){
+    const lounge=currentRoom==='lounge';
+    const site=lounge?point(0,6.4,48):point(currentRoom==='market'?6.2:3.4,0,48);
+    if(shopOwner)add('SHOP OWNER',...site,'sign',openVenueLicence,shopOwner,{side:lounge?'left':'right',width:66,font:6});
+    else add('Shop licence',...site,'sign',openVenueLicence,'',{side:lounge?'left':'right',width:55,font:6});
+  }
   if(currentRoom==='bakery')add('Baker',...point(foodStall.x+.5,foodStall.y+.5,47),'npc',()=>use(bakeryFurniture[0]),'Buy Tower Bread');
   if(currentRoom==='hub'){
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
@@ -8226,6 +8242,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
     if(next===moonwood.trailCamp.room)campReadAt=-Infinity;
   }
   if(currentRoom!==next)willowbankFlock(0,null);
+  if(next!==currentRoom&&$('venueLicenceDialog')?.open)$('venueLicenceDialog').close();
   currentRoom=next;refreshShopLicence();selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;

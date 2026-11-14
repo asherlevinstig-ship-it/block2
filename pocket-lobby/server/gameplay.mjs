@@ -46,7 +46,7 @@ import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {essenceAction} from './essences.mjs';
-import {gamblingAction} from './gambling.mjs';
+import {loungeRevenue,gamblingAction} from './gambling.mjs';
 import {factionHall,factionHallRest,factionHallStove} from '../public/faction-hall.js';
 import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread,homeCookingBatch} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
@@ -126,7 +126,14 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
   }
   if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
-  if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='gamble'||action==='gambleMove'){
+    const previous=state.gambling?.round;
+    const alreadySettled=previous?.status==='complete'?previous.id:null;
+    gamblingAction(state,action,body,now,random===Math.random?undefined:random);
+    const round=state.gambling.round;
+    if(round.id!==alreadySettled)recordShopPurchase(state,'lounge',loungeRevenue(round),now);
+    return;
+  }
   if(action==='emberMend'){
     available(state);
     if(state.fishingCast||state.timberCut||state.bedRest||state.gambling?.round?.status==='playing')throw new Error('Choose Ember Mend after finishing your current activity.');
@@ -151,7 +158,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(!owned.includes(id)){
       if(item.loot)throw new Error('Defeat the Shardback Guardian to find these gloves.');
       location(state,['armory']);if(state.credits<item.price)throw new Error('Choose armour within your gold balance.');
-      state.credits-=item.price;owned.push(id);
+      state.credits-=item.price;owned.push(id);recordShopPurchase(state,'armory',item.price,now);
     }
     state.combatGear.ownedArmour=owned;state.combatGear.equippedArmour=id;state.combatGear.stonebackVestEquipped=false;return;
   }
@@ -161,10 +168,12 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     const wardrobe=normalizeWardrobe(state.wardrobe,state.avatar),quote=tailorQuote(wardrobe,body.id,body.kind);
     if(!quote.ids.length)throw new Error('Choose clothing you do not already own.');
     if(state.credits<quote.price)throw new Error('Choose clothing within your gold balance.');
-    state.credits-=quote.price;wardrobe.owned.push(...quote.ids);state.wardrobe=wardrobe;return;
+    state.credits-=quote.price;recordShopPurchase(state,'tailor',quote.price,now);wardrobe.owned.push(...quote.ids);state.wardrobe=wardrobe;return;
   }
-  if(action==='buyFurniture'){purchaseFurniture(state,body.id,body.quantity);return;}
-  if(action==='buySafe'){purchaseFurniture(state,'safe',1);return;}
+  if(action==='buyFurniture'||action==='buySafe'){
+    const {cost}=action==='buySafe'?purchaseFurniture(state,'safe',1):purchaseFurniture(state,body.id,body.quantity);
+    recordShopPurchase(state,'furnishings',cost,now);return;
+  }
   if(action==='chestTransfer'||action==='chestPurpose'){
     available(state);
     if(!besideHomeChest(state)||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Travel beside your placed Wooden chest after finishing your activity.');
@@ -385,9 +394,9 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     state.tradeReceipt={id:body.id,quantity,gold,tradingXp};
     return;
   }
-  if(action==='enchant'){available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw it before enchanting.');enchantWeapon(state,body.id,body.level);return;}
+  if(action==='enchant'){available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw it before enchanting.');const {gold}=enchantWeapon(state,body.id,body.level);recordShopPurchase(state,'armory',gold,now);return;}
   if(action==='weapon'){
-    available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw this weapon from the vault first.');purchaseWeapon(state,body.id);return;
+    available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw this weapon from the vault first.');const {spent}=purchaseWeapon(state,body.id);recordShopPurchase(state,'armory',spent,now);return;
   }
   if(action==='quest'){
     if(state.autoLesson==='required')throw new Error('Choose your First Auto Job before claiming the Warden reward.');

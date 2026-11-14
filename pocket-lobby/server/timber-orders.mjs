@@ -1,3 +1,4 @@
+import {recordShopPurchase,shopSaleStatements} from './shop-licences.mjs';
 import {awardTradingXp} from './activity-xp.mjs';
 import {GOLD_CAP} from '../public/bank.js';
 
@@ -24,13 +25,13 @@ export function atTradingPost(state){
 
 export async function matchAutoTimberOrders(db,sellerId,minimumPrice,surplus,wallet){
   if(!surplus||wallet<minimumPrice)return [];
-  const {results}=await db.prepare(`SELECT order_id,price,remaining,mutation FROM tower_timber_orders
+  const {results}=await db.prepare(`SELECT order_id,buyer_id,price,remaining,mutation FROM tower_timber_orders
     WHERE remaining>0 AND buyer_id<>? AND price>=? ORDER BY price DESC,created_at,order_id LIMIT 5`).bind(sellerId,minimumPrice).all();
   const matches=[];
   for(const order of results){
     const quantity=Math.min(surplus,order.remaining,Math.floor(wallet/order.price));
     if(!quantity)continue;
-    matches.push({id:order.order_id,mutation:order.mutation,price:order.price,quantity});
+    matches.push({id:order.order_id,mutation:order.mutation,price:order.price,quantity,buyerId:order.buyer_id});
     surplus-=quantity;wallet-=quantity*order.price;
     if(!surplus)break;
   }
@@ -92,6 +93,7 @@ export async function changeTimberOrder(db,row,state,body,now){
       state.woodcutting.timber-=quantity;state.credits+=gold;
       state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+gold);
       awardTradingXp(state,quantity);
+      recordShopPurchase(state,'market',gold,now,order.buyer_id);
       receipt={kind:'fill',quantity,gold};
     }else if(body.kind==='cancel'){
       if(!remaining)throw invalid('This order has no unfilled timber to cancel.');
@@ -114,6 +116,7 @@ export async function changeTimberOrder(db,row,state,body,now){
     db.prepare(`UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=?
       AND EXISTS (SELECT 1 FROM tower_timber_orders WHERE order_id=? AND mutation=?) RETURNING *`)
       .bind(JSON.stringify(state),body.operation,now,playerId,row.revision,orderId,mutation),
+    ...shopSaleStatements(db,state,playerId,row.revision+1,body.operation),
     db.prepare('DELETE FROM tower_timber_orders WHERE order_id=? AND mutation=? AND remaining=0 AND ready=0 RETURNING order_id').bind(orderId,mutation)
   ]);
   if(result[1].results[0])return {updated:result[1].results[0],receipt};

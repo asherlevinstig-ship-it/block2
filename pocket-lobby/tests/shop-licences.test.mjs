@@ -4,13 +4,16 @@ import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
 import {changeShopLicence,recordShopPurchase,shopLicenceBoard,shopSaleStatements} from '../server/shop-licences.mjs';
 import {applyGameplayAction} from '../server/gameplay.mjs';
+import {shopLicences} from '../public/shop-licences.js';
+import {skillXpForLevel} from '../public/skill-curve.js';
+import {loungeRevenue} from '../server/gambling.mjs';
 import {normalizeState} from '../server/player-state.mjs';
 
 const start=Date.UTC(2026,10,14),week=7*86400000;
 function setup(){
  const {db,sql}=testDatabase();
  const player=(id,name,location='bakery',tradingXp=50)=>{
-  const state=normalizeState({credits:500,avatar:{...normalizeState({}).avatar,name},location,stats:{tradingXp}});
+  const state=normalizeState({credits:location==='lounge'?1500:500,avatar:{...normalizeState({}).avatar,name},location,stats:{tradingXp}});
   const row={player_id:id,revision:1};
   sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?)').run(id,JSON.stringify(state),'create',start);
   return {row,state};
@@ -101,4 +104,42 @@ test('two bakery customers see the same owner and a retried bread purchase only 
  assert.equal(replay.state.credits,470);
  assert.equal((await owner.request('shop-licences')).claimable,3);
  assert.equal((await owner.action('shopLicence',{kind:'claim'},'collect')).state.credits,403);
+});
+
+test('the Lounge is the highest tier and pays only on settled table losses',async()=>{
+ const {db,player,change,sale}=setup();
+ const level=shopLicences.lounge.trading;
+ assert.ok(Object.entries(shopLicences).filter(([id])=>id!=='lounge').every(([,offer])=>offer.trading<level));
+ await assert.rejects(change(player('novice','Cedar','lounge',skillXpForLevel(level)-1),'buy'),/Trading level 8/);
+ const owner=player('owner','Aster','lounge',skillXpForLevel(level));
+ await change(owner,'buy');
+ const guest=player('guest','Birch','lounge');
+ for(const round of [
+  {status:'playing',bet:25,payout:0},
+  {status:'complete',bet:25,payout:25},
+  {status:'complete',bet:25,payout:50},
+  {status:'complete',bet:25,payout:0}
+ ])recordShopPurchase(guest.state,'lounge',loungeRevenue(round),start+1);
+ await sale(guest,start+1,'lounge-result');
+ const board=await shopLicenceBoard(db,'owner',start+1);
+ assert.equal(board.shops.lounge.owner,'Aster');
+ assert.equal(board.shops.lounge.recentSales,25);
+ assert.equal(board.claimable,2);
+});
+
+test('Trading Post ownership excludes orders where the owner is the buyer or seller',async()=>{
+ const {db,player,change,sale}=setup();
+ const owner=player('owner','Aster','market',skillXpForLevel(6));
+ owner.state.credits=1000;
+ owner.row=await change(owner,'buy');
+ owner.state=JSON.parse(owner.row.state_json);
+ const seller=player('seller','Birch','market');
+ recordShopPurchase(seller.state,'market',100,start+1,'owner');
+ recordShopPurchase(seller.state,'market',150,start+1,'other');
+ await sale(seller,start+1,'market-guest');
+ recordShopPurchase(owner.state,'market',200,start+2,'other');
+ await sale(owner,start+2,'market-owner');
+ const board=await shopLicenceBoard(db,'owner',start+2);
+ assert.equal(board.shops.market.recentSales,450);
+ assert.equal(board.claimable,15);
 });

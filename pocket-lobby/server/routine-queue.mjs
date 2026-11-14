@@ -64,6 +64,7 @@ export function completeTimberMarketTrip(state,at,matches){
  state.woodcutting.timber-=quantity;
  state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;
  awardTradingXp(state,quantity);
+ for(const match of matches)recordShopPurchase(state,'market',match.quantity*match.price,at,match.buyerId);
  p.stepCount=quantity;delete p.timberMarketTrip;
  if(quantity)autoBankGold(state,p,at);
  nextStep(p,at,quantity?'Sold '+quantity+' timber to players for '+gold+' gold':'No timber sold at your price · Kept your timber');
