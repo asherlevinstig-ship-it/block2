@@ -1,6 +1,8 @@
 import {styleAbilities,abilityStatLevel} from './style-abilities.js';
 
 export const masteryBenefits={
+ lightFingers:['+10 success percentage points · 85% cap','+12 success percentage points · 85% cap','+15 success percentage points · 85% cap'],
+ cutpurse:['20% larger haul · 25% wallet cap','30% larger haul · 25% wallet cap','40% larger haul · 25% wallet cap'],
  raiseFallen:['Base undead strength and lifetime','+1 strike damage · +5s lifetime, up to 60s','+2 strike damage · +10s lifetime, up to 60s'],
  deathmark:['25% marked strike bonus','35% marked strike bonus','45% marked strike bonus'],
  bloodlust:['10% PvP damage bonus','15% PvP damage bonus','20% PvP damage bonus'],
@@ -17,6 +19,8 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ lightFingers:'Complete a successful Light Fingers steal. One use per attempt.',
+ cutpurse:'Successfully steal additional gold with Cutpurse. One use per attempt.',
  raiseFallen:'Have your undead ally land a creature strike. One successful use per summon.',
  deathmark:'Strike the marked player before the mark fades.',
  bloodlust:'Land a weapon strike while Bloodlust is active. One use per activation.',

@@ -1,4 +1,7 @@
-import {robberyRules,robberyChance,robberyGold,robberyStats,normalizeRobbery} from '../public/robbery-rules.js';
+import {theftQuote} from '../public/theft-abilities.js';
+import {normalizeStyleAbilities,styleAbilities} from '../public/style-abilities.js';
+import {awardAbilityUse} from './ability-mastery.mjs';
+import {robberyRules,robberyStats,normalizeRobbery} from '../public/robbery-rules.js';
 import {normalizeActionPoints} from '../public/action-points.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {publicRoomNamespace} from './shared-trees.mjs';
@@ -7,22 +10,25 @@ function ready(state,actor){
  if(state.characterCreated===false||state.autoDisconnected||state.health<=0||state.hunting?.encounter||state.hunting?.recoveryUntil||state.depthsRun)throw invalid('This player is not available for a steal attempt.');
  if(actor&&(state.controlMode==='auto'||state.plan||state.report||state.fishingCast||state.timberCut||state.miningCut||state.bedRest||state.campRest||state.gambling?.round?.status==='playing'))throw invalid('Finish your current activity and choose Play before stealing.');
 }
-export function prepareRobbery(actor,target,operation,now,random=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296){
+export function prepareRobbery(actor,target,operation,now,random=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296,power=null){
  ready(actor,true);ready(target,false);
  const a=actor.robbery=normalizeRobbery(actor.robbery),b=target.robbery=normalizeRobbery(target.robbery);
  if(a.lastAttemptAt&&now-a.lastAttemptAt<robberyRules.cooldown)throw invalid('Wait '+Math.ceil((robberyRules.cooldown-now+a.lastAttemptAt)/1000)+'s before another steal attempt.');
  if(b.protectedUntil>now)throw invalid('This player is protected after a recent attempt. Choose someone else.');
- const available=robberyGold(target.credits,actor);
+ const quote=theftQuote(actor,target,power);
+ if(quote.powerCooldownUntil>now)throw invalid('This pickpocket technique is still recharging.');
+ const available=quote.gold;
  if(!available)throw invalid('This player has no unprotected wallet gold to steal. Banked gold and the first 50 wallet gold are safe.');
  const points=normalizeActionPoints(actor.actionPoints);
  if(!points.unlimited&&points.value<robberyRules.ap)throw invalid('A steal attempt costs 10 AP. Answer more questions first.',402);
  if(actor.credits>100000000-available)throw invalid('Make room in your wallet before stealing.');
- const chance=robberyChance(actor,target),success=random()*100<chance,gold=success?available:0,xp=success?10:3;
+ const chance=quote.chance,success=random()*100<chance,gold=success?available:0,xp=success?10:3;
  if(!points.unlimited)actor.actionPoints={...points,value:points.value-robberyRules.ap,spent:Math.min(Number.MAX_SAFE_INTEGER,(points.spent??0)+robberyRules.ap),at:now};
  actor.credits+=gold;target.credits-=gold;
  actor.stats={...actor.stats,stealthXp:Math.min(MAX_SKILL_XP,(actor.stats?.stealthXp??0)+xp)};
  a.lastAttemptAt=now;b.protectedUntil=now+robberyRules.protection;
- const receipt={id:operation,at:now,success,gold,xp,chance,ap:robberyRules.ap,room:actor.location};
+ if(power){actor.styleAbilities=normalizeStyleAbilities(actor.styleAbilities);actor.styleAbilities.readyAt[power]=now+styleAbilities[power].cooldown;if(success&&(power==='lightFingers'||gold>quote.baseGold))awardAbilityUse(actor,power,operation);}
+ const receipt={...(power?{power,bonusGold:success?gold-quote.baseGold:0}:{}),id:operation,at:now,success,gold,xp,chance,ap:robberyRules.ap,room:actor.location};
  a.lastAttempt={...receipt,name:target.avatar?.name??'Player'};
  b.lastReceived={...receipt,name:actor.avatar?.name??'Player'};
  return receipt;
@@ -40,9 +46,9 @@ export async function robberyAction(env,row,actor,body,now=Date.now(),random){
  if(!targetRow)throw invalid('This player has left.');
  const target=JSON.parse(targetRow.state_json);ready(target,false);
  if(target.location!==actor.location)throw invalid('This player has changed areas.');
- const quote={chance:robberyChance(actor,target),ap:robberyRules.ap,gold:robberyGold(target.credits,actor),stats:robberyStats(actor),cooldownUntil:(actor.robbery?.lastAttemptAt??0)+robberyRules.cooldown,protectedUntil:target.robbery?.protectedUntil??0};
+ const quote={...theftQuote(actor,target,body.power??null),ap:robberyRules.ap,stats:robberyStats(actor),cooldownUntil:(actor.robbery?.lastAttemptAt??0)+robberyRules.cooldown,protectedUntil:target.robbery?.protectedUntil??0};
  if(body.kind==='preview')return {preview:quote};
- const receipt=prepareRobbery(actor,target,body.operation,now,random);
+ const receipt=prepareRobbery(actor,target,body.operation,now,random,body.power??null);
  receipt.peer=body.target;actor.robbery.lastAttempt.peer=body.target;
  const targetOperation='robbed:'+body.operation;
  // Materialize both revision checks before updating either row. One statement

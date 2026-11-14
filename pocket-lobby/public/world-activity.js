@@ -63,7 +63,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
  const seenPerks=new Set((before.equipmentEffects??[]).map(e=>e.id));
  for(const e of after.equipmentEffects??[]){if(seenPerks.has(e.id)||!equipmentPerks[e.perk])continue;const label=e.perk==='vampire'?'+'+e.amount+' HP · Vampiric Sword':e.perk==='angler'?'Better catch · Angler’s Cloak':e.perk==='prospector'?'+'+e.amount+' bonus ore · Prospector’s Gloves':'Lucky Boots · Rare drop!';add('perk:'+e.id,'perk',label,e.amount,e.at,e.room);if(events.at(-1)?.id==='perk:'+e.id)events.at(-1).perk=e.perk;}
  for(const [key,role] of [['lastAttempt','thief'],['lastReceived','victim']]){
-  const r=after.robbery?.[key];if(r?.id&&r.id!==before.robbery?.[key]?.id)add('robbery:'+role+':'+r.id,r.gold?(role==='thief'?'gold':'loss'):'push',r.gold?(role==='thief'?'+'+r.gold+' stolen gold':'−'+r.gold+' gold · Pickpocketed'):(role==='thief'?'Spotted! Steal failed':'Caught a pickpocket'),r.gold,r.at,r.room);
+  const r=after.robbery?.[key];if(role==='thief'&&r?.power&&r.id!==before.robbery?.[key]?.id)add('theft-power:'+r.id,'ability',r.power==='lightFingers'?'Light Fingers':'Cutpurse',0,r.at,r.room);if(r?.id&&r.id!==before.robbery?.[key]?.id)add('robbery:'+role+':'+r.id,r.gold?(role==='thief'?'gold':'loss'):'push',r.gold?(role==='thief'?'+'+r.gold+' stolen gold':'−'+r.gold+' gold · Pickpocketed'):(role==='thief'?'Spotted! Steal failed':'Caught a pickpocket'),r.gold,r.at,r.room);
  }
  return events.slice(-16);
 }

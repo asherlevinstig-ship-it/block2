@@ -31,6 +31,8 @@ export function activePreyTrail(state,now){
  return state.location===preyTrail.room&&trail?.until>now&&!trail.cleared?trail:null;
 }
 export const styleAbilities={
+ lightFingers:{name:'Light Fingers',icon:'✥',cost:10,cooldown:90000,description:'A careful pickpocket technique: +10 percentage points to success chance, up to 85%. Choose it for a nearby player’s steal attempt. Success and failure cost 10 AP.',requirements:{stealth:3,luck:2}},
+ cutpurse:{name:'Cutpurse',icon:'◈',cost:10,cooldown:90000,description:'A bold pickpocket technique: steal 20% more gold on success, capped at 25% of wallet gold. Banked gold and the first 50 wallet gold remain safe. Each attempt costs 10 AP.',requirements:{stealth:4,trading:3}},
  raiseFallen:{name:'Raise Fallen',icon:'☠',cooldown:90000,description:'Necromancy · Raise a beast you defeated in the last minute. One undead ally follows and strikes in wild hunts and solo dungeons every three seconds for 30–60 seconds. Higher Magic Knowledge strengthens it. Bosses and players cannot be raised.',requirements:{magicKnowledge:5,evil:3}},
  waypoint:{name:'Waypoint',icon:'◇',cooldown:180000,description:'Travel to a discovered landmark from safety.',requirements:{exploration:3}},
  shadowstep:{name:'Shadowstep',icon:'◈',cooldown:45000,description:'Blink up to four reachable tiles. In arena combat, briefly delay the creature’s pursuit.',requirements:{exploration:3,stealth:3}},
@@ -81,5 +83,5 @@ export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
+   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen','lightFingers','cutpurse'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
 }

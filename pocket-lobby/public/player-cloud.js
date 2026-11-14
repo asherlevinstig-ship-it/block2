@@ -578,7 +578,7 @@
       const robberyRules=await import('./robbery-rules.js');window.towerEquipmentStats=robberyRules.equipmentStats;window.towerItemStatText=robberyRules.itemStatText;
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
-      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},silverfinSupper:async(body=null)=>{
+      window.playerCloud={enqueue,flush,attach,refreshRobbery,robbery:async(kind,target,power=null)=>{await flush();if(gameplayBusy)throw new Error("Wait for your current action.");gameplayBusy=true;try{return await action("robbery",{kind,target,power});}finally{gameplayBusy=false;}},prepareAccountChange:async()=>{if(!pausedForPoints&&!window.towerAuthRequired){window.towerPauseForAccount?.();window.towerSaveNow?.();await flush();}window.towerMultiplayer?.disconnect();},silverfinSupper:async(body=null)=>{
         if(gameplayBusy||acting||presenceBusy)throw new Error('Wait for your current action.');
         await flush();
         gameplayBusy=true;

@@ -6323,7 +6323,7 @@ function refreshStyleAbilityBar(){
     button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():id==='bloodlust'?openStyleAbilities():['deathmark','siphon','shadowPursuit'].includes(id)?window.towerRobbery?.openPower(id):castStyleAbility(id,{});
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():id==='bloodlust'?openStyleAbilities():['deathmark','siphon','shadowPursuit','lightFingers','cutpurse'].includes(id)?window.towerRobbery?.openPower(id):castStyleAbility(id,{});
     bar.append(button);
   }
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
@@ -9053,7 +9053,7 @@ window.towerRobberyHooks={pursue:(room,name)=>{setExplorationDestination(room);n
  applyServerGameplay(state);updateInventory();
  if(reward.kind==='item')showTransaction('PvP reward',[{icon:'◆',text:reward.name+' · Added to Inventory'}]);
  else if(reward.amount)showTransaction('PvP reward',[],reward.amount);
-},gift:state=>window.towerApplySupperInventory(state),peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};
+},gift:state=>window.towerApplySupperInventory(state),peers:()=>[...remotePeers.values()],local:()=>({x:player.cx,y:player.cy}),pause:()=>window.towerPauseForAccount(),result:(state,receipt)=>{applyServerGameplay(state);updateInventory();refreshStyleAbilityBar();if(receipt.power)abilityBursts.push({id:receipt.power,room:currentRoom,tile:{x:player.cx,y:player.cy},phase:'arrival',started:performance.now()});note(receipt.success?'Stole '+receipt.gold+' gold! +'+receipt.xp+' Stealth XP.':'Spotted! The attempt cost 10 AP. +'+receipt.xp+' Stealth XP.');}};
 
 function currentCombatBuild(){return window.combatBuild({combatGear,wardrobe,magic:magicState,hunting});}
 window.towerBuildHooks={state:()=>({...currentGoalState(),wardrobe,magic:magicState,hunting}),equipment:()=>openInventory(),wardrobe:()=>openAvatar(),abilities:()=>openEssences()};

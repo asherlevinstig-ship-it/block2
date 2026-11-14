@@ -1,4 +1,6 @@
 const themes={
+ lightFingers:{rim:'#97ded7',light:'#e6fff5',glow:'105,210,195',duration:800},
+ cutpurse:{rim:'#ecc474',light:'#fff2b1',glow:'235,190,95',duration:800},
  raiseFallen:{rim:'#78e6ad',light:'#e0ffc9',glow:'95,220,150',duration:920},
  deathmark:{rim:'#c88aff',light:'#f4d8ff',glow:'176,72,240',duration:800},
  siphon:{rim:'#f17aab',light:'#ffd8e5',glow:'237,72,125',duration:800},
@@ -50,7 +52,7 @@ export function drawAbilityBursts(ctx,point,effects,room,time,reduced){
    for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#7ee6b0':'#e4ffd3';ctx.fillRect(x+Math.sin(i*2.4)*r*(1-t),y-6-(i%7+1)*t*6,1.5,2.5);}
    ctx.restore();continue;
   }
-  if(['deathmark','siphon','bloodlust','shadowPursuit'].includes(id)){
+  if(['deathmark','siphon','bloodlust','shadowPursuit','lightFingers','cutpurse'].includes(id)){
    ctx.save();ctx.globalAlpha=Math.max(0,1-t);ctx.strokeStyle=theme.rim;ctx.fillStyle=theme.light;ctx.lineWidth=1.5;
    if(id==='deathmark'){
     const r=reduced?11:7+ease(t)*9;ctx.beginPath();ctx.arc(x,y-31,r,0,tau);ctx.stroke();

@@ -1,3 +1,4 @@
+import {theftPowers} from './theft-abilities.js';
 import {styleAbilities} from './style-abilities.js';
 import {pvpRooms,bountyGold} from './pvp.js';
 import {foodItems} from './cooking.js';
@@ -5,13 +6,24 @@ import {fishProducts} from './fishing.js';
 import {robberyRules,equipmentStats} from './robbery-rules.js';
 export function initializeRobbery({doc=document,cloud,hooks}){
  const dialog=doc.createElement('dialog');dialog.id='robberyDialog';dialog.className='game-window robbery-window';dialog.setAttribute('aria-labelledby','robberyTitle');
- dialog.innerHTML=`<div class="modal-head"><span class="window-emblem" aria-hidden="true">✦</span><div><div class="eyebrow">NEARBY PLAYERS</div><h2 id="robberyTitle">Nearby players</h2></div><button class="close" type="button" aria-label="Close">×</button></div><p>Choose a player within one tile.</p><div id="robberyPlayers" class="robbery-players"></div><section class="robbery-detail"><h3>Send a gift</h3>
+ dialog.innerHTML=`<div class="modal-head"><span class="window-emblem" aria-hidden="true">✦</span><div><div class="eyebrow">NEARBY PLAYERS</div><h2 id="robberyTitle">Nearby players</h2></div><button class="close" type="button" aria-label="Close">×</button></div><p>Choose a player within one tile.</p><div id="robberyPlayers" class="robbery-players"></div><section id="giftPanel" class="robbery-detail"><h3>Send a gift</h3>
  <label>Item <select id="giftItem"></select></label>
  <label>Quantity <input id="giftQuantity" type="number" min="1" max="10" value="1"></label>
  <button id="giftSend" class="primary" type="button" disabled>Send gift</button>
- <p id="giftStatus" role="status"></p></section><section id="pvpPanel" class="robbery-detail" hidden><h3>Outdoor PvP</h3><p id="pvpScore"></p><button id="pvpStrike" type="button" class="primary">Attack · 1 AP</button><div id="pvpPowers" class="offer-actions"></div><p id="pvpPowerInfo"></p><button id="pvpFollow" type="button" hidden>Follow the trail</button><p id="pvpStatus" role="status"></p></section><section class="robbery-detail"><h3>Most Wanted</h3><p>Defeat a wanted player for a ${bountyGold} gold bounty. Bounty kills carry no Evil penalty.</p><div id="pvpWitnesses"></div><button id="pvpWanted" type="button">View bounties</button><ul id="pvpWantedList" aria-live="polite"></ul></section><details id="robberyDisclosure"><summary>Pickpocket</summary><section class="robbery-detail"><div class="eyebrow">PICKPOCKETING</div><h3 id="robberyTarget">Choose a player</h3><div class="robbery-metrics"><div><small>COST PER ATTEMPT</small><b>10 AP</b></div><div><small>SUCCESS CHANCE</small><b id="robberyChance">—</b></div></div><p id="robberyEquipment"></p><p id="robberyTerms">Your haul grows with Stealth, Luck and equipped bonuses, up to 25% of wallet gold. Banked gold and the first 50 wallet gold are safe. Success and failure both cost 10 AP. One attempt per minute; the target is protected for 10 minutes afterwards.</p><button id="robberySteal" type="button" class="primary" disabled>Attempt steal · 10 AP</button><p id="robberyResult" role="status" aria-live="polite"></p></section></details><button id="robberyRefresh" type="button">Refresh nearby players</button>`;
+ <p id="giftStatus" role="status"></p></section><section id="pvpPanel" class="robbery-detail" hidden><h3>Outdoor PvP</h3><p id="pvpScore"></p><button id="pvpStrike" type="button" class="primary">Attack · 1 AP</button><div id="pvpPowers" class="offer-actions"></div><p id="pvpPowerInfo"></p><button id="pvpFollow" type="button" hidden>Follow the trail</button><p id="pvpStatus" role="status"></p></section><section id="wantedPanel" class="robbery-detail"><h3>Most Wanted</h3><p>Defeat a wanted player for a ${bountyGold} gold bounty. Bounty kills carry no Evil penalty.</p><div id="pvpWitnesses"></div><button id="pvpWanted" type="button">View bounties</button><ul id="pvpWantedList" aria-live="polite"></ul></section><details id="robberyDisclosure"><summary>Pickpocket</summary><section class="robbery-detail"><div class="eyebrow">PICKPOCKETING</div><h3 id="robberyTarget">Choose a player</h3><div class="robbery-metrics"><div><small>COST PER ATTEMPT</small><b>10 AP</b></div><div><small>SUCCESS CHANCE</small><b id="robberyChance">—</b></div></div><p id="robberyEquipment"></p><label for="robberyTechnique">Technique</label><select id="robberyTechnique"></select><p id="robberyPowerInfo"></p><p id="robberyTerms">Your haul grows with Stealth, Luck and equipped bonuses, up to 25% of wallet gold. Banked gold and the first 50 wallet gold are safe. Success and failure both cost 10 AP. One attempt per minute; the target is protected for 10 minutes afterwards.</p><button id="robberySteal" type="button" class="primary" disabled>Attempt steal · 10 AP</button><p id="robberyResult" role="status" aria-live="polite"></p></section></details><button id="robberyRefresh" type="button">Refresh nearby players</button>`;
  doc.body.append(dialog);
- const $=id=>doc.getElementById(id);let selected=null,quote=null,busy=false,requestId=0;
+ const $=id=>doc.getElementById(id);let selected=null,quote=null,busy=false,requestId=0,theftOnly=false;
+ function renderTechniques(){
+  const select=$('robberyTechnique'),old=select.value;select.replaceChildren();
+  for(const power of ['',...(cloud.initial.styleAbilities?.learned??[]).filter(id=>theftPowers.includes(id))]){
+   const option=doc.createElement('option');option.value=power;option.textContent=power?styleAbilities[power].name:'Standard pickpocket';select.append(option);
+  }
+  if([...select.options].some(option=>option.value===old))select.value=old;
+  select.disabled=busy;
+  const power=select.value;$('robberyPowerInfo').textContent=power?styleAbilities[power].description:'A regular steal attempt using your Stealth, Luck and equipped bonuses.';
+  $('robberySteal').textContent='Attempt '+(power?styleAbilities[power].name:'steal')+' · 10 AP';
+ }
+ $('robberyTechnique').onchange=()=>{renderTechniques();quote=null;$('robberySteal').disabled=true;if(selected)inspect(selected);};
  function giftOptions(){
   const peer=hooks.peers().find(p=>p.id===selected);
   const local=hooks.local(),close=peer&&!peer.auto&&Math.abs(peer.x-local.x)+Math.abs(peer.y-local.y)<=1;
@@ -43,7 +55,7 @@ export function initializeRobbery({doc=document,cloud,hooks}){
   finally{busy=false;giftOptions();}
  };
  function list(){
-  giftOptions();
+  renderTechniques();giftOptions();
   const peers=hooks.peers(),local=hooks.local();$('robberyPlayers').replaceChildren();
   if(!peers.length){const p=doc.createElement('p');p.textContent='No other players are visible here yet.';$('robberyPlayers').append(p);}
   for(const peer of peers){const button=doc.createElement('button'),distance=Math.abs(peer.x-local.x)+Math.abs(peer.y-local.y);button.type='button';button.textContent=(peer.wanted?'☠ ':'')+peer.name+' · '+(distance<=robberyRules.reach?'Nearby':'Move closer');button.setAttribute('aria-pressed',String(peer.id===selected));button.onclick=()=>inspect(peer.id);$('robberyPlayers').append(button);}
@@ -53,19 +65,20 @@ export function initializeRobbery({doc=document,cloud,hooks}){
   if(busy)return;selected=id;renderPvp();quote=null;$('giftStatus').textContent='';const current=++requestId;list();const peer=hooks.peers().find(p=>p.id===id);$('robberyTarget').textContent=peer?.name??'Player left';$('robberyChance').textContent='—';$('robberySteal').disabled=true;$('robberyResult').textContent='';
   if(!$('robberyDisclosure').open)return;
   $('robberyResult').textContent='Checking proximity…';
-  try{hooks.pause();const result=await cloud.robbery('preview',id);if(current!==requestId)return;quote=result.preview;$('robberyChance').textContent=quote.chance+'%';let reason='';
+  try{hooks.pause();const result=await cloud.robbery('preview',id,$('robberyTechnique').value||null);if(current!==requestId)return;quote=result.preview;$('robberyChance').textContent=quote.chance+'%';let reason='';
    if(quote.protectedUntil>Date.now())reason='This player is temporarily protected after a recent attempt.';
    else if(quote.cooldownUntil>Date.now())reason='Wait '+Math.ceil((quote.cooldownUntil-Date.now())/1000)+'s before your next attempt.';
+   else if(quote.powerCooldownUntil>Date.now())reason='This technique recharges in '+Math.ceil((quote.powerCooldownUntil-Date.now())/1000)+'s. Choose Standard pickpocket or wait.';
    else if(!quote.gold)reason='This player has no unprotected wallet gold.';
    else if(!cloud.initial.actionPoints?.unlimited&&(cloud.initial.actionPoints?.value??0)<robberyRules.ap)reason='You need 10 AP. Use Questions on the hotbar to earn more.';
-   $('robberySteal').disabled=!!reason;$('robberyResult').textContent=reason||'Success may take up to '+quote.gold+' gold. The target can notice your attempt.';
+   $('robberySteal').disabled=!!reason;$('robberyResult').textContent=reason||'On success: '+quote.gold+' gold'+(quote.power==='cutpurse'?' · '+(quote.gold-quote.baseGold)+' bonus gold included':quote.power==='lightFingers'?' · +'+(quote.chance-quote.baseChance)+' success percentage points':'')+'. The target can notice your attempt.';
   }catch(error){if(current===requestId)$('robberyResult').textContent=error.message;}
  }
  $('robberySteal').onclick=async()=>{
-  if(busy||!quote)return;busy=true;$('robberySteal').disabled=true;$('robberyResult').textContent='Reaching for a coin pouch…';
-  try{const result=await cloud.robbery('steal',selected),r=result.receipt;quote=null;$('robberyResult').textContent=r.success?'Success! +'+r.gold+' gold · +'+r.xp+' Stealth XP · −10 AP.':'Spotted! Nothing stolen · +'+r.xp+' Stealth XP · −10 AP.';hooks.result(result.state,r);}
+  if(busy||!quote)return;busy=true;renderTechniques();$('robberySteal').disabled=true;$('robberyResult').textContent='Reaching for a coin pouch…';
+  try{const result=await cloud.robbery('steal',selected,quote.power??null),r=result.receipt;quote=null;$('robberyResult').textContent=r.success?(r.power?styleAbilities[r.power].name+' · ':'')+'Success! +'+r.gold+' gold'+(r.bonusGold?' ('+r.bonusGold+' bonus included)':'')+' · +'+r.xp+' Stealth XP · −10 AP.':'Spotted! Nothing stolen · +'+r.xp+' Stealth XP · −10 AP.';hooks.result(result.state,r);}
   catch(error){$('robberyResult').textContent=error.message;}
-  finally{busy=false;giftOptions();}
+  finally{busy=false;renderTechniques();giftOptions();}
  };
  $('robberyDisclosure').ontoggle=()=>{if($('robberyDisclosure').open&&selected)inspect(selected);};
  $('robberyRefresh').onclick=()=>{if(busy)return;list();renderPvp();if(selected)inspect(selected);};
@@ -99,7 +112,7 @@ export function initializeRobbery({doc=document,cloud,hooks}){
  function renderPvp(){
   clearTimeout(pvpRefreshTimer);
   const state=cloud.initial,mode=state.pvp,peer=hooks.peers().find(p=>p.id===selected),local=hooks.local();
-  $('pvpPanel').hidden=!pvpRooms.has(state.location);
+  $('pvpPanel').hidden=theftOnly||!pvpRooms.has(state.location);
   $('pvpScore').textContent=(mode?.kills??0)+' kills · '+(mode?.deaths??0)+' defeats · Evil '+(state.stats.evil??0)+(mode?.wantedAt?' · ☠ Wanted':'')+' · '+(mode?.unprovokedKills??0)+' unprovoked · '+(mode?.defensiveKills??0)+' self-defence · '+(mode?.bountyKills??0)+' bounty kills. Only unprovoked kills add Evil.';
   const outOfReach=!peer||peer.auto||Math.abs(peer.x-local.x)+Math.abs(peer.y-local.y)>1;
   $('pvpStrike').disabled=busy||outOfReach;
@@ -132,7 +145,7 @@ export function initializeRobbery({doc=document,cloud,hooks}){
   finally{busy=false;renderPvp();}
  }
  $('pvpStrike').onclick=()=>changePvp({kind:'strike',target:selected});
- function open(id){if(busy)return;selected=id??null;$('pvpPowerInfo').textContent='';renderWitnesses();$('pvpStatus').textContent='';renderPvp();quote=null;$('giftStatus').textContent='';list();$('robberyChance').textContent='—';$('robberyTarget').textContent='Choose a player';$('robberyResult').textContent='';$('robberySteal').disabled=true;if(!dialog.open){$('robberyDisclosure').open=false;dialog.showModal();}if(id)inspect(id);}
+ function open(id,{theft=false}={}){if(busy)return;theftOnly=theft;$('giftPanel').hidden=theft;$('wantedPanel').hidden=theft;$('robberyTitle').textContent=theft?'Pickpocket':'Nearby players';selected=id??null;requestId++;$('pvpPowerInfo').textContent='';renderWitnesses();$('pvpStatus').textContent='';renderPvp();quote=null;$('giftStatus').textContent='';list();$('robberyChance').textContent='—';$('robberyTarget').textContent='Choose a player';$('robberyResult').textContent='';$('robberySteal').disabled=true;if(!dialog.open){$('robberyDisclosure').open=theft;dialog.showModal();}if(id)inspect(id);}
  $('nearbyPlayers').onclick=()=>open();
- return {open,openPower(power){open();$('pvpPowerInfo').textContent=styleAbilities[power]?.description??'';},witness(incident){if(incident?.id){witnessed.set(incident.id,incident);renderWitnesses();}}};
+ return {open,openPower(power){if(theftPowers.includes(power)){open(null,{theft:true});$('robberyTechnique').value=power;renderTechniques();}else{open();$('pvpPowerInfo').textContent=styleAbilities[power]?.description??'';}},witness(incident){if(incident?.id){witnessed.set(incident.id,incident);renderWitnesses();}}};
 }

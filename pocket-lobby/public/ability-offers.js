@@ -46,7 +46,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   cancel();selected=id;
   const ability=catalog[id];title.textContent=ability.name;description.textContent=ability.description;
   requirements.textContent=Object.entries(ability.requirements).map(([key,level])=>(key==='magicKnowledge'?'Magic Knowledge':key==='familiarConnection'?'Familiar Connection':key[0].toUpperCase()+key.slice(1))+' '+level).join(' · ');
-  cost.textContent=ability.passive?'Passive · Activates at most once per minute':(ability.cost===0?'0 AP': '1 AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
+  cost.textContent=ability.passive?'Passive · Activates at most once per minute':(ability.cost===0?'0 AP':(ability.cost??1)+' AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
   accept.textContent='Hold to accept '+ability.name;
   for(const button of choices.children)button.setAttribute('aria-pressed',String(button.dataset.ability===id));
  }
@@ -128,6 +128,9 @@ function drawPreview(canvas,id,time,drawCharacter,reduced){
  }else if(id==='shadowPursuit'){
   for(let i=0;i<6;i++){ctx.globalAlpha=1-i*.12;ctx.fillRect(165+i*18,112-i*5,5,3);}ctx.globalAlpha=1;
   ctx.font='bold 12px system-ui';ctx.fillText('FOLLOW THE TRAIL',170,63);
+ }else if(['lightFingers','cutpurse'].includes(id)){
+  ctx.fillStyle='#e3b967';ctx.fillRect(210,88,22,23);ctx.fillStyle='#8d6342';ctx.fillRect(213,85,16,4);ctx.fillStyle='#fff0b2';ctx.font='bold 13px system-ui';ctx.fillText(id==='lightFingers'?'+10% CHANCE':'+20% GOLD',188,64);
+  for(let i=0;i<6;i++){const a=t*5+i;ctx.beginPath();ctx.arc(190+Math.sin(a)*28,80+i*4,2,0,Math.PI*2);ctx.fill();}
  }else if(id==='trackPrey'){
   for(let i=0;i<5;i++){ctx.globalAlpha=reduced ? .8 : .3+.7*Math.max(0,Math.sin(t*6-i));ctx.fillRect(170+i*18,114-i*5,5,3);ctx.fillRect(170+i*18,110-i*5,2,2);}ctx.globalAlpha=1;
  }else if(id==='scoutAhead'){
