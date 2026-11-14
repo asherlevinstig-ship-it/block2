@@ -6316,34 +6316,52 @@ function refreshStyleAbilityBar(){
   const bar=$('styleAbilityBar'),state=window.playerCloud?.initial;
   if(!bar||!state||!window.styleAbilities)return;
   const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
-  const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt[id]??0)-combatNow())/1000)));
-  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
+  const teacher=state.styleAbilities?.teacherAccess===true;
+  const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt?.[id]??0)-combatNow())/1000)));
+  const nextKey=JSON.stringify([teacher,learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
   if(nextKey===styleAbilityKey)return;
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
-  bar.replaceChildren();
-  const teacher=state.styleAbilities?.teacherAccess===true;
-  const controls=teacher?document.createElement('select'):null;
-  if(controls){
-    controls.setAttribute('aria-label','Teacher abilities');
-    const prompt=document.createElement('option');prompt.value='';prompt.textContent='Teacher abilities';controls.append(prompt);
-    bar.append(controls);
+  let controls=bar.querySelector('.teacher-abilities');
+  if(!teacher||!controls){
+    bar.replaceChildren();
+    if(teacher){
+      controls=document.createElement('details');
+      controls.className='teacher-abilities';
+      const label=document.createElement('summary');label.textContent='Teacher abilities';controls.append(label);
+      const choices=document.createElement('div');choices.className='teacher-ability-options';controls.append(choices);
+      controls.onkeydown=event=>{
+        if(event.key==='Escape'&&controls.open){event.preventDefault();event.stopPropagation();controls.open=false;label.focus();}
+      };
+      bar.append(controls);
+    }else controls=null;
   }
-  const teacherActions=new Map();
+  const choices=controls?.querySelector('.teacher-ability-options');
+  const existing=new Map(Array.from(choices?.children??[],element=>[element.dataset.ability,element]));
   for(const [index,id] of learned.entries()){
-    const ability=window.styleAbilities[id],button=document.createElement('button');button.title=ability.description;
-    button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
+    const ability=window.styleAbilities[id],button=existing.get(id)??document.createElement('button');button.title=ability.description;
+    existing.delete(id);
+    button.type='button';button.dataset.ability=id;
+    const label=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
+    if(button.textContent!==label)button.textContent=label;
     button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():id==='bloodlust'?openStyleAbilities():['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id)?window.towerRobbery?.openPower(id):castStyleAbility(id,{});
-    if(controls){
-      const option=document.createElement('option');option.value=id;option.textContent=button.textContent;option.disabled=button.disabled;controls.append(option);
-      teacherActions.set(id,button.onclick);
-    }else bar.append(button);
+    button.onclick=()=>{
+      if(controls){controls.open=false;controls.querySelector('summary').focus();}
+      if(id==='waypoint')openStyleAbilities('waypoint');
+      else if(id==='shadowstep')aimShadowstep();
+      else if(id==='shareHearth')openHearth();
+      else if(id==='ambush')useAmbush();
+      else if(id==='appraise')openAppraisalMarket();
+      else if(id==='bloodlust')openStyleAbilities();
+      else if(['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id))window.towerRobbery?.openPower(id);
+      else castStyleAbility(id,{});
+    };
+    if(!button.parentNode)(choices??bar).append(button);
   }
-  if(controls)controls.onchange=()=>{const use=teacherActions.get(controls.value);controls.value='';use?.();};
-  const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
-  menu.onclick=()=>openStyleAbilities();bar.append(menu);
+  for(const stale of existing.values())stale.remove();
+  const menu=bar.querySelector('.style-ability-menu')??document.createElement('button');menu.className='style-ability-menu';menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
+  menu.onclick=()=>openStyleAbilities();if(!menu.parentNode)bar.append(menu);
 }
 let clearAbilityOffer=()=>{};
 function openStyleAbilities(mode){
