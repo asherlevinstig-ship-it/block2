@@ -6275,7 +6275,9 @@ function refreshStyleAbilityBar(){
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
   menu.onclick=()=>openStyleAbilities();bar.append(menu);
 }
+let clearAbilityOffer=()=>{};
 function openStyleAbilities(mode){
+  clearAbilityOffer();
   const dialog=$('styleAbilityDialog'),state=window.playerCloud?.initial;
   if(!dialog||!state||!window.styleAbilities)return;
   const contents=$('styleAbilityContents'),status=$('styleAbilityStatus');
@@ -6294,23 +6296,17 @@ function openStyleAbilities(mode){
     for(const [destination,place] of places)button(contents,place.name,()=>castStyleAbility('waypoint',{destination}));
     if(!places.length)add(contents,'p','Discover a waypoint landmark by visiting it first.');
   }else{
-    const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
-    add(contents,'p',learned.length+' / '+window.abilitySlots+' permanent slots used. Accepting an ability fills its slot permanently.');
-    if(learned.length)add(contents,'p','Learned · '+learned.map(id=>window.styleAbilities[id].name).join(', '));
-    if(!offers.length)add(contents,'p','No ability offers are waiting.');
-    for(const id of offers){
-      const ability=window.styleAbilities[id],card=add(contents,'section','');
-      add(card,'h3',ability.name);
-      add(card,'p',ability.description+' '+(ability.cost===0?'No AP to cast':'Costs 1 AP')+' · '+(ability.cooldown/1000)+'s cooldown.');
-      add(card,'p',ability.discovery??(id==='waypoint'?'Earned by discovering areas and reaching Exploration 3.':'Earned by reaching Exploration 3 and Stealth 3.'));
-      const decide=async decision=>{
-        try{await serverGameplay('abilityDecision',{id,decision});openStyleAbilities();refreshStyleAbilityBar();}
-        catch(error){status.textContent=error.message;}
-      };
-      button(card,'Accept '+ability.name+' permanently',()=>decide('accept'));
-      button(card,'Decline',()=>decide('decline'));
-    }
-    if(offers.length)button(contents,'Decide later',()=>dialog.close());
+    clearAbilityOffer=window.renderAbilityOffers({
+      contents,status,state,catalog:window.styleAbilities,offers:window.styleAbilityOffers(state),slots:window.abilitySlots,
+      drawCharacter:(ink,x,y,time)=>{
+        ink.save();ink.translate(x,y);ink.scale(1.6,1.6);
+        sprite(ink,0,0,avatar,{time,vest:armourSelection(combatGear)});
+        ink.restore();
+      },
+      reduced:()=>reducedMotion.matches,
+      decide:async(id,decision)=>{await serverGameplay('abilityDecision',{id,decision});refreshStyleAbilityBar();},
+      done:()=>openStyleAbilities()
+    });
   }
   if(!dialog.open)dialog.showModal();
 }
