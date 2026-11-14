@@ -323,7 +323,7 @@ export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   const nextBoarAt=now+Math.max(huntEnemy(encounter).firstAttack,enemyAttack(encounter).tell);
   return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
-export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={}){
+export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={},openingMultiplier=1){
   const target=action==='attack'&&!encounter?.addActor&&activeAdd(encounter);
   if(target&&now>=target.spawnAt)return mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments),now);
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
@@ -352,7 +352,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   if(action==='attack'){
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
     if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2)result.encounter.nextPlayerAt=now+350;return result;}
-    result.damage=attributes.damage+Math.floor(random()*5);
+    result.damage=Math.ceil((attributes.damage+Math.floor(random()*5))*openingMultiplier);
     if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
       const plating=physicalPlating(encounter,result.damage,enemy.shellArmor,enemy.exposedBonus,now);

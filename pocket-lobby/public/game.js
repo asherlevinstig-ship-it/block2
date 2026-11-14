@@ -1497,7 +1497,7 @@ function updateDepthsDecisionVitals(){
   $('depthsDecisionAp').textContent=ap===Infinity?'Unlimited':ap;
   $('depthsDecisionApHint').textContent=ap===0?'Answer a question to earn 1 AP before travelling.':ap===1?'Entering uses your last AP. Attacks and abilities also cost AP.':'';
 }
-function startMonsterEncounter(enemy,standGround=false){
+function startMonsterEncounter(enemy,standGround=false,ambush=false){
   combatAudio.enable(combatSoundEnabled);
   if(currentRoom!==enemy.room||unavailable())return;
   const index=depthsStageIndex(currentRoom);
@@ -1511,9 +1511,14 @@ function startMonsterEncounter(enemy,standGround=false){
   player.direction=(site.x-player.cx)-(site.y-player.cy)>=0?'right':'left';player.back=site.x+site.y<player.cx+player.cy;
   if(window.playerCloud?.gameplay){
     const body=enemy.id==='dusktusk'?{trackedPrey:true}:enemy.moonbackId!==undefined?{moonbackId:enemy.moonbackId}:standGround?{standGround:true}:{};
+    if(ambush)body.ambush=true;
     serverGameplay('fight',body).then(packet=>{
-      serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;canvas.focus({preventScroll:true});
-      combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
+      if(ambush){
+        lastCombatReceipt=packet.state.combatReceipt?.id;
+        for(const event of packet.state.combatReceipt?.events??[])applyCombatResult(event,packet.state,true);
+      }
+      serverCombatId=packet.state.combatId;setPlayerCombat(!!packet.state.hunting.encounter);nextCombatPoll=0;canvas.focus({preventScroll:true});
+      combatMessage=ambush?'Ambush strikes for '+packet.state.combatReceipt.events[0].damage+' damage!':'You engage the '+enemy.name+'. Dodge with Space, or Flee.';
       updateCombatPanel();note(standGround?'Standing your ground · Auto retreat is off for this fight. Press F to flee.':'Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
     }).catch(error=>{
       if(error.message.startsWith('Choose whether to fight:')){
@@ -2956,7 +2961,7 @@ function object(item,highlight=false,time=0,weather=null) {
       const actorEncounter=item.coopBoss?window.towerVaultCoop?.encounter():item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat||item.coopBoss?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
-      let facing=player;
+      let facing=!player.inCombat&&['wildboar'].includes(type)?{x:item.x-1,y:item.y}:player;
       if(['crystalGuardian','depthsSkitter','depthsSeer','depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
         pose.now=combatNow();
         pose.lastAttack=item.coopBoss?window.towerVaultCoop?.lastAttack():(combatArt.bursts??[]).findLast(effect=>effect.action==='enemy'&&!effect.targetId);
@@ -6226,6 +6231,17 @@ function animateFamiliarScout(site){
   const path=[from,...(routes[0]??[])],travel=Math.max(240,Math.min(2350,path.length*155));
   scoutAnimation={id:familiarState.equipped,room:currentRoom,path,started:performance.now(),travel,duration:travel+750};
 }
+function ambushReady(){
+ const enemy=roomEnemy(),state=window.playerCloud?.initial;
+ const site=enemy?.id==='dusktusk'?window.preyTrail?.site:{x:6,y:5};
+ return !player.inCombat&&!routineControlled()&&window.ambushPrey?.has(enemy?.id)&&
+  state?.styleAbilities?.learned?.includes('ambush')&&(state.styleAbilities.readyAt.ambush??0)<=combatNow()&&
+  (enemy.id==='dusktusk'||combatNow()>=huntRespawnAt(hunting,enemy))&&window.ambushPosition?.({x:player.cx,y:player.cy},site);
+}
+function useAmbush(){
+ if(!ambushReady()){note('Approach the back of a wild boar with Ambush ready.');return;}
+ startMonsterEncounter(roomEnemy(),false,true);
+}
 let shadowstepTargeting=false,styleAbilityKey='',abilityTransition=false,abilityBursts=[];
 let shadowstepPreview={key:'',tiles:[]};
 function shadowstepTargets(){
@@ -6243,17 +6259,17 @@ function refreshStyleAbilityBar(){
   if(!bar||!state||!window.styleAbilities)return;
   const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
   const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt[id]??0)-combatNow())/1000)));
-  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled()]);
+  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady()]);
   if(nextKey===styleAbilityKey)return;
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
   bar.replaceChildren();
   for(const [index,id] of learned.entries()){
     const ability=window.styleAbilities[id],button=document.createElement('button');
-    button.type='button';button.textContent=ability.icon+' '+ability.name+(seconds[index]?' · '+seconds[index]+'s':'');
+    button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':ability.name)+(seconds[index]?' · '+seconds[index]+'s':'');
     button.disabled=seconds[index]>0||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():castStyleAbility(id,{});
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():castStyleAbility(id,{});
     bar.append(button);
   }
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';

@@ -34,7 +34,7 @@ import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuratio
 import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
-import {activePreyTrail,preyTrail} from '../public/style-abilities.js';
+import {activePreyTrail,preyTrail,ambushPrey,ambushPosition,styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
 import {moonbackRules,moonbackSighting} from '../public/moonback.js';
 import {veilCloakId} from '../public/wardrobe.js';
 
@@ -252,8 +252,23 @@ export function activityAction(state,action,body,now,random){
     if(!enemy||!adjacent(state,sighting??{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(!sighting&&(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy)))throw new Error('Invalid encounter. Wait for the creature to return.');
+    if(body.ambush===true){
+      const abilities=normalizeStyleAbilities(state.styleAbilities);
+      if(state.controlMode==='auto'||state.plan||!abilities.learned.includes('ambush')||(abilities.readyAt.ambush??0)>now||
+        !ambushPrey.has(enemy.id)||!ambushPosition(state.position,sighting??{x:6,y:5})){
+        throw Object.assign(new Error('Approach a wild boar from behind with Ambush ready.'),{status:400});
+      }
+    }
     startCombatEncounter(state,enemy,now);
     if(sighting&&enemy.id==='moonbackStag')Object.assign(state.hunting.encounter,{moonbackRoom:sighting.room,moonbackId:sighting.id});
+    if(body.ambush===true){
+      state.hunting.encounter.nextPlayerAt=now;
+      const event=huntingTurn(state.hunting.encounter,state.health,state.stats,'attack',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments,1.5);
+      const abilities=normalizeStyleAbilities(state.styleAbilities);
+      abilities.readyAt.ambush=now+styleAbilities.ambush.cooldown;state.styleAbilities=abilities;
+      event.power='Ambush';event.powerColor='#ffd48b';event.powerForm='sword';event.effect='strikes for '+event.damage+' damage';
+      state.combatReceipt={id:crypto.randomUUID(),events:[result(state,event,now,random)]};
+    }
     if(body.standGround===true&&index>=0)state.hunting.encounter.autoRetreatDisabled=true;
     const firstTactic=index>=0?nextCombatTactic(state):null;
     if(firstTactic?.action==='flee'){

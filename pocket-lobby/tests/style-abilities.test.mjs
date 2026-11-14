@@ -92,3 +92,22 @@ test('Scout Ahead requires care and an equipped familiar, and leaves discovery t
  act(state,'keeperClue',{id:'keeperCrate'},181001);
  assert.equal(state.adventure.keeperRouteFound,true);
 });
+
+test('Ambush hits for 50% extra damage once, charges one AP, and rejects a front approach',()=>{
+ const makeHunter=position=>make({location:'clearing',position,stats:{huntingXp:140,stealthXp:50},styleAbilities:{learned:['ambush']}});
+ const front=makeHunter({x:5,y:5});
+ assert.throws(()=>act(front,'fight',{ambush:true}),/behind/);
+ assert.equal(front.actionPoints.value,5);
+ assert.equal(front.hunting.encounter,null);
+ const regular=makeHunter({x:7,y:5});
+ act(regular,'fight',{});
+ const hunter=makeHunter({x:7,y:5});
+ applyGameplayAction(hunter,'fight',{ambush:true},1000,()=>0);
+ const hit=hunter.combatReceipt.events[0];
+ assert.equal(hit.power,'Ambush');
+ assert.equal(hunter.actionPoints.value,4);
+ assert.equal(hit.damage,21);
+ assert.equal(hunter.hunting.encounter.health,regular.hunting.encounter.health-21);
+ assert.equal(hunter.styleAbilities.readyAt.ambush,61000);
+ assert.equal(normalizeState(hunter).styleAbilities.readyAt.ambush,61000);
+});

@@ -2,6 +2,10 @@ import {keeperSites} from './lantern-keepers.js';
 import {skillLevel} from './skill-curve.js';
 
 export const abilitySlots=3;
+export const ambushPrey=new Set(['boar','thornBoar','dusktusk']);
+export function ambushPosition(position,site){
+ return !!position&&!!site&&position.x===site.x+1&&position.y===site.y;
+}
 export const scoutClueSeconds=45;
 export function scoutAheadSite(state){
  if(state.adventure?.keeperRouteFound)return null;
@@ -24,7 +28,8 @@ export const styleAbilities={
  shadowstep:{name:'Shadowstep',icon:'◈',cooldown:45000,description:'Blink up to four reachable tiles. In arena combat, briefly delay the creature’s pursuit.',requirements:{exploration:3,stealth:3}},
  trackPrey:{name:'Track Prey',icon:'⁙',cooldown:180000,cost:0,description:'Reveal a trail in Bramble Clearing that leads to a Dusktusk Boar.',requirements:{hunting:2,exploration:2},discovery:'Earned through successful wild hunts and new discoveries.'},
  scoutAhead:{name:'Scout Ahead',icon:'✧',cooldown:180000,cost:0,description:'Send your equipped familiar to find a Lantern Keeper clue.',requirements:{familiarConnection:2,exploration:2},discovery:'Earned by caring for a familiar and discovering new areas.'},
- shareHearth:{name:'Share a Hearth',icon:'♨',cooldown:180000,cost:0,description:'Share a cooked meal at the Waystation campfire. Both players recover up to 20 HP over five seconds.',requirements:{cooking:2,kindness:2},discovery:'Earned by cooking and caring for a familiar.'}
+ shareHearth:{name:'Share a Hearth',icon:'♨',cooldown:180000,cost:0,description:'Share a cooked meal at the Waystation campfire. Both players recover up to 20 HP over five seconds.',requirements:{cooking:2,kindness:2},discovery:'Earned by cooking and caring for a familiar.'},
+ ambush:{name:'Ambush',icon:'⚔',cooldown:60000,description:'Approach a wild boar from behind and open combat with a strike dealing 50% extra damage.',requirements:{hunting:3,stealth:2},discovery:'Earned through wild hunts and practising stealth.'}
 };
 export const waypoints={
  outside:{name:'Tower Courtyard',x:2,y:5},
