@@ -1,3 +1,5 @@
+import {normalizeStyleAbilities,sanctuaryRules,styleAbilities} from '../public/style-abilities.js';
+import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {recordDungeonChest} from '../public/dungeon-chests.js';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
@@ -32,6 +34,13 @@ function hurt(r,m,amount,move,at){
  m.hp=Math.min(m.hp,playerMaxHealth(m,at));if(m.hp<=0||m.left)return;
  let damage=amount;if(m.dodgeUntil>=at&&m.dodgeUntil-at<=350){damage=0;m.counterUntil=at+1800+(m.build.counterWindow??0);m.lastFeedback='Perfect dodge · Counter ready';}
  if(damage&&m.ward>0&&at<=(m.wardUntil??0)){const block=Math.min(damage,m.ward);damage-=block;m.ward-=block;}
+ const sanctuary=r.sanctuary;
+ if(damage&&sanctuary?.until>at&&sanctuary.remaining>0&&Math.hypot(m.pos.x-sanctuary.x,m.pos.y-sanctuary.y)<=sanctuaryRules.radius){
+  const blocked=Math.min(damage,sanctuary.remaining);
+  damage-=blocked;
+  sanctuary.remaining-=blocked;
+  m.lastFeedback='Sanctuary absorbed '+blocked+' damage.';
+ }
  if(damage)m.lastFeedback=move+' hit you for '+damage+' HP.';
  m.hp=Math.max(0,m.hp-damage);m.lastHit={at,damage,move};if(!m.hp){m.cause=move;m.tip=vaultDefeatTip(move);m.lastFeedback='Defeated by '+move;}
 }
@@ -69,7 +78,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  s.health=0;s.location='home';s.position={x:5,y:7};s.depthsRun=null;s.hunting.recoveryUntil=now+boarRules.recovery;delete s.vaultCoop;
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
- const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,observedAt:now,
+ const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
   targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
@@ -113,7 +122,24 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='tick')return {text:m.lastFeedback??'Watch the marked attack.'};
  if(r.status!=='battle'||m.hp<=0)throw invalid('This co-op battle is not active.');
- if(!['strike','power','dodge','taunt'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(!['strike','power','dodge','taunt','sanctuary'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(kind==='sanctuary'){
+  const abilities=normalizeStyleAbilities(s.styleAbilities);
+  if(!abilities.learned.includes('sanctuary'))throw invalid('Learn Sanctuary before placing a ward.');
+  if((abilities.readyAt.sanctuary??0)>now)throw invalid('Sanctuary is still recharging.');
+  if(r.sanctuary?.until>now&&r.sanctuary.remaining>0)throw invalid('Your party already has an active Sanctuary.');
+  requireActionPoint(s);
+  const remaining=sanctuaryRules.capacity+(abilityMastery(s,'sanctuary').stage-1)*10;
+  r.sanctuary={x:m.pos.x,y:m.pos.y,until:now+sanctuaryRules.duration,remaining};
+  s.styleAbilities=abilities;
+  abilities.readyAt.sanctuary=now+styleAbilities.sanctuary.cooldown;
+  awardAbilityUse(s,'sanctuary',body.operation);
+  m.support++;
+  m.lastFeedback='Sanctuary placed · '+remaining+' shared protection.';
+  spendActionPoint(s,now);
+  syncPlayer(s,r,id,now);
+  return {text:m.lastFeedback};
+ }
  if(kind!=='dodge')requireActionPoint(s);
  const build=m.build,weapon=weaponProfile(m.weapon,s.combatGear.activeSwordUpgrade,s.combatGear.weaponEnchantments),stats=huntingAttributes(s.stats,m.weapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build);
  const target=r.adds?.find(a=>a.id===body.target&&a.hp>0),position=target??r.origin,armour=target?0:r.phase===1&&now>=(r.exposedUntil??0)?9:0;

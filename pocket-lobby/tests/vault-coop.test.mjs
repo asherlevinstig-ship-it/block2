@@ -113,3 +113,30 @@ test('a late position update cannot erase a co-op reinforcement hit',()=>{
  assert.equal(r.members.a.lastHit.move,'Hatchling Bite');
  assert(a.health<100);
 });
+
+test('Sanctuary shares one damage pool with nearby allies and leaves distant allies exposed',()=>{
+ const {r,a}=party();
+ a.styleAbilities={learned:['sanctuary']};
+ a.actionPoints.value=2;
+ act(r,a,'a','start',1300);
+ r.members.b.pos={...r.members.a.pos};
+ act(r,a,'a','sanctuary',1400);
+ assert.equal(a.actionPoints.value,1);
+ assert.equal(publicVaultParty(r,'b',1400).sanctuary.remaining,30);
+ assert.throws(()=>act(r,a,'a','sanctuary',1500),/recharging/);
+ r.adds=[{id:'test',hp:10,kind:'wisp',target:{...r.members.a.pos},landsAt:1600}];
+ const unprotected=structuredClone(r);delete unprotected.sanctuary;
+ advanceVaultParty(r,1600);
+ advanceVaultParty(unprotected,1600);
+ const protectedDamage=r.members.a.hp+r.members.b.hp-unprotected.members.a.hp-unprotected.members.b.hp;
+ assert(protectedDamage>0);
+ assert.equal(r.sanctuary.remaining,30-protectedDamage);
+ r.members.b.pos={x:9,y:6};
+ const distantHealth=r.members.b.hp;
+ r.adds[0].target={...r.members.b.pos};r.adds[0].landsAt=1700;
+ const remaining=r.sanctuary.remaining;
+ advanceVaultParty(r,1700);
+ assert(r.members.b.hp<distantHealth);
+ assert.equal(r.sanctuary.remaining,remaining);
+ assert.equal(publicVaultParty(r,'a',9400).sanctuary,null);
+});

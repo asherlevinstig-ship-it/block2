@@ -1,6 +1,7 @@
 import {styleAbilities,abilityStatLevel} from './style-abilities.js';
 
 export const masteryBenefits={
+ sanctuary:['Absorbs up to 30 shared damage','Absorbs up to 40 shared damage','Absorbs up to 50 shared damage'],
  packTactics:['+1.5 seconds to counter','+2 seconds to counter','+2.5 seconds to counter'],
  lockbreaker:['30 seconds inside','40 seconds inside','50 seconds inside'],
  lightFingers:['+10 success percentage points · 85% cap','+12 success percentage points · 85% cap','+15 success percentage points · 85% cap'],
@@ -21,6 +22,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ sanctuary:'Place a Sanctuary during a co-op Vault fight.',
  packTactics:'Trigger Pack Tactics with a perfect dodge and an equipped familiar.',
  lockbreaker:'Successfully enter another player’s room.',
  lightFingers:'Complete a successful Light Fingers steal. One use per attempt.',

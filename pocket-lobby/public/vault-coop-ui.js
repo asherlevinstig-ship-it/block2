@@ -1,3 +1,4 @@
+import {sanctuaryRules} from './style-abilities.js';
 import {vaultMechanisms} from './vault-mechanisms.js';
 import {coopEncounter,coopMove,vaultPhaseDetails} from './vault-coop.js';
 import {drawArenaTelegraph} from './dungeon-art.js';
@@ -20,7 +21,7 @@ export function initializeVaultCoop(api){
   render();
  }
  async function send(kind,slot){
-  if(['strike','dodge','power','taunt'].includes(kind)&&raid?.status!=='battle')return;
+  if(['strike','dodge','power','taunt','sanctuary'].includes(kind)&&raid?.status!=='battle')return;
   if(busy)return;busy=true;
   try{const result=await api.change({kind,id:raid?.id??api.state().party,slot,mechanism:kind==="mechanism"?slot:undefined,target:selected,ally:$('coopAlly').value});accept(result);if(dialog.open)dialog.close();const tile=raid?.adds.find(a=>a.id===selected)??raid?.origin;if(kind==='strike')api.strike(tile);if(kind==='power')api.cast(tile);if(kind==='dodge')api.dodge();}
   catch(error){$('coopFeedback').textContent=error.message;$('coopJoinError').textContent=error.message;if((error.status===402||/closer|mana|Action Point/i.test(error.message))&&kind==='strike')autoAttack=false;}
@@ -62,9 +63,19 @@ export function initializeVaultCoop(api){
  },250);
  function draw({ctx,point,surface,now,time,reduced}){
   if(!active()||!['battle','victory'].includes(raid?.status))return;const e=coopEncounter(raid);if(raid.status==='battle')drawArenaTelegraph({ctx,point,surface,encounter:e,move:coopMove(raid),now,reduced});
+  const ward=raid.sanctuary;
+  if(raid.status==='battle'&&ward?.until>now&&ward.remaining>0){
+   for(let y=ward.y-sanctuaryRules.radius;y<=ward.y+sanctuaryRules.radius;y++){
+    for(let x=ward.x-sanctuaryRules.radius;x<=ward.x+sanctuaryRules.radius;x++){
+     if(x>=0&&x<12&&y>=0&&y<10&&Math.hypot(x-ward.x,y-ward.y)<=sanctuaryRules.radius)surface(x+.05,y+.05,.9,.9,1,'#69efd83c','#8bffe0');
+    }
+   }
+   const [x,y]=point(ward.x+.5,ward.y+.5,20);
+   ctx.save();ctx.fillStyle='#a7ffe7';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText('Sanctuary · '+ward.remaining,x,y);ctx.restore();
+  }
   for(const add of raid.adds)if(add.landsAt-now<=1400&&add.landsAt>=now)surface(add.target.x+.05,add.target.y+.05,.9,.9,1,'#bd93e955','#cfb1f1');
   if(attackFx&&time-attackFx.time<350){const age=Math.max(0,time-attackFx.time),center=attackFx.center==='target'?attackFx.target:attackFx.origin,[x,y]=point(center.x+.5,center.y+.5,1);ctx.save();ctx.globalAlpha=1-age/350;ctx.strokeStyle=raid.phase===3?'#d5b3ff':'#ffe0a4';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(x,y,12+age/5,6+age/10,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
   popups=popups.filter(p=>time-p.at<1100);for(const p of popups){const [x,y]=point(p.x+.5,p.y+.5,85+(time-p.at)/35);ctx.save();ctx.globalAlpha=Math.max(0,1-(time-p.at)/1100);if(p.perk){const [fx,fy]=point(p.x+.5,p.y+.5,20);ctx.strokeStyle=p.perk==='luck'?'#ffe49a':'#f48ca9';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(fx,fy,reduced?15:8+(time-p.at)/40,reduced?8:4+(time-p.at)/80,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=p.perk==='vampire'?'#ff9db5':'#ffddaa';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(p.text,x,y);ctx.restore();}
  }
- return {active,render,draw,view:()=>raid,lastAttack:()=>attackFx,targetPosition:()=>raid?.adds.find(a=>a.id===selected)??raid?.origin,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:id=>{selected=id;lastKey='';render();},power:slot=>send('power',slot),dispose:()=>clearInterval(timer)};
+ return {active,render,draw,view:()=>raid,lastAttack:()=>attackFx,targetPosition:()=>raid?.adds.find(a=>a.id===selected)??raid?.origin,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:id=>{selected=id;lastKey='';render();},power:slot=>send('power',slot),sanctuary:()=>send('sanctuary'),dispose:()=>clearInterval(timer)};
 }

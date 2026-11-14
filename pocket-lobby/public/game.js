@@ -6355,6 +6355,7 @@ function refreshStyleAbilityBar(){
       else if(id==='shareHearth')openHearth();
       else if(id==='ambush')useAmbush();
       else if(id==='appraise')openAppraisalMarket();
+      else if(id==='sanctuary'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.sanctuary();else note('Sanctuary is available during a co-op Vault fight.');}
       else if(id==='bloodlust'||id==='packTactics')openStyleAbilities();
       else if(['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id))window.towerRobbery?.openPower(id);
       else castStyleAbility(id,{});
