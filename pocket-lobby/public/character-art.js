@@ -9,7 +9,8 @@ export function towerCharacterPose(meta,options={}){
   const {direction='right',back=false,time=0,cycle=0,seated=false,wave=null,fishing=false,fishingAge=0,weapon=false,weaponTier=null,pose={},reduced=false}=options;
   const row=back?(direction==='right'?2:3):(direction==='right'?1:0);
   let state='idle',frame=reduced?0:Math.floor(time/850)%2;
-  if(options.meditating){state='blink';frame=0;}
+  if(options.reading){state=seated?'sit':'idle';frame=0;}
+  else if(options.meditating){state='blink';frame=0;}
   else if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
   else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
   else if(pose.recoil>1){state='hurt';frame=0;}
@@ -23,9 +24,10 @@ export function towerCharacterPose(meta,options={}){
   else if(pose.ready){state='ready';frame=reduced?0:Math.floor(time/650)%2;}
   else if(cycle){state='walk';frame=reduced?0:Math.floor(time/70)%8;}
   else if(!reduced&&time%3700>3550){state='blink';frame=0;}
-  if(!options.meditating&&options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
+  if(!options.reading&&!options.meditating&&options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
   const animation=meta.states[state];frame=clamp(Math.floor(frame),0,animation.frames-1);
   const column=animation.start+frame,detail=meta.poses[meta.directions[row]][column];
+  if(options.reading){const age=Math.max(0,options.readingAge??time),phase=age%2800;return {state:'reading',frame:reduced||phase<2300?0:1+Math.min(2,Math.floor((phase-2300)/167)),row,column,detail};}
   return {state:options.meditating?'meditate':state,frame:options.meditating?(reduced?0:Number(Math.sin(time/1600)>.25)):frame,row,column,detail};
 }
 
@@ -69,6 +71,22 @@ export function meditateTowerFrame(pixels,source,width,height,appearance,selecti
   poly([[side*14,73],[side*17,74],[side*16,76],[side*13,75]],'#edbd8e');
   put(center+side*15,74,'#ffe0ae');
  }
+}
+export function readingTowerFrame(pixels,width,height,appearance,selection){
+ const original=pixels.slice(),cx=Math.floor(width/2),back=selection.row>=2;
+ const sleeve=JACKETS[appearance.outfit??0]??JACKETS[0];
+ const put=(x,y,color)=>{if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],(y*width+x)*4);};
+ const box=(x,y,w,h,color)=>{for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)put(cx+xx,yy,color);};
+ // Lift both forearms around the book; keep the original head and planted feet.
+ for(let y=53;y<70;y++)for(let x=cx-19;x<=cx+19;x++)if(Math.abs(x-cx)>12&&x>=0&&x<width)pixels.fill(0,(y*width+x)*4,(y*width+x)*4+4);
+ for(const side of [-1,1]){
+  for(let y=50;y<61;y++){const x=side*(12+Math.floor((y-50)/4));box(x-2,y,5,1,sleeve[0]);box(x-1,y,3,1,sleeve[1]);}
+ }
+ box(-15,58,31,12,'#333348');box(-14,59,29,10,'#5a7892');box(-13,57,12,10,'#eddbac');box(1,57,12,10,'#fff0c7');box(-1,58,2,11,'#9d8056');
+ for(const side of [-1,1]){box(side<0?-12:3,59,9,1,'#b9a986');box(side<0?-12:3,62,8,1,'#c8b793');box(side<0?-16:13,61,4,5,'#a86d50');box(side<0?-15:13,61,3,3,'#edbd8e');}
+ // Three discrete page-turn frames, cached at native sprite resolution.
+ if(selection.frame){const w=[0,5,2,5][selection.frame],x=selection.frame===1?2:selection.frame===2?-1:-6;box(x,54,w,12,'#fff5d5');box(x,54,1,12,'#bca77f');}
+ if(back)for(let y=0;y<68;y++)for(let x=cx-11;x<=cx+11;x++){const i=(y*width+x)*4;if(original[i+3])pixels.set(original.subarray(i,i+4),i);}
 }
 export function tintTowerPixel(r,g,b,a,appearance={}){
   if(r!==250||g<1||g>4)return [r,g,b,a];
@@ -350,6 +368,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     tailorTowerFrame(pixels,sourcePixels,width,height,appearance,selection,vest);
     shapeTowerGarment(pixels,sourcePixels,width,height,appearance,selection,vest);
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
+    if(selection.state==='reading')readingTowerFrame(pixels,width,height,appearance,selection);
     if(selection.state==='meditate')meditateTowerFrame(pixels,sourcePixels,width,height,appearance,selection);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');
     const data=typeof ImageData==='function'?new ImageData(pixels,width,height):{data:pixels,width,height};ctx.putImageData(data,0,0);
@@ -357,6 +376,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
   }
   function grip(x,y,options={}){const {detail}=towerCharacterPose(meta,options);return [x+(detail.grip[0]-meta.pivot[0])*meta.scale,y+(detail.grip[1]-meta.pivot[1])*meta.scale];}
   function draw(ctx,x,y,appearance={},options={}){
+    if(options.reading)options={...options,meditating:false,weapon:false,sheathed:false,wave:null,fishing:false,pose:{}};
     if(options.meditating)options={...options,weapon:false,sheathed:false};
     const selection=towerCharacterPose(meta,options),image=frameImage(appearance,selection,options.vest);
     const [gx,gy]=grip(x,y,options);ctx.save();ctx.imageSmoothingEnabled=false;

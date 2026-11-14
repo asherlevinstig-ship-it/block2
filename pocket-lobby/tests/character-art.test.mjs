@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {uniqueTowerOutfit,tailorTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {uniqueTowerOutfit,tailorTowerFrame,readingTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
 const root=new URL('../public/art/',import.meta.url),meta=JSON.parse(fs.readFileSync(new URL('tower-adventurer.json',root),'utf8'));
 
 test('meditation uses closed eyes in every facing, stable breathing frames and a still reduced-motion pose',()=>{
@@ -113,4 +113,32 @@ test('hoods and real armour have different rendered pixels and separate cached f
  renderer.draw(ctx,0,0,{outfit:11},{direction:'left'});const ranger=images.at(-1).pixels.slice();renderer.draw(ctx,0,0,{outfit:12},{direction:'left'});assert.notDeepEqual(images.at(-1).pixels,ranger,'distinct hood colors and silhouettes');assert.notDeepEqual([...images.at(-1).pixels].filter((_,i)=>i%4===3),[...ranger].filter((_,i)=>i%4===3),'cape cut changes the outline independently of colour');
  renderer.draw(ctx,0,0,{outfit:0},{direction:'left',vest:'scoutLeather'});const leather=images.at(-1);renderer.draw(ctx,0,0,{outfit:0},{direction:'left',vest:'towerPlate'});const plate=images.at(-1);assert.notEqual(leather,plate);assert.notDeepEqual(leather.pixels,plate.pixels,'plate and leather never share a cached image');
  renderer.draw(ctx,0,0,{outfit:0},{direction:'left',vest:'scoutLeather'});assert.equal(images.at(-1),leather);
+});
+
+
+test('reading holds a stable pose in every direction, turns pages and respects reduced motion',()=>{
+ for(const [direction,back] of [['left',false],['right',false],['right',true],['left',true]]){
+  const options={reading:true,direction,back,weapon:true,wave:.3,cycle:1,time:9000};
+  const a=towerCharacterPose(meta,{...options,readingAge:1000}),b=towerCharacterPose(meta,{...options,readingAge:2500});
+  assert.equal(a.state,'reading');assert.equal(a.column,meta.states.idle.start);assert.equal(a.frame,0);assert(b.frame>0);
+  assert.equal(towerCharacterPose(meta,{...options,readingAge:2500,reduced:true}).frame,0);
+  assert.equal(towerCharacterPose(meta,{...options,seated:true}).column,meta.states.sit.start);
+ }
+});
+
+test('reading redraws sleeves and book pages while preserving the face and feet',()=>{
+ const w=80,h=100,source=new Uint8ClampedArray(w*h*4),at=(x,y)=>(y*w+x)*4;
+ source.set([100,120,140,255],at(40,25));source.set([30,50,70,255],at(40,81));
+ const a=source.slice(),b=source.slice();readingTowerFrame(a,w,h,{}, {row:0,frame:0});readingTowerFrame(b,w,h,{}, {row:0,frame:2});
+ assert.deepEqual(a.slice(at(40,25),at(40,25)+4),source.slice(at(40,25),at(40,25)+4));
+ assert.deepEqual(a.slice(at(40,81),at(40,81)+4),source.slice(at(40,81),at(40,81)+4));
+ assert(a[at(28,59)+3]&&a[at(52,59)+3],'both open pages are visible');assert.notDeepEqual(a,b);
+});
+
+test('reading frames are cached separately and never draw a carried or equipped weapon',()=>{
+ const normal={data:new Uint8ClampedArray(meta.width*meta.height*4)},images=[];
+ const renderer=createTowerCharacterRenderer({metadata:meta,atlases:{normal,armour:normal},createCanvas:()=>({getContext:()=>({putImageData(){}})})});
+ const ctx={save(){},restore(){},drawImage:image=>images.push(image)};
+ renderer.draw(ctx,0,0,{},{});renderer.draw(ctx,0,0,{}, {reading:true,weapon:true,sheathed:true,meditating:true,weaponTier:'trainingSword',readingAge:1000});
+ assert.notEqual(images[0],images[1]);renderer.draw(ctx,0,0,{}, {reading:true,readingAge:1000});assert.equal(images[1],images[2]);
 });

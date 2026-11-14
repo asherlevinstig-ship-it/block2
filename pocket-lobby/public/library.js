@@ -14,3 +14,13 @@ export function normalizeLibrary(input){
 }
 export function besideLibraryBooks(state){return state.location==='library'&&libraryLayout.filter(([type])=>['bookcase','table'].includes(type)).some(([type,x,y])=>Math.abs(state.position.y-y)+Math.max(x-state.position.x,0,state.position.x-(x+(type==='bookcase'?1:0)))===1);}
 export const magicKnowledgeLevel=state=>skillLevel(state.stats?.magicKnowledgeXp);
+
+// A bounded visual pose, derived only from the saved server reading session.
+export function readingAt(pose,room,x,y,now=Date.now()){
+ return !!pose&&room==='library'&&Number.isSafeInteger(pose.startedAt)&&pose.startedAt>0&&pose.until===pose.startedAt+readingDuration&&now>=pose.startedAt&&now<pose.until&&pose.x===x&&pose.y===y;
+}
+export function sharedReadingPose(state,now=Date.now()){
+ const r=state.library?.reading;
+ if(state.health<=0||state.controlMode==='auto'||state.plan||state.report||!readingAt(r,state.location,state.position?.x,state.position?.y,now))return null;
+ return {startedAt:r.startedAt,until:r.until,x:r.x,y:r.y};
+}

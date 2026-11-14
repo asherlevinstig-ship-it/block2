@@ -52,3 +52,40 @@ test('Client saves cannot forge books or knowledge; walking away ends a reading 
  const moved=protectFishingState(before,make({position:{x:4,y:3}}));assert.equal(moved.library.reading,undefined);assert(before.library.reading);
  assert.throws(()=>normalizeState({stats:{magicKnowledgeXp:-1}}),/attribute/);
 });
+
+
+import {sharedReadingPose,readingAt} from '../public/library.js';
+import {SharedRoom,publicPeer} from '../server/shared-room.mjs';
+import {publishWorldActivity} from '../server/world-activity.mjs';
+import {testDatabase} from './db-helper.mjs';
+
+test('shared reading poses expose only timing and position and expire locally',()=>{
+ const s=make();act(s,'libraryRead',{book:'firstLight'},1000);
+ const pose=sharedReadingPose(s,1100);assert.deepEqual(Object.keys(pose).sort(),['startedAt','until','x','y']);
+ assert(readingAt(pose,'library',4,2,1200));assert(!readingAt(pose,'hub',4,2,1200));assert(!readingAt(pose,'library',4,3,1200));assert(!readingAt(pose,'library',4,2,13000));
+ const peer={id:'reader',room:'library',x:4,y:2,reading:pose,activity:'reading'};
+ assert.deepEqual(publicPeer(peer,1200).reading,pose);assert.equal(publicPeer(peer,13000).reading,null);assert.equal(publicPeer(peer,13000).activity,null);
+ assert.equal(publicPeer({...peer,x:5},1200).reading,null);
+ assert.equal(sharedReadingPose({...s,controlMode:'auto'},1200),null);
+});
+
+test('server reading start and finish reach spectators, survive repeated snapshots and reject forged poses',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());const now=Date.now(),playerId='reader';
+ const before=make(),after=structuredClone(before);act(after,'libraryRead',{book:'firstLight'},now);
+ const meta={id:'public-reader',playerId,room:'library',x:4,y:2,name:'Reader',expiresAt:now+100000,lastAuthAt:now,windowAt:now,packets:0};
+ const reader={readyState:1,sent:[],deserializeAttachment:()=>meta,serializeAttachment:value=>Object.assign(meta,value),send(raw){this.sent.push(JSON.parse(raw));},close(){this.readyState=3;}};
+ const spectatorMeta={...meta,id:'public-viewer',playerId:'viewer',x:6,y:4},spectator={...reader,sent:[],deserializeAttachment:()=>spectatorMeta,serializeAttachment:value=>Object.assign(spectatorMeta,value)};
+ const context={getWebSockets:()=>[reader,spectator],storage:{get:async()=>[],put:async()=>{},setAlarm:async()=>{}},blockConcurrencyWhile:fn=>fn()};
+ const room=new SharedRoom(context,{TOWER_DB:db});
+ sql.prepare('INSERT INTO tower_players VALUES (?,?,2,?,?)').run(playerId,JSON.stringify(after),'read',now);
+ const env={SHARED_ROOMS:{idFromName:name=>name,get:()=>({fetch:request=>room.fetch(request)})}};
+ await publishWorldActivity(env,playerId,before,after,2);
+ const snapshot=spectator.sent.filter(m=>m.type==='snapshot').at(-1);
+ assert(snapshot,'spectator receives a fresh snapshot');
+ assert(snapshot.players.find(p=>p.id==='public-reader').reading);assert.equal(meta.activity,'reading');
+ await room.webSocketMessage(spectator,JSON.stringify({type:'reading',active:true,until:now+999999}));assert.equal(spectatorMeta.reading,undefined);
+ const finished=structuredClone(after);delete finished.library.reading;
+ sql.prepare('UPDATE tower_players SET state_json=?,revision=3 WHERE player_id=?').run(JSON.stringify(finished),playerId);
+ await publishWorldActivity(env,playerId,after,finished,3);
+ assert.equal(spectator.sent.filter(m=>m.type==='snapshot').at(-1).players.find(p=>p.id==='public-reader').reading,null);
+});

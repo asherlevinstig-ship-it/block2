@@ -1,5 +1,6 @@
 import {libraryLayout} from './library.js';
 export {libraryLayout};
+export {readingAt,sharedReadingPose} from './library.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
 import {waystationRoom,waystationArea} from './waystation.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';

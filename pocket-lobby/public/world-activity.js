@@ -1,3 +1,4 @@
+import {sharedReadingPose} from './library.js';
 import {equipmentPerks} from './equipment-effects.js';
 export {equipmentPerks} from './equipment-effects.js';
 import {rareHunts,ownsRareItem} from './rare-loot.js';
@@ -65,4 +66,4 @@ export function worldActivityEvents(before,after,now=Date.now()){
  return events.slice(-16);
 }
 export function createWorldActivityTracker(initial){let previous=initial?structuredClone(initial):null;return {update(state,now){const events=worldActivityEvents(previous,state,now);previous=structuredClone(state);return events;}};}
-export function sharedActivity(state){return state.plan?.mealStockTrip?(state.plan.mealStockTrip.phase==='returning'?'walking':'cooking'):state.hunting?.encounter?'combat':state.miningCut?'mining':state.timberCut?'woodcutting':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.treeWork?.phase==='waiting'?'regrowth':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}
+export function sharedActivity(state){return sharedReadingPose(state)?'reading':state.plan?.mealStockTrip?(state.plan.mealStockTrip.phase==='returning'?'walking':'cooking'):state.hunting?.encounter?'combat':state.miningCut?'mining':state.timberCut?'woodcutting':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.treeWork?.phase==='waiting'?'regrowth':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}

@@ -1,3 +1,4 @@
+import {readingAt,sharedReadingPose} from '../public/library.js';
 import {besideHearth} from './hearth.mjs';
 import {pvpRooms,pvpGuards,witnessRange} from '../public/pvp.js';
 import {playerMaxHealth} from '../public/food-buffs.js';
@@ -30,7 +31,8 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control
 const canMeditate=meta=>!meta.serverAuto&&!meta.auto&&!meta.seat&&!meta.activity&&!meta.fishing&&!meta.chopping&&!meta.mining;
 export function publicPeer(meta,now=Date.now()){
   const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
-  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+  const reading=!meta.auto&&readingAt(meta.reading,meta.room,x,y,now)?meta.reading:null;
+  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:reading?'reading':meta.activity==='reading'?null:meta.activity??null,reading,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
 }
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
@@ -258,7 +260,7 @@ export class SharedRoom{
     recordPlayUsage(this.env,meta,Date.now(),{flush:!!leaving||!!meta.auto!==(state.plan?.source==='rules')});
     if(leaving){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
     meta.stoneguardUntil=state.styleAbilities?.stoneguard?.until??0;
-    meta.health=Math.max(0,Math.min(playerMaxHealth(state),state.health??100));meta.activity=sharedActivity(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
+    meta.health=Math.max(0,Math.min(playerMaxHealth(state),state.health??100));meta.activity=sharedActivity(state);meta.reading=sharedReadingPose(state);meta.mining=miningPose(state);meta.chopping=choppingPose(state);meta.fishing=sharedFishingPose(state);meta.auto=state.plan?.source==='rules';
     const blinkAt=state.styleAbilities?.lastBlinkAt??0;
     if(blinkAt>(meta.lastBlinkAt??0)&&Date.now()-blinkAt<5000&&state.position){
       meta.lastBlinkAt=blinkAt;meta.x=state.position.x;meta.y=state.position.y;
@@ -279,7 +281,7 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
     await this.loadTrees(profile.room);
-    const meta={...profile,willowbankShortcut:state.adventure?.willowbankShortcut===true,usageAt:now,fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    const meta={...profile,willowbankShortcut:state.adventure?.willowbankShortcut===true,usageAt:now,reading:sharedReadingPose(state),fishing:sharedFishingPose(state),veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();
@@ -331,7 +333,7 @@ export class SharedRoom{
       if(meta.serverAuto||this.autoPeers.has(meta.playerId))return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps,meta)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
-      if(meta.x!==message.x||meta.y!==message.y){meta.seat=null;meta.meditationRequested=false;}const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
+      if(meta.x!==message.x||meta.y!==message.y){meta.seat=null;meta.meditationRequested=false;meta.reading=null;if(meta.activity==='reading')meta.activity=null;}const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
       ws.serializeAttachment(meta);this.snapshot();return;
     }
     if(message?.type==='stand'){meta.seat=null;ws.serializeAttachment(meta);this.snapshot();return;}

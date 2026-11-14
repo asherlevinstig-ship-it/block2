@@ -33,7 +33,7 @@ export function initializeLibrary({cloud,hooks,doc=document}){
  $('libraryRead').onclick=async()=>{
   if(busy)return;if(cloud.initial.library?.reading){failed=null;await finish(cloud.initial.library.reading.id);return;}busy=true;render();$('libraryStatus').textContent='';
   try{await hooks.change('libraryRead',{book:selected});$('libraryStatus').textContent='Take a breath. Let the words sink in.';}
-  catch(error){failed=id;$('libraryStatus').textContent=error.message;}
+  catch(error){$('libraryStatus').textContent=error.message;}
   finally{busy=false;if(dialog.open)render();}
  };
  dialog.querySelector('.close').onclick=()=>{if(!busy)dialog.close();};dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});dialog.addEventListener('close',()=>{clearTimeout(timer);cancelAnimationFrame(frame);});
