@@ -80,3 +80,36 @@ test('solo Guardian defeat guidance and the phase-specific on-screen weaknesses 
  const s=player();s.characterRules.combat.enabled=false;applyGameplayAction(s,'fight',{},1000);s.health=1;s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.nextBoarAt=2000;s.hunting.encounter.arenaLockedFor=2000;s.hunting.encounter.brainMove='bossIronSmash';s.hunting.encounter.brainOrigin={x:6,y:5};s.hunting.encounter.arenaPlayer={x:5,y:5};advanceServerCombat(s,2100,()=>.99);assert.equal(s.health,0);assert.match(s.combatReports[0].defeat.tip,/ring/);
  for(const [health,text] of [[420,/IRONCLAD/],[250,/UNBOUND/],[100,/RUNIC HEART/]])assert.match(enemyRoleInfo({enemy:'depthsGuardian',health,brainMaxHealth:420},1000).status,text);
 });
+
+test('a committed solo Vault attack survives a phase change and damages a stationary player',()=>{
+ const s=player();applyGameplayAction(s,'fight',{},1000);
+ const e=s.hunting.encounter;
+ Object.assign(e,{health:281,nextBoarAt:3000,arenaLockedFor:3000,arenaTarget:{x:5,y:5},brainOrigin:{x:6,y:5},brainMove:'bossIronSmash',brainNextThinkAt:3001});
+ const events=advanceServerCombat(s,3000,()=>.99);
+ assert(events.some(event=>event.phaseChange?.index===2));
+ assert(events.some(event=>event.move==='Sundering Smash'&&event.taken>0));
+ assert(s.health<100);
+});
+
+test('a committed co-op Vault attack survives a phase change',()=>{
+ const {r,a}=party();
+ act(r,a,'a','start',1000);
+ const impact=r.landsAt;
+ r.hp=Math.floor(r.max*2/3)+1;
+ act(r,a,'a','strike',r.warningAt+100);
+ assert.equal(r.phase,2);
+ assert.equal(r.landsAt,impact);
+ assert.equal(r.move,'bossIronSmash');
+ advanceVaultParty(r,impact);
+ assert(r.members.a.hp<100);
+ assert.equal(r.lastAttack.move,'Sundering Smash');
+});
+
+test('a late position update cannot erase a co-op reinforcement hit',()=>{
+ const {r,a}=party();act(r,a,'a','start',1000);
+ r.adds.push({id:'bite',kind:'skitter',hp:30,target:{...a.position},landsAt:2500});
+ a.position={x:8,y:5};
+ act(r,a,'a','tick',2600);
+ assert.equal(r.members.a.lastHit.move,'Hatchling Bite');
+ assert(a.health<100);
+});

@@ -61,9 +61,17 @@ export function huntEnemy(encounter){
 export function transitionVaultPhase(event,before,now){
  const previous=vaultPhase(before),next=vaultPhase(event.encounter);
  if(!previous||!next||previous.index===next.index)return event;
- const encounter=event.encounter;encounter.bossPhaseAt=now;encounter.castHits=0;delete encounter.castDeadline;delete encounter.enemyMove;
- if(encounter.brainVersion===2)Object.assign(encounter,planBrainAttack(encounter,huntEnemy(encounter),now));
-  encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
+ const encounter=event.encounter;encounter.bossPhaseAt=now;
+ const committed=encounter.brainVersion===2&&before.arenaLockedFor===before.nextBoarAt&&
+  before.nextBoarAt>now&&encounter.nextBoarAt===before.nextBoarAt;
+ if(!committed){
+  encounter.castHits=0;delete encounter.castDeadline;delete encounter.enemyMove;
+  if(encounter.brainVersion===2){
+   Object.assign(encounter,planBrainAttack(encounter,huntEnemy(encounter),now));
+  }else{
+   encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
+  }
+ }
  event.phaseChange={index:next.index,name:next.name,hint:next.hint,color:next.color};return event;
 }
 export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='crystalGuardian'?hunting.crystalRespawnAt??0:enemy?.id==='millCustodian'?0:enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;

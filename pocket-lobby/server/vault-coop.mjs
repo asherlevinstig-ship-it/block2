@@ -57,7 +57,9 @@ export function advanceVaultParty(r,now){
 function phaseChange(r,now){
  if(r.hp<=0){r.hp=0;r.status='victory';r.victoryAt=now;r.adds=[];return;}
  const phase=coopPhase(r);if(phase===r.phase)return;delete r.lastAttack;
- r.attacks=0;r.exposedUntil=0;r.stagger=0;plan(r,now,1500);
+ r.attacks=0;r.exposedUntil=0;r.stagger=0;
+ if(now>=r.warningAt&&now<r.landsAt)r.phase=phase;
+ else plan(r,now);
  const kind=phase===2?'skitter':'wisp',count=phase===3&&Object.keys(r.members).length>1?2:1;
  for(let i=0;i<count;i++)r.adds.push({id:'phase'+phase+'-'+i,kind,name:kind==='wisp'?'Rune Wisp':'Mire Hatchling',hp:kind==='wisp'?40:45,max:kind==='wisp'?40:45,x:i?8:4,y:i?4:7,target:{...r.targetTile},landsAt:now+4200});
 }
@@ -82,7 +84,8 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  const m=r.members[id];if(!m||m.left||s.vaultCoop?.id!==r.id)throw invalid('Join this Vault party first.');
  if(s.position?.x===11&&!dungeonFloor('depthsVault',s.position.x,s.position.y,r.vaultMechanism))throw invalid('Choose a walkable tile in the shared Vault.');
  // A movement arriving after the impact cannot erase damage from that impact.
- if(r.status!=='battle'||now<r.landsAt)m.pos={...s.position};
+ const nextImpact=Math.min(r.landsAt,...(r.adds??[]).filter(add=>add.hp>0).map(add=>add.landsAt));
+ if(r.status!=='battle'||now<nextImpact)m.pos={...s.position};
  advanceVaultParty(r,now);m.pos={...s.position};m.lastAt=now;syncPlayer(s,r,id,now);
  if(!s.vaultCoop)return {text:'Defeated by '+m.cause+'. '+m.tip};
  if(kind==='leave'){
@@ -122,7 +125,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   damage=plating?.damage??Math.max(1,stats.damage-armour);if(plating?.flanked)text='Flank hit! ';if(now<m.counterUntil){damage=Math.ceil(damage*(1+(weapon.counterMultiplier??.5)+build.counter));m.counterUntil=0;text+='Counter! ';}if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
   m.lastStrike=now;
   if(!target){r.stagger+=Math.ceil(weaponStagger(m.weapon,s.combatGear.activeSwordUpgrade)*build.stagger)+(build.id==='vanguard'&&m.ward>0&&m.wardUntil>now?8:0);if(r.stagger>=160){r.stagger=0;r.exposedUntil=now+3000;r.landsAt=Math.max(r.landsAt,now+2000);text='Stagger break! Core exposed. ';}
-   if(r.phase===3&&r.move==='bossFan'&&now>=r.warningAt){r.castHits++;if(r.castHits>=3){plan(r,now,1800);m.support++;text+='Charged volley interrupted! ';}}
+   if(r.move==='bossFan'&&now>=r.warningAt){r.castHits++;if(r.castHits>=3){plan(r,now,1800);m.support++;text+='Charged volley interrupted! ';}}
   }
  }
  if(kind==='power'){
@@ -136,7 +139,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   else if(power.form==='renewal'){if(ally.hp>=playerMaxHealth(ally,now))throw invalid('Choose an injured ally to heal.');ally.hp=Math.min(playerMaxHealth(ally,now),ally.hp+power.value);m.support++;text='Healed '+ally.name+'. ';}
   else if(power.form==='focus'){r.landsAt+=Math.min(1000,power.value);m.support++;text='Guardian delayed. ';}
   else{m.nextDodgeAt=now;m.dodgeUntil=now+350;text='Dodge readied. ';}
-  if(power.gem==='storm'&&r.phase===3&&r.move==='bossFan'&&now>=r.warningAt){plan(r,now,1800);m.support++;text+='Storm interrupted the volley! ';}
+  if(power.gem==='storm'&&r.move==='bossFan'&&now>=r.warningAt){plan(r,now,1800);m.support++;text+='Storm interrupted the volley! ';}
   if(!target&&power.gem==='fire')r.burn={source:id,damage:power.rank+2,nextAt:now+1000,until:now+4000};
   if(!target&&power.gem==='ice'){if(now>=(r.chilledUntil??0))r.landsAt+=600;r.chilledUntil=now+4000;}
   if(!target&&power.gem==='shadow')r.weakenedUntil=now+5000;
