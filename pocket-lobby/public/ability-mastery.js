@@ -1,6 +1,7 @@
 import {styleAbilities,abilityStatLevel} from './style-abilities.js';
 
 export const masteryBenefits={
+ faultbreaker:['3 empowered party hits','4 empowered party hits','5 empowered party hits'],
  bloodPrice:['30 damage shield','35 damage shield','40 damage shield'],
  bindBeast:['Base ally strength and duration','+1 strike damage · +5 seconds','+2 strike damage · +10 seconds'],
  sanctuary:['Absorbs up to 30 shared damage','Absorbs up to 40 shared damage','Absorbs up to 50 shared damage'],
@@ -24,6 +25,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ faultbreaker:'Crack the armoured Vault Guardian’s plating.',
  bloodPrice:'Let a creature break the shield.',
  bindBeast:'Have a bound beast land a strike in another fight.',
  sanctuary:'Place a Sanctuary during a co-op Vault fight.',

@@ -78,7 +78,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  s.health=0;s.location='home';s.position={x:5,y:7};s.depthsRun=null;s.hunting.recoveryUntil=now+boarRules.recovery;delete s.vaultCoop;
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
- const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
+ const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
   targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
@@ -122,7 +122,26 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='tick')return {text:m.lastFeedback??'Watch the marked attack.'};
  if(r.status!=='battle'||m.hp<=0)throw invalid('This co-op battle is not active.');
- if(!['strike','power','dodge','taunt','sanctuary'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(!['strike','power','dodge','taunt','sanctuary','faultbreaker'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(kind==='faultbreaker'){
+  const abilities=normalizeStyleAbilities(s.styleAbilities);
+  if(!abilities.learned.includes('faultbreaker'))throw invalid('Learn Faultbreaker before using it.');
+  if((abilities.readyAt.faultbreaker??0)>now)throw invalid('Faultbreaker is still recharging.');
+  if(r.phase!==1)throw invalid('Faultbreaker needs the Guardian’s armour in its opening phase.');
+  if(Math.hypot(m.pos.x-r.origin.x,m.pos.y-r.origin.y)>2)throw invalid('Move within two tiles of the Guardian.');
+  if(r.faultbreaker?.until>now&&r.faultbreaker.hits>0)throw invalid('The Guardian’s armour is already fractured.');
+  requireActionPoint(s);
+  const hits=2+abilityMastery(s,'faultbreaker').stage;
+  r.faultbreaker={until:now+8000,hits};
+  s.styleAbilities=abilities;
+  abilities.readyAt.faultbreaker=now+styleAbilities.faultbreaker.cooldown;
+  awardAbilityUse(s,'faultbreaker',body.operation);
+  m.support++;
+  m.lastFeedback='Armour fractured · '+hits+' empowered party hits.';
+  spendActionPoint(s,now);
+  syncPlayer(s,r,id,now);
+  return {text:m.lastFeedback};
+ }
  if(kind==='sanctuary'){
   const abilities=normalizeStyleAbilities(s.styleAbilities);
   if(!abilities.learned.includes('sanctuary'))throw invalid('Learn Sanctuary before placing a ward.');
@@ -148,8 +167,9 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   if(!weapon)throw invalid('You joined without a weapon. Use abilities, or retreat and equip one.');
   if(now<m.lastStrike+stats.attackInterval)throw invalid('Wait for your weapon to recover.');
   if(Math.hypot(m.pos.x-position.x,m.pos.y-position.y)>playerMeleeReach(m.weapon))throw invalid('Move closer to your target.');
-  const plating=!target&&r.phase===1?physicalPlating({...coopEncounter(r),arenaPlayer:m.pos,arenaLockedFor:now>=r.warningAt?r.landsAt:0,brainRecoveryUntil:r.lastAttack?r.warningAt-600:0},stats.damage,9,0,now):null;
-  damage=plating?.damage??Math.max(1,stats.damage-armour);if(plating?.flanked)text='Flank hit! ';if(now<m.counterUntil){damage=Math.ceil(damage*(1+(weapon.counterMultiplier??.5)+build.counter));m.counterUntil=0;text+='Counter! ';}if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
+  const fractured=!target&&r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0;
+  const plating=!fractured&&!target&&r.phase===1?physicalPlating({...coopEncounter(r),arenaPlayer:m.pos,arenaLockedFor:now>=r.warningAt?r.landsAt:0,brainRecoveryUntil:r.lastAttack?r.warningAt-600:0},stats.damage,9,0,now):null;
+  damage=plating?.damage??Math.max(1,stats.damage-(fractured?0:armour));if(plating?.flanked)text='Flank hit! ';if(now<m.counterUntil){damage=Math.ceil(damage*(1+(weapon.counterMultiplier??.5)+build.counter));m.counterUntil=0;text+='Counter! ';}if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
   const raised=s.styleAbilities?.raised;
   if(s.styleAbilities?.learned?.includes(raised?.living?'bindBeast':'raiseFallen')&&raised?.summonedAt<=now&&raised.until>now&&raised.nextAt<=now){
    damage+=raised.damage;
@@ -157,6 +177,11 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
    raised.lastStrikeAt=now;
    awardAbilityUse(s,raised.living?'bindBeast':'raiseFallen',raised.id);
    text+=raised.living?'Bound beast joined the strike. ':'Undead ally joined the strike. ';
+  }
+  if(fractured){
+   damage=Math.ceil(damage*1.2);
+   r.faultbreaker.hits--;
+   text+='Faultbreaker opening! ';
   }
   m.lastStrike=now;
   if(!target){r.stagger+=Math.ceil(weaponStagger(m.weapon,s.combatGear.activeSwordUpgrade)*build.stagger)+(build.id==='vanguard'&&m.ward>0&&m.wardUntil>now?8:0);if(r.stagger>=160){r.stagger=0;r.exposedUntil=now+3000;r.landsAt=Math.max(r.landsAt,now+2000);text='Stagger break! Core exposed. ';}

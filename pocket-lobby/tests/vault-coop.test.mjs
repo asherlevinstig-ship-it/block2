@@ -140,3 +140,24 @@ test('Sanctuary shares one damage pool with nearby allies and leaves distant all
  assert.equal(r.sanctuary.remaining,remaining);
  assert.equal(publicVaultParty(r,'a',9400).sanctuary,null);
 });
+
+test('Faultbreaker shares limited weapon openings without spending them on adds',()=>{
+ const {r,a,b}=party();
+ a.styleAbilities={learned:['faultbreaker']};
+ a.actionPoints.value=b.actionPoints.value=8;
+ act(r,a,'a','start',1300);
+ a.position=b.position={x:r.origin.x-1,y:r.origin.y};
+ r.members.a.pos=r.members.b.pos={...a.position};
+ const baseline=structuredClone(r);
+ act(r,a,'a','faultbreaker',1400);
+ assert.equal(a.actionPoints.value,7);
+ assert.equal(publicVaultParty(r,'b',1400).faultbreaker.hits,3);
+ const ordinary=act(baseline,structuredClone(b),'b','strike',1500).hit;
+ const boosted=act(r,b,'b','strike',1500).hit;
+ assert(boosted>ordinary);
+ assert.equal(r.faultbreaker.hits,2);
+ r.adds=[{id:'test',hp:100,x:r.origin.x-1,y:r.origin.y,landsAt:9900}];
+ act(r,a,'a','strike',1600,{target:'test'});
+ assert.equal(r.faultbreaker.hits,2);
+ assert.equal(publicVaultParty(r,'a',9400).faultbreaker,null);
+});
