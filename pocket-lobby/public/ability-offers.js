@@ -45,7 +45,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   cancel();selected=id;
   const ability=catalog[id];title.textContent=ability.name;description.textContent=ability.description;
   requirements.textContent=Object.entries(ability.requirements).map(([key,level])=>(key==='familiarConnection'?'Familiar Connection':key[0].toUpperCase()+key.slice(1))+' '+level).join(' · ');
-  cost.textContent=(ability.cost===0?'0 AP': '1 AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
+  cost.textContent=ability.passive?'Passive · Activates at most once per minute':(ability.cost===0?'0 AP': '1 AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
   accept.textContent='Hold to accept '+ability.name;
   for(const button of choices.children)button.setAttribute('aria-pressed',String(button.dataset.ability===id));
  }
@@ -116,6 +116,14 @@ function drawPreview(canvas,id,time,drawCharacter,reduced){
   ctx.beginPath();ctx.ellipse(145+blink,115,radius,radius*.42,0,0,Math.PI*2);ctx.stroke();
   if(id==='waypoint'){ctx.globalAlpha=.35;ctx.fillRect(138,38,14,77);ctx.globalAlpha=1;}
   for(let i=0;i<12;i++){const a=i*2.4+t*4;ctx.fillRect(145+blink+Math.cos(a)*radius,104-i%4*12+Math.sin(a)*6,2,2);}
+ }else if(['deathmark','siphon','bloodlust'].includes(id)){
+  drawCharacter(ctx,225,115,reduced?0:time);ctx.strokeStyle=id==='siphon'?'#df6b97':'#c778f2';
+  ctx.beginPath();ctx.arc(225,74,16,0,Math.PI*2);ctx.stroke();
+  for(let i=0;i<10;i++){const f=(t+i/10)%1;ctx.fillStyle=id==='siphon'?'#ed7b9e':'#bb87ef';ctx.fillRect(220-f*70,85-Math.sin(f*Math.PI)*20,3,3);}
+  ctx.font='bold 12px system-ui';ctx.fillText(id==='deathmark'?'MARK':id==='siphon'?'+HP':'FURY',205,47);
+ }else if(id==='shadowPursuit'){
+  for(let i=0;i<6;i++){ctx.globalAlpha=1-i*.12;ctx.fillRect(165+i*18,112-i*5,5,3);}ctx.globalAlpha=1;
+  ctx.font='bold 12px system-ui';ctx.fillText('FOLLOW THE TRAIL',170,63);
  }else if(id==='trackPrey'){
   for(let i=0;i<5;i++){ctx.globalAlpha=reduced ? .8 : .3+.7*Math.max(0,Math.sin(t*6-i));ctx.fillRect(170+i*18,114-i*5,5,3);ctx.fillRect(170+i*18,110-i*5,2,2);}ctx.globalAlpha=1;
  }else if(id==='scoutAhead'){

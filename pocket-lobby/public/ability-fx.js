@@ -1,4 +1,8 @@
 const themes={
+ deathmark:{rim:'#c88aff',light:'#f4d8ff',glow:'176,72,240',duration:800},
+ siphon:{rim:'#f17aab',light:'#ffd8e5',glow:'237,72,125',duration:800},
+ bloodlust:{rim:'#fa6c55',light:'#ffe2af',glow:'240,75,50',duration:800},
+ shadowPursuit:{rim:'#bc96ff',light:'#eee2ff',glow:'150,94,230',duration:800},
  waypoint:{rim:'#72d9ff',light:'#fff2bc',glow:'87,175,255',duration:920},
  shadowstep:{rim:'#b68aff',light:'#efddff',glow:'142,82,242',duration:510}
 };
@@ -34,9 +38,24 @@ export function drawAbilityBursts(ctx,point,effects,room,time,reduced){
  for(const effect of effects){
   if(effect.room!==room)continue;
   const {id,tile,phase,started}=effect,theme=themes[id];
+  if(!theme)continue;
   const age=time-started,t=age/theme.duration;
   if(t<0||t>=1)continue;
   const [x,y]=point(tile.x+.5,tile.y+.5,1);
+  if(['deathmark','siphon','bloodlust','shadowPursuit'].includes(id)){
+   ctx.save();ctx.globalAlpha=Math.max(0,1-t);ctx.strokeStyle=theme.rim;ctx.fillStyle=theme.light;ctx.lineWidth=1.5;
+   if(id==='deathmark'){
+    const r=reduced?11:7+ease(t)*9;ctx.beginPath();ctx.arc(x,y-31,r,0,tau);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x-r-4,y-31);ctx.lineTo(x+r+4,y-31);ctx.moveTo(x,y-31-r-4);ctx.lineTo(x,y-31+r+4);ctx.stroke();
+   }else if(id==='siphon'){
+    for(let i=0;i<14;i++){const q=reduced?.5:(t+i/14)%1,a=i*2.4;diamond(ctx,x+Math.cos(a)*(1-q)*30,y-15+Math.sin(a)*(1-q)*15-q*12,1.4,2.5);ctx.fill();}
+   }else if(id==='bloodlust'){
+    for(let i=0;i<7;i++){const dx=(i-3)*5,dy=reduced?8:t*28;ctx.beginPath();ctx.moveTo(x+dx,y);ctx.quadraticCurveTo(x+dx+6,y-dy/2,x+dx,y-dy-8);ctx.stroke();}
+   }else{
+    for(let i=0;i<5;i++){ctx.globalAlpha=(1-t)*(1-i*.15);diamond(ctx,x+i*6-12,y-i*4-(reduced?0:t*8),2,3);ctx.fill();}
+   }
+   ellipse(ctx,x,y,10+(reduced?0:ease(t)*12),theme.rim,1);ctx.restore();continue;
+  }
   const arrive=phase==='arrival',portal=id==='waypoint';
   const progress=ease(t);
   const alpha=Math.min(1,(1-t)*2.4)*Math.min(1,t*18);

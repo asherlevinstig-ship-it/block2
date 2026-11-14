@@ -61,6 +61,7 @@ export function styleAbilityAction(state,action,body,now){
   spendActionPoint(state,now);
   return true;
  }
+ if(['deathmark','bloodlust','shadowPursuit','siphon'].includes(id))throw invalid('Use PvP powers from Nearby players. Bloodlust activates after a player defeat.');
  if(id==='appraise')throw invalid('Choose an ore listing in Market stalls to appraise it.');
  if(id==='ambush')throw invalid('Use Ambush beside a wild boar before combat.');
  if(id==='shareHearth')throw invalid('Invite a player from the Share a Hearth panel.');

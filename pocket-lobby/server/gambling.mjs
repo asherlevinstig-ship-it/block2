@@ -92,7 +92,7 @@ export function gamblingAction(state,action,body,now,random=secureRandom){
 
 // Never send the dealer's face-down card in player saves or conflict packets.
 export function publicPlayerState(state){
-  if(state.pvp?.incidents){const {incidents,...pvp}=state.pvp;state={...state,pvp};}
+  if(state.pvp){const {incidents,engagements,mark,lastOpponent,pursuit,...pvp}=state.pvp;state={...state,pvp:{...pvp,...(lastOpponent?{lastOpponent:{name:lastOpponent.name,until:lastOpponent.until}}:{})}};}
   if(state.learning)state={...state,learning:publicLearning(state.learning)};
   if(state.gambling?.round?.game!=='blackjack'||state.gambling.round.status!=='playing')return state;
   return {...state,gambling:{...state.gambling,round:{...state.gambling.round,dealer:[state.gambling.round.dealer[0],null]}}};

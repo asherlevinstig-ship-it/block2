@@ -6282,17 +6282,17 @@ function refreshStyleAbilityBar(){
   if(!bar||!state||!window.styleAbilities)return;
   const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
   const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt[id]??0)-combatNow())/1000)));
-  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady]);
+  const nextKey=JSON.stringify([learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow()]);
   if(nextKey===styleAbilityKey)return;
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
   bar.replaceChildren();
   for(const [index,id] of learned.entries()){
-    const ability=window.styleAbilities[id],button=document.createElement('button');
-    button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':ability.name)+(seconds[index]?' · '+seconds[index]+'s':'');
-    button.disabled=seconds[index]>0||routineControlled();
+    const ability=window.styleAbilities[id],button=document.createElement('button');button.title=ability.description;
+    button.type='button';button.textContent=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
+    button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():castStyleAbility(id,{});
+    button.onclick=()=>id==='waypoint'?openStyleAbilities('waypoint'):id==='shadowstep'?aimShadowstep():id==='shareHearth'?openHearth():id==='ambush'?useAmbush():id==='appraise'?openAppraisalMarket():id==='bloodlust'?openStyleAbilities():['deathmark','siphon','shadowPursuit'].includes(id)?window.towerRobbery?.openPower(id):castStyleAbility(id,{});
     bar.append(button);
   }
   const menu=document.createElement('button');menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
@@ -9008,7 +9008,10 @@ window.towerApplyPvpHit=(state,receipt)=>{
 };
 window.towerWantedChanged=()=>note('You are wanted. Hunters can claim a bounty for defeating you.',5000);
 window.towerApplyRobberyState=state=>{credits=state.credits;Object.assign(playerStats,state.stats);$('credits').textContent=new Intl.NumberFormat().format(credits);walletTween=null;updatePlayerStats();};
-window.towerRobberyHooks={pvpReward:(state,reward)=>{
+window.towerRobberyHooks={pursue:(room,name)=>{setExplorationDestination(room);note('Following '+name+'’s fading trail. Use the marked exits.');},pvpState:(state,receipt)=>{
+ applyServerGameplay(state);refreshStyleAbilityBar();
+ if(receipt.power||state.styleAbilities?.bloodlustUntil>combatNow())abilityBursts.push({id:receipt.power??'bloodlust',room:currentRoom,tile:{x:player.cx,y:player.cy},phase:'arrival',started:performance.now()});
+},pvpReward:(state,reward)=>{
  if(!reward)return;
  applyServerGameplay(state);updateInventory();
  if(reward.kind==='item')showTransaction('PvP reward',[{icon:'◆',text:reward.name+' · Added to Inventory'}]);

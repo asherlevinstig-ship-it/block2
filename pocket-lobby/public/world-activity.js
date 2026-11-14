@@ -10,6 +10,17 @@ export function worldActivityEvents(before,after,now=Date.now()){
  if(!before||!after)return [];
  const events=[],room=after.location,p=plan(after),b=plan(before),same=p&&b&&(p.routineId??p.startedAt)===(b.routineId??b.startedAt);
  const add=(id,kind,label,amount=0,at=now,eventRoom=room)=>{if(now-at>=0&&now-at<5000)events.push({id,kind,label,amount,at,room:eventRoom});};
+ const strike=after.pvp?.lastStrike;
+ if(strike?.id&&strike.id!==before.pvp?.lastStrike?.id){
+  const names={deathmark:'Deathmark',siphon:'Siphon',shadowPursuit:'Shadow Pursuit'};
+  if(strike.power)add('pvp-power:'+strike.id,'ability',names[strike.power],0,strike.at,strike.room);
+  if(strike.healed>0)add('pvp-heal:'+strike.id,'heal','+'+strike.healed+' HP',strike.healed,strike.at,strike.room);
+ }
+ const mark=after.pvp?.lastMark;
+ if(mark?.id&&mark.id!==before.pvp?.lastMark?.id)add('pvp-mark:'+mark.id,'ability','Deathmarked',0,mark.at,mark.room);
+ const hit=after.pvp?.lastHit;
+ if(hit?.id&&hit.id!==before.pvp?.lastHit?.id&&hit.damage>0)add('pvp-hurt:'+hit.id,'damage','−'+hit.damage+' HP',hit.damage,hit.at,hit.room);
+ if(after.styleAbilities?.bloodlustUntil>now&&after.styleAbilities.bloodlustUntil!==before.styleAbilities?.bloodlustUntil)add('bloodlust:'+after.styleAbilities.bloodlustUntil,'ability','Bloodlust',0,now);
  const timberGold=same?(p.timberSales?.gold??0)-(b.timberSales?.gold??0):0;
  const mined=after.miningReceipt;
  if(mined?.id&&mined.id!==before.miningReceipt?.id){

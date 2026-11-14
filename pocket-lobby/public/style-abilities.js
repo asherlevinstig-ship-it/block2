@@ -2,6 +2,9 @@ import {keeperSites} from './lantern-keepers.js';
 import {skillLevel} from './skill-curve.js';
 
 export const abilitySlots=3;
+export function abilityStatLevel(state,stat){
+ return stat==='evil'?(state.stats?.evil??0):skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[(stat==='fishing'?'patience':stat)+'Xp']);
+}
 export const ambushPrey=new Set(['boar','thornBoar','dusktusk']);
 export function ambushPosition(position,site){
  return !!position&&!!site&&position.x===site.x+1&&position.y===site.y;
@@ -35,6 +38,10 @@ export const styleAbilities={
  ambush:{name:'Ambush',icon:'⚔',cooldown:60000,description:'Approach a wild boar from behind and open combat with a strike dealing 50% extra damage.',requirements:{hunting:3,stealth:2},discovery:'Earned through wild hunts and practising stealth.'},
  appraise:{name:'Appraise',icon:'◉',cost:0,cooldown:60000,description:'Compare an ore listing with completed player sales from the last seven days.',requirements:{trading:3,mining:2},discovery:'Earned by trading and mining.'},
  stoneguard:{name:'Stoneguard',icon:'⬡',cooldown:60000,description:'Raise stone plates for five seconds, reducing creature damage by 30%.',requirements:{mining:3,vitality:2},discovery:'Earned by mining and building Vitality.'},
+ deathmark:{name:'Deathmark',icon:'✥',cooldown:45000,description:'Mark a nearby player for ten seconds. Your next weapon strike against them deals 25% more damage. Marking costs 1 AP; striking costs another.',requirements:{evil:1,stealth:2}},
+ bloodlust:{name:'Bloodlust',icon:'♜',cost:0,passive:true,cooldown:60000,description:'Defeating a player grants 10% more PvP damage for fifteen seconds, at most once per minute.',requirements:{evil:2,strength:3}},
+ shadowPursuit:{name:'Shadow Pursuit',icon:'⁘',cooldown:60000,description:'Reveal the area of your most recent opponent for thirty seconds. Follow the trail through normal routes; this does not teleport you or reveal a hidden player.',requirements:{evil:1,exploration:3}},
+ siphon:{name:'Siphon',icon:'♦',cooldown:45000,description:'Empower a weapon strike against a nearby player, healing you for 25% of the damage actually dealt.',requirements:{evil:2,vitality:3}},
  patientCast:{name:'Patient Cast',icon:'≈',cost:0,cooldown:60000,description:'Empower your next manual cast with a brighter bobber and a 50% wider perfect-reel window.',requirements:{fishing:3,exploration:2},discovery:'Earned by catching fish and exploring.'}
 };
 export const waypoints={
@@ -63,11 +70,14 @@ export function normalizeStyleAbilities(input){
  }));
  const guard=input?.stoneguard;
  const guarded=learned.includes('stoneguard')&&Number.isSafeInteger(guard?.until)&&guard.until>0&&[30,40,50].includes(guard.reduction);
- return {learned,declined,readyAt,quietUntil,lastBlinkAt,...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
+ const pvpTimers=Object.fromEntries(['deathmarkUntil','bloodlustUntil'].filter(key=>learned.includes(key==='deathmarkUntil'?'deathmark':'bloodlust')&&Number.isSafeInteger(input?.[key])&&input[key]>0).map(key=>[key,input[key]]));
+ const pursuit=input?.pursuit;
+ const pursuing=learned.includes('shadowPursuit')&&typeof pursuit?.room==='string'&&/^[a-zA-Z]{1,30}$/.test(pursuit.room)&&typeof pursuit.name==='string'&&Number.isSafeInteger(pursuit.until)&&pursuit.until>0;
+ return {learned,declined,readyAt,quietUntil,lastBlinkAt,...pvpTimers,...(pursuing?{pursuit:{room:pursuit.room,name:pursuit.name.slice(0,40),until:pursuit.until}}:{}),...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (['shareHearth','appraise','stoneguard'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[(stat==='fishing'?'patience':stat)+'Xp'])>=level)).map(([id])=>id);
+   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
 }

@@ -388,6 +388,8 @@ export async function handlePlayerApi(request,env){
     if(path==='/api/player/pvp'){
       if(body.kind!=='strike')return json({error:'Choose a PvP action.'},400);
       const result=await pvpStrike(env,row,state,body);
+      await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(result.row.state_json),result.row.revision,{fresh:true});
+      if(result.targetRow)await publishWorldActivity(env,result.targetRow.player_id,result.targetBefore,JSON.parse(result.targetRow.state_json),result.targetRow.revision,{fresh:true});
       return json({...playerPacket(result.row),receipt:result.receipt});
     }
     if(path==='/api/player/robbery'){
