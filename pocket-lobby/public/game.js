@@ -4694,7 +4694,8 @@ function finishFishing(time){
   const goalCatch=catchingGoalFish&&currentRoom==='pond'&&characterRules.goal?.target==='weapon:ironSword';
   if(goalCatch)updateUpgradeGoalHud();
   showTransaction(oakTrial?'First Oak Rod catch!':levelUp?'Patience level '+patienceLevel()+'!':receipt?.shoalReeled?'Shoal catch landed':'Catch landed',[
-    {text:'+1 '+fish.name,icon:'⋈'},{text:'+'+earned+' Patience XP'+(session.bonus?' · Reel bonus':''),icon:'✦'},
+    {text:'+1 '+fish.name,icon:'⋈'},
+    ...(session.silverfinWatch?[{text:session.silverfinWatch.complete?'Silverfin Watch complete · Two anglers pitched in':'Silverfin Watch · Your catch counted',icon:'✦'}]:[]),{text:'+'+earned+' Patience XP'+(session.bonus?' · Reel bonus':''),icon:'✦'},
     ...(oakTrial?[{text:oakBiteSavings+'s shorter average bite wait than Reed Rod',icon:'♓'},{text:'Sells for '+fish.price+' gold at the Trading Post',icon:'◈'}]:[]),
     ...(goalCatch?[{text:caughtFishCount()<2?'Iron Sword task · 1 / 2 fish caught':'Iron Sword task · Open your goal to sell the catch',icon:'◈'}]:[])
   ]);
@@ -5844,6 +5845,7 @@ async function completeServerCast(session){
     const result=await serverGameplay('catch',{castId:session.serverCastId});
     if(fishingSession!==session)return;
     const receipt=result.state.fishingReceipt;
+    session.silverfinWatch=result.silverfinWatch;
     session.serverResult=receipt;
     session.fishId=receipt.fish;session.bonus=receipt.bonus;
     finishFishing(performance.now());
@@ -6423,6 +6425,7 @@ function updateActivityPrompt(){
   $('roomLayout').dataset.contextual=String(visible);
   const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal','engageMoonback','moonbackTracks','cellarGuardian','cellarChest'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
+  $('contextGuideSilverfin').hidden=!visible||currentRoom!=='pond'||!window.playerCloud?.readSilverfinWatch;
   $('contextGuideSecondChance').hidden=!prompt?.secondChance;
   $('contextGuideSecondChance').disabled=serverActionBusy;
   const key=prompt?JSON.stringify(prompt):'';
@@ -6447,6 +6450,39 @@ function updateActivityPrompt(){
   else if(prompt.action==='moonbackTracks')button.textContent='Follow tracks';
   else button.textContent=$(prompt.action).textContent||prompt.title;
 }
+let silverfinWatchTimer=null,silverfinWatchLoading=false;
+async function refreshSilverfinWatch(){
+  const dialog=$('silverfinWatchDialog'),status=$('silverfinWatchStatus');
+  if(!dialog.open||document.hidden||silverfinWatchLoading)return;
+  silverfinWatchLoading=true;
+  try{
+    const watch=await window.playerCloud.readSilverfinWatch();
+    if(!dialog.open)return;
+    const count=watch.contributors.length;
+    const message=count+' / '+watch.target+' anglers · '+(watch.complete?'Watch complete':count?'Waiting for a second angler':'Catch a fish to start the watch');
+    if(status.textContent===message)return;
+    status.textContent=message;
+    const names=$('silverfinWatchNames');
+    names.replaceChildren();
+    for(const person of watch.contributors){
+      const item=document.createElement('li');
+      item.textContent=person.name+(person.self?' (you)':'')+(person.faction?' · '+person.faction:'');
+      names.append(item);
+    }
+  }catch(error){if(dialog.open)status.textContent=error.message;}
+  finally{silverfinWatchLoading=false;}
+}
+$('contextGuideSilverfin').onclick=()=>{
+  if(currentRoom!=='pond'||unavailable())return;
+  $('silverfinWatchStatus').textContent='Checking the watch…';
+  $('silverfinWatchNames').replaceChildren();
+  $('silverfinWatchDialog').showModal();
+  refreshSilverfinWatch();
+  silverfinWatchTimer=setInterval(refreshSilverfinWatch,15000);
+};
+$('silverfinWatchDialog').addEventListener('close',()=>clearInterval(silverfinWatchTimer));
+$('silverfinWatchClose').onclick=$('silverfinWatchFish').onclick=()=>$('silverfinWatchDialog').close();
+$('silverfinWatchFaction').onclick=()=>{$('silverfinWatchDialog').close();$('openFactions').onclick?.();};
 function updateAdventurePanel(){
   updateExplorationNav();
   updateWoodPanel();

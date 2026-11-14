@@ -108,6 +108,11 @@ export function initializeFactions(api,document=globalThis.document){
     if(membership){
       const {name,description,roster,leader}=membership;
       mine.append(make('h3',name),make('p',description),projectBoard(membership),make('h4','Roster · '+roster.length+' / '+capacity));
+      if(membership.silverfin){
+        const watch=make('section','');watch.className='faction-project';
+        watch.append(make('h4','Silverfin Watch'),make('p',membership.silverfin.today+' today · '+membership.silverfin.total+' all-time faction contributions'),make('small','Catch a fish at Silverfin Pond while the daily watch still needs an angler. Non-members can help too.'));
+        mine.insertBefore(watch,mine.lastChild);
+      }
       const list=make('ul','');
       for(const member of roster){
         const row=make('li','');

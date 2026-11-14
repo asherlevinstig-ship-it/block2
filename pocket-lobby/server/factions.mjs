@@ -3,6 +3,7 @@ import {factionLeadershipLevel,factionLeadershipXp,leadershipStatus} from '../pu
 
 import {factionFoundingFee,factionRegistrar} from '../public/faction-registry.js';
 
+import {readFactionSilverfin} from './silverfin-watch.mjs';
 import {donateFactionProject,readFactionProject} from './faction-projects.mjs';
 import {factionHall} from '../public/faction-hall.js';
 
@@ -33,9 +34,9 @@ export async function readFactions(db,playerId,search=''){
     'SELECT f.faction_id AS id, f.name, f.description, COUNT(m.player_id) AS size FROM tower_factions f JOIN tower_faction_members m USING (faction_id) WHERE instr(f.name_key, ?) > 0 GROUP BY f.faction_id ORDER BY f.name_key LIMIT 50'
   ).bind(query).all();
   const player=await readApplicant(db,playerId);
-  const hall=membership?await readFactionProject(db,playerId,membership.id):null;
+  const [hall,silverfin]=membership?await Promise.all([readFactionProject(db,playerId,membership.id),readFactionSilverfin(db,membership.id)]):[null,null];
   if(hall?.open)hall.feast=await readGuildFeast(db,playerId,membership.id);
-  return {founding:{fee:factionFoundingFee,wallet:player?.gold??0,registrar:factionRegistrar.name},leadership:leadershipStatus(player?.xp),capacity:CAPACITY,factions:directory.results,membership:membership?{...membership,roster:roster.results,hall}:null};
+  return {founding:{fee:factionFoundingFee,wallet:player?.gold??0,registrar:factionRegistrar.name},leadership:leadershipStatus(player?.xp),capacity:CAPACITY,factions:directory.results,membership:membership?{...membership,roster:roster.results,hall,silverfin}:null};
 }
 
 export async function changeFaction(db,playerId,body,now=Date.now()){

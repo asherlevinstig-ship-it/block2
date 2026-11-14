@@ -1,3 +1,4 @@
+import {readSilverfinWatch,silverfinContribution} from './silverfin-watch.mjs';
 import {readPublicRequests,deliverPublicRequest} from './public-requests.mjs';
 import {advanceAutoCooking} from './auto-cooking.mjs';
 import {robberyAction} from './robbery.mjs';
@@ -73,10 +74,15 @@ export const packet=row=>({state:publicPlayerState(readPlayerState(row)),charact
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
-async function write(db,id,revision,state,operation,factionId=null,treeMutation=null){
+async function write(db,id,revision,state,operation,factionId=null,treeMutation=null,pondCatchAt=null){
   if(treeMutation)return writeTreePlayer(db,id,revision,state,operation,treeMutation);
-  return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
-    .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId).first();
+  const update=db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
+    .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId);
+  if(pondCatchAt===null)return update.first();
+  const [saved,contribution]=await db.batch([update,silverfinContribution(db,id,state,pondCatchAt)]);
+  const row=saved.results[0];
+  if(row&&contribution.results.length)row.silverfinContributed=true;
+  return row??null;
 }
 async function actorMotion(env,id){
   if(!env.AUTO_ACTORS)return null;
@@ -228,6 +234,7 @@ export async function handlePlayerApi(request,env){
       return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
+    if(path==='/api/player/silverfin-watch'&&request.method==='GET')return json({watch:await readSilverfinWatch(env.TOWER_DB,id)});
     if(path==='/api/player/public-requests'&&request.method==='GET')return json({board:await readPublicRequests(env.TOWER_DB)});
     if(path==='/api/player/vault-coop'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id),state=row&&readPlayerState(row),code=new URL(request.url).searchParams.get('id')??state?.vaultCoop?.id;
@@ -291,7 +298,7 @@ export async function handlePlayerApi(request,env){
       }
       return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
     }
-    let state=readPlayerState(row),factionId=null,treeMutation=null;
+    let state=readPlayerState(row),factionId=null,treeMutation=null,pondCatchAt=null;
     if(path==='/api/player/public-requests'){
       const updated=await deliverPublicRequest(env.TOWER_DB,row,state,body.id,body.operation,Date.now());
       if(!updated)return json({error:'The board changed. Refresh it and try again.',...packet(await read(env.TOWER_DB,id))},409);
@@ -347,7 +354,9 @@ export async function handlePlayerApi(request,env){
         const now=Date.now();
         const millRaid=gameplay==='cast'&&state.location==='millbrook'&&!state.fishingCast?await readMillRaid(env.TOWER_DB,now):undefined;
         const camp=(gameplay==='campRest'||gameplay==='cook'&&state.location===trailCamp.room)?await readTrailCamp(env.TOWER_DB):undefined;
+        const priorCatch=state.fishingReceipt?.castId;
         applyGameplayAction(state,gameplay,body,now,Math.random,{millRaid,camp});
+        if(gameplay==='catch'&&state.fishingReceipt?.room==='pond'&&state.fishingReceipt.castId!==priorCatch)pondCatchAt=now;
         if(shared&&state.timberCut)state.timberCut.treeGeneration=shared.generation;
         if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);
       }
@@ -480,10 +489,11 @@ export async function handlePlayerApi(request,env){
       spendActionPoint(state,Date.now());
       if(state.plan&&state.actionPoints.value===0){stopForActionPoints(state,Date.now());finishRoutineReport(state,Date.now());}
     }
-    const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation);
+    const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation,pondCatchAt);
     if(!updated&&treeMutation){const latest=await read(env.TOWER_DB,id);if(latest?.revision===row.revision)return json({error:'Invalid cut: another player felled this tree. Choose a standing tree.'},400);}
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
     await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision,{fresh:!!treeMutation||Date.now()-(row.updated_at??0)<10000});
+    if(updated.silverfinContributed)return json({...packet(updated),silverfinWatch:await readSilverfinWatch(env.TOWER_DB,id,pondCatchAt)});
     return json(packet(updated));
   }catch(error){
     if(error.status===402)return json({error:error.message,code:'action-points'},402);
