@@ -40,7 +40,7 @@ export const willowmereAreas={
 export const willowmereRooms=Object.keys(willowmereAreas);
 export const willowmereMapPositions={reedwater:[490,640],willowbank:[295,720],millbrook:[510,805]};
 export const moonfinPool={room:'millbrook',spots:[{x:8,y:4},{x:8,y:5}],water:{x:9.7,y:4.8}};
-export const fishingSites={ambermead:{stations:[{x:8,y:6}],waterX:10.2},pond:{stations:[{x:5,y:5}],waterX:7.4},willowbank:{stations:[{x:6,y:2},{x:6,y:5},{x:6,y:8}],waterX:7.45}};
+export const fishingSites={ambermead:{stations:[{x:8,y:6}],waterX:10.2},pond:{stations:[{x:5,y:5},{x:5,y:0},{x:5,y:7}],waterX:7.4},willowbank:{stations:[{x:6,y:2},{x:6,y:5},{x:6,y:8}],waterX:7.45}};
 export const isFishingRoom=room=>Object.hasOwn(fishingSites,room);
 export const besideFishingStation=(room,position)=>!!position&&fishingSites[room]?.stations.some(p=>Math.abs(p.x-position.x)+Math.abs(p.y-position.y)===1);
 export function riverWater(room,x,y){return room==='reedwater'?x>=5&&x<=6:room==='willowbank'?x>=14||y===5&&x>=9||x===7&&(y===2||y===5||y===8):room==='millbrook'?x>=9:false;}

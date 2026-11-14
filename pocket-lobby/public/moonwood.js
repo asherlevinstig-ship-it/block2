@@ -9,7 +9,7 @@ import {oreDeposits,quarryMiner,drawQuarryCliffs,depositRoom} from './mining.js'
 import {quarryForge} from './forge.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
-import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,willowbankView,willowbankBarrier,riverWater,riverBridge} from './region-catalog.js';
+import {watchAreas,watchRooms,watchWater,fishingSites,willowmereAreas,willowmereRooms,willowbankView,willowbankBarrier,riverWater,riverBridge} from './region-catalog.js';
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
 import {dungeonFloor,dungeonRooms,isDungeonMob} from './dungeon-arena.js';
@@ -34,7 +34,7 @@ export const moonwood=(()=>{
     depthsRest:{number:'D2·R',name:'The Quiet Shrine',description:'A peaceful spring offers 30 HP for 15 gold from your unbanked haul. One blessing per expedition.',badge:'OPTIONAL · REST',floor:'Shrine branch',center:[4,5],palette:['#344f52','#4c6a68','#99b6aa'],authored:[['pillar',3,2],['pillar',8,2],['glowFungus',3,7],['glowFungus',9,3],['cachePassage',2,5],['restAltar',6,4]]},
     depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A duelling Thornblade Duelist guards an Awakening Seal. Time a dodge and punish it with a counter. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['depthsSentinel',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
     depthsVault:{number:'D3',name:'The Sunken Vault',description:'A chained colossus rises over the drowned vault. Study the relief, then face its armour, blades and runic heart.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['depthsColossus',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
-    logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
+    logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',11,4],['wildtree',0,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
     trail:{number:'04',name:'Lantern Trail',description:'Follow the old trail into Moonwood. A lantern waits at the first waystone.',badge:'MOONWOOD',floor:'Forest trail',center:[5,5],palette:['#324957','#3e5460','#788285'],landmark:['lanternStand',5,4,5,5]},
     grove:{number:'05',name:'Whispering Grove',description:'The trees crowd around a trail that only a lantern can reveal.',badge:'MOONWOOD',floor:'Hidden grove',center:[5,5],palette:['#36465d','#4c4c6a','#777294']},
@@ -42,7 +42,7 @@ export const moonwood=(()=>{
     shrine:{number:'07',name:'Moth Shrine',description:'Pale moths circle a stone altar in a quiet clearing.',badge:'MOONWOOD',floor:'Hidden landmark',center:[5,4],palette:['#3c4862','#4f5773','#8f85a3'],landmark:['mothAltar',6,4,5,4],authored:[['pillar',4,2],['pillar',8,2],['pillar',4,6],['pillar',8,6],['wildtree',1,1],['wildtree',10,7],['wildbloom',5,2],['wildbloom',7,6]]},
     ruins:{number:'08',name:'Moonwell Ruins',description:'An old well glows among the ruins. A Stoneback Beetle guards the nearby stones.',badge:'MOONWOOD',floor:'Ancient landmark',center:[5,4],palette:['#444258','#57536b','#8d8194'],landmark:['moonwell',6,4,5,4],authored:[['stonebackBeetle',6,5],['pillar',3,2],['pillar',8,2],['pillar',3,6],['pillar',8,6],['wildrock',9,6],['wildbloom',4,3],['wildtree',1,8],['wildtree',10,1]]},
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
-    pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
+    pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from one of three fishing posts and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',2,0],['wildtree',0,8],['wildrock',2,7],['wildbloom',2,9],['wildbloom',3,3]]}
   };
   const heights={keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
@@ -128,6 +128,10 @@ export const moonwood=(()=>{
     if(landmarkType)carve({x:approachX,y:approachY},center);
     const visiblePath=new Set(path);
     for(const door of doors[id].filter(door=>door.gate))connectPath(door);
+    if(id==='pond'){
+      for(const station of fishingSites.pond.stations.slice(1))carve({x:4,y:station.y},center);
+      for(let y=1;y<=8;y++){path.add(key(3,y));path.add(key(4,y));}
+    }
     if(id==='creek')for(let x=0;x<view.cols;x++)path.add(key(x,4));
     if(id==='depthsGate')for(let x=4;x<10;x++)path.add(key(x,4));
     if(id==='depthsGallery'){carve({x:3,y:4},center);carve({x:9,y:4},center);}
@@ -150,7 +154,8 @@ export const moonwood=(()=>{
         }
       }
     }
-    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':id==='depthsVault'?'vaultBoss':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
+    if(id==='pond')for(const {x,y} of fishingSites.pond.stations.slice(1))scenery.push({id:key(x,y),type:'fishingPost',x,y,rot:0,room:id});
+    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,room:id,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':id==='depthsVault'?'vaultBoss':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
     if(dungeonRooms.includes(id)){const main=['depthsGate','depthsGallery','depthsVault'].includes(id);for(const [type,x,y] of [['dungeonCover',4,3],['dungeonCover',3,6],...(main?[['dungeonArch',1,4],['dungeonExit',10,5]]:[]),['dungeonChain',10,2],['dungeonBones',2,6]])scenery.push({id:type+':'+x+','+y,type,x,y,rot:0});}
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     if(id===trailCamp.room)scenery.push({id:'trailCamp',type:'trailCamp',x:trailCamp.x,y:trailCamp.y,rot:0});
@@ -240,7 +245,7 @@ export const moonwood=(()=>{
     }
   }
 
-  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather}){
+  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,canopyOpacity=1}){
     if(Object.hasOwn(galleryLightSites,item.type)){
       const {x,y,type}=item,[px,py]=point(x+.5,y+.5);
       const light=depthsRun?.galleryLight,lit=!light?.claimed&&galleryLightReceiver(light)===type;
@@ -518,10 +523,14 @@ export const moonwood=(()=>{
       for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
       rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
     }else if(type==='wildtree'||type==='timberTree'){
-      drawWoodlandTree(x,y,{point,polygon,surface,block,rect});
+      drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity);
     }else if(type==='wildrock'){
       drawWoodlandRock(x,y,{point,polygon,surface});
     }else if(type==='fishingPost'){
+      if(item.room==='pond'){
+        block(x-.21,y+.11,1.35,.78,0,3,['#b89872','#685044','#836750']);
+        for(let i=0;i<5;i++)surface(x-.12+i*.24,y+.16,.16,.66,3.1,'#c7a985');
+      }
       part(.30,.34,.19,.19,0,16,['#c1a385','#65566a','#927984']);
       part(.19,.27,.54,.34,16,3,['#d9c2a1','#85778a','#a59c9e']);
       rect(px-3,py-20,2,2,'#d2e6da');

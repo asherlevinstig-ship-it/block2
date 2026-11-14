@@ -72,3 +72,14 @@
  .hud-rail .tool{min-height:43px}
  #inventoryDialog .bag-slot>span{font-size:11px}
 }
+
+/* Keep crowded rooms readable while leaving each player available for interaction. */
+.remote-player-label.compact-player-label:not(:hover):not(:focus-visible){
+ width:12px;height:12px;min-height:0;padding:0;border:1px solid #a8c6d0;border-radius:50%;
+ background:#20374bd9;color:transparent;box-shadow:0 1px 3px #101522b0;font-size:0;
+}
+
+@media(max-width:519px){
+ .world-labels[data-room=hub] .world-label-npc{font-size:9px;padding:4px 6px}
+ .world-labels[data-room=pond] .world-label-shoal{font-size:9px;padding:4px 5px}
+}

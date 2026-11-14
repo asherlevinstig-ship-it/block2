@@ -15,7 +15,7 @@ export const socialRooms={[overlookRoom]:[12,10],[waystationRoom]:[12,10],crysta
 const layouts={[overlookRoom]:overlookArea.authored,[waystationRoom]:waystationArea.authored,[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
   tailor:[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]],
   furnishings:[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1],['silverfinTank',2,7],['moonCrystal',7,3]],
-  hub:[['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],['plant',1,1],['plant',16,1],['sofa',2,10],['bench',2,12],['sofa',13,8,2]],
+  hub:[['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],['plant',1,1],['plant',16,1],['sofa',4,10],['bench',4,12],['sofa',14,10,2]],
   lounge:[['bar',.05,.25],['shelf',.02,.48],['plant',.3,8.7],['plant',8.9,.2],['sofa',5,1],['chair',8,3,1],['lamp',8,1],['stool',2,1],['stool',2,2],['stool',2,3],['chair',2,6,1],['chair',4,8],['lamp',1,6],['plant',7,8],['plant',.3,7.2],['blackjack',6,3],['roulette',3,7,1]],
   outside:[['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],['streetlamp',11,10],['bench',3,8],['bench',10,3,1],['bench',9,9,2],['plant',0,1],['plant',0,10],['plant',13,1],['plant',13,10]],
   store:[['tackleCounter',3,2],['rodRack',7,1],['baitCrates',7,4],['plant',1,1],['stool',4,4]],

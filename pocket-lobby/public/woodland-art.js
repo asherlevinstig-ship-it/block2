@@ -4,7 +4,7 @@ const palettes=[
  {shadow:'#283d47',body:'#335961',lit:'#49797b',tip:'#6f9c91',bark:'#796057'}
 ];
 
-export function drawWoodlandTree(x,y,{point,polygon,surface,block,rect}){
+export function drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity=1){
  const variant=(x*7+y*5)%3,p=palettes[variant],[px,py]=point(x+.5,y+.5);
  const poly=(pts,fill,edge)=>polygon(pts.map(([a,b])=>[px+a,py+b]),fill,edge);
  const bark=(u,v,w,d,z,h)=>block(x+u,y+v,w,d,z,h,[p.bark,'#493f42','#5f4c46']);
@@ -16,6 +16,7 @@ export function drawWoodlandTree(x,y,{point,polygon,surface,block,rect}){
   poly([[-5,-22],[-15,-33],[-12,-37],[-2,-29],[9,-39],[13,-37],[4,-24]],'#7b7065');
   for(let i=0;i<4;i++)rect(px-4+(i%2)*2,py-5-i*5,4,1,'#b1a093');
  }
+ if(canopyOpacity<1){ctx.save();ctx.globalAlpha*=canopyOpacity;}
  if(variant===2){
   // Offset tiers and broken edges give the pine a distinct profile at game scale.
   for(const [top,width,shift] of [[-36,23,0],[-44,19,-2],[-53,13,1]]){
@@ -35,6 +36,7 @@ export function drawWoodlandTree(x,y,{point,polygon,surface,block,rect}){
   const a=(i*13+x*5+y*3)%29-15,b=-23-(i*11+x+y)%20;
   if(variant!==2||Math.abs(a)<12)rect(px+a,py+b,i%2?2:3,1,i%3?p.lit:p.tip);
  }
+ if(canopyOpacity<1)ctx.restore();
 }
 
 export function drawWoodlandRock(x,y,{point,polygon,surface}){

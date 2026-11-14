@@ -77,6 +77,8 @@ let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAn
 let familiarReaction=null;
 const familiarFollowers=new Map(),familiarPortraits=[];
 const renderedActors=[],actorNameplates=new Map();
+let worldLabelBounds=[];
+const crowdedRoom=()=>remotePeers.size>=6&&['hub','logging','pond'].includes(currentRoom);
 let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=!!savedPlayerState?.depthsRun?.rewardChests?.[savedPlayerState?.location];
@@ -267,11 +269,23 @@ function drawWoodEffects(time){
   }finally{ctx.restore();}
 }
 
+function timberCanopyOpacity(item){
+  if(!['logging','pond'].includes(currentRoom))return 1;
+  const [x,y]=point(item.x+.5,item.y+.5);
+  const covers=([px,py])=>Math.abs(px-x)<30&&py<y&&py>y-55;
+  const actors=[player,...(currentRoom==='logging'?remotePeers.values():[])];
+  if(actors.some(actor=>{
+    const [px,py]=point((actor.rx??actor.x)+.5,(actor.ry??actor.y)+.5);
+    return covers([px,py-20]);
+  }))return .22;
+  if(currentRoom==='logging'&&[[5.8,3.5],[4.5,3.5],...route.slice(0,3).map(({x,y})=>[x+.5,y+.5])].some(([tx,ty])=>covers(point(tx,ty))))return .28;
+  return 1;
+}
 function drawTimberTree(item,time){
   const tree=treeState(item);
   const shared=sharedTimber.get(timberKey(item)),hitAge=time-(shared?.impactAt??-Infinity);
   const [x,y]=point(item.x+.5,item.y+.5);
-  const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
+  const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,canopyOpacity:timberCanopyOpacity(item)});
   if(tree.regrowsAt){
     const falling=shared?{started:shared.impactAt,direction:shared.fallDirection}:treeFall?.key===timberKey(item)?treeFall:null;
     const fall=falling?Math.min(1,Math.max(0,(time-falling.started)/timberTreeRules.fallMs)):1;
@@ -296,6 +310,10 @@ function drawTimberTree(item,time){
   try{
     if(impact)ctx.translate(player.direction==='right'?1:-1,0);
     drawTree();
+    if(item===hoverItem||item===woodSession?.tree){
+      surface(item.x+.08,item.y+.08,.84,.84,.45,'#ffe3a528','#ffe3a5');
+      rect(x-7,y-28,14,13,'#172636');rect(x-2,y-24,2,7,'#c49a63');rect(x-1,y-25,5,4,'#f3deb0');
+    }
     if(tree.cuts||impact){
       const width=Math.min(7,2+tree.cuts*2);
       rect(x-Math.floor(width/2),y-12,width,2,'#eac38b');
@@ -623,7 +641,8 @@ function updateWorldFloats(time){
   if(f.fx){f.fx.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale)+'px';f.fx.style.top=Math.round(bounds.y+((y-20-cy)*zoom+cy)*bounds.scale)+'px';if(age>950){f.fx.remove();f.fx=null;}}
   f.node.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale+(f.lane%2?12:-12))+'px';
   f.node.style.top=Math.round(bounds.y+((y-52-cy)*zoom+cy)*bounds.scale-f.lane*18-(reducedMotion.matches?0:age/55))+'px';
-  f.node.style.opacity=String(Math.min(1,(1800-age)/500));
+  const quiet=currentRoom==='pond'&&crowdedRoom()&&f.actor!=='self'&&f.node.dataset.kind==='catch';
+  f.node.style.opacity=String(Math.min(1,(1800-age)/500)*(quiet?.55:1));
  }
 }
 function receivePeers(peers){
@@ -653,7 +672,7 @@ function drawRemote(peer,time){
   const raidPose=['millbrook','depthsVault'].includes(currentRoom)&&time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
   const meditating=peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{meditating,direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
-  if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
+  if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
   const activity=meditating?'Meditating':chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
   renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:meditating?35:43),familiar,familiarName:peer.familiarName});
@@ -664,6 +683,8 @@ function updateActorNameplates(){
  if(renderedActors.length){
   const p=canvasBounds(),layerBox=layer.getBoundingClientRect(),cx=view.width/2,cy=view.height/2-4;
   const toScreen=(x,y)=>({x:p.left-layerBox.left+p.x+((x-cx)*zoom+cx)*p.scale,y:p.top-layerBox.top+p.y+((y-cy)*zoom+cy)*p.scale});
+  const crowded=crowdedRoom();
+  const occupied=crowded?[...worldLabelBounds]:[];
   const render=(key,name,detail,position,kind,color,action)=>{
    seen.add(key);
    let plate=actorNameplates.get(key);
@@ -675,17 +696,26 @@ function updateActorNameplates(){
    }
    const caption=detail?name+' · '+detail:name;
    if(plate.caption!==caption){plate.caption=caption;plate.node.textContent=caption;plate.node.title=caption;}
+   const width=Math.min(130,caption.length*6+14),left=position.x-width/2,top=position.y-19;
+   const remote=remotePeers.get(key);
+   const compact=crowded&&kind==='remote-player-label'&&(
+    !remote||Math.abs(remote.rx-player.x)+Math.abs(remote.ry-player.y)>3||
+    occupied.some(box=>left<box.right&&left+width>box.left&&top<box.bottom&&top+22>box.top)
+   );
+   if(crowded&&!compact)occupied.push({left,right:left+width,top,bottom:top+22});
+   if(plate.compact!==compact){plate.compact=compact;plate.node.classList.toggle('compact-player-label',compact);}
    if(color&&plate.color!==color){plate.color=color;plate.node.style.setProperty('--pet-label-color',color);}
    if(kind==='remote-player-label')plate.node.onclick=()=>window.towerRobbery?.open(key);
    if(kind==='reward-label'){plate.node.onclick=action;plate.node.disabled=!action;}
    if(kind==='enemy-label'){plate.node.onclick=action;plate.node.disabled=!action;plate.node.dataset.target=String(detail==='Target');}
    plate.node.style.left=Math.round(position.x)+'px';plate.node.style.top=Math.round(position.y)+'px';
   };
-  for(const actor of renderedActors){
+  const priority=actor=>actor.id==='self'||actor.enemy||actor.reward?0:Math.abs((remotePeers.get(actor.id)?.rx??player.x)-player.x)+Math.abs((remotePeers.get(actor.id)?.ry??player.y)-player.y)+1;
+  for(const actor of crowded?[...renderedActors].sort((a,b)=>priority(a)-priority(b)):renderedActors){
    const owner=toScreen(actor.x,actor.y);
    if(actor.reward){render(actor.id,actor.name,actor.detail,owner,'reward-label',null,actor.action);continue;}
    if(actor.enemy){render(actor.id,actor.name,actor.detail,owner,'enemy-label',null,actor.action);continue;}
-   if(actor.familiar){
+   if(actor.familiar&&(!crowded||actor.id==='self')){
     const {id,x,y}=actor.familiar,pet=toScreen(x,y),species=familiars[id];
     const petName=actor.familiarName||species.name;
     const ownerWidth=Math.min(130,((actor.name?.length??5)+(actor.activity?.length??0))*6+14),petWidth=Math.min(130,petName.length*6+19);
@@ -2107,8 +2137,8 @@ let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,no
 const hubFurniture=[
   ['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
   ['plant',1,1],['plant',16,1],
-  ['sofa',2,10],['bench',2,12],
-  ['sofa',13,8,2]
+  ['sofa',4,10],['bench',4,12],
+  ['sofa',14,10,2]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const courtyardFurniture=[
   ['trainingDummy',9,4],
@@ -2922,7 +2952,7 @@ function object(item,highlight=false,time=0,weather=null) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -3473,10 +3503,11 @@ function updateWorldLabels(){
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
+  worldLabelBounds=[];
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
   const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
     if(['Fishing station','Hidden fishing pool'].includes(text)&&!subtitle)subtitle='1 AP / catch';
@@ -3509,8 +3540,10 @@ function updateWorldLabels(){
     }
     const width=label.offsetWidth||text.length*7+16,height=label.offsetHeight||(subtitle?30:19);
     const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
-    label.style.left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)))+'px';
-    label.style.top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)))+'px';
+    const left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)));
+    const top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)));
+    label.style.left=left+'px';label.style.top=top+'px';
+    if(action)worldLabelBounds.push({left,right:left+width,top,bottom:top+height});
     return label;
   };
   const guidedDoor=nextExplorationDoor()??(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination());
@@ -3577,7 +3610,10 @@ function updateWorldLabels(){
     add('Trail camp',...point(fire.x+.5,fire.y+.5,30),'npc',()=>use(fire),({cold:'Cold fire',embers:'Fading embers',burning:'Fire lit'})[phase]);
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
-  if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name+' · 1 AP / catch');
+  if(shoal){
+    const mobile=canvas.clientWidth<520;
+    add('Fish the shoal',...point(shoal.water.x,shoal.water.y,mobile?4:21),'shoal',usePondShoal,mobile?'':shoal.name+' · 1 AP / catch');
+  }
   if(poolLabel)add(poolLabel,...point(moonfinPool.water.x,moonfinPool.water.y,21),'shoal',poolBite?reelFish:useMoonfinPool,poolBite?'Space':'Rare catch · 1 AP / catch');
   if(clue){
     const {inside,tile,to}=clue.door,x=inside.x+.5+(inside.x-tile.x)*.75,y=inside.y+.5+(inside.y-tile.y)*.75;
@@ -3629,11 +3665,18 @@ function updateWorldLabels(){
       if(item.type==='fishingPost')add('Hidden fishing pool',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item));
     }
   }
+  if(currentRoom==='pond'&&!fishingSession){
+    const names={0:'North bank',5:'Main jetty',7:'South bank'};
+    for(const post of roomFurniture().filter(item=>item.type==='fishingPost')){
+      const label=add(names[post.y],...point(post.x+.5,post.y+.5,28),'npc',()=>use(post),canvas.clientWidth<520?'':'Cast · 1 AP / catch');
+      label.title=names[post.y]+' · Cast · 1 AP / catch';
+    }
+  }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
     add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
     if(stump)add('Regrowing',...point(6.5,5.5,13),'sign');
-    else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()),'1 AP / completed cut');
+    else add('Timber',...point(6.5,5.5,25),'npc',()=>use(timberTree()));
   }
   if(depthsRun&&!player.inCombat){
     for(const item of roomFurniture().filter(i=>i.type==='dungeonArch'||i.type==='dungeonExit')){
@@ -3872,7 +3915,7 @@ function draw(time){
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
-    const height=['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h;
+    const height=isTimberTree(item)&&timberCanopyOpacity(item)<1?20:['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
   }
@@ -3976,7 +4019,11 @@ function pointer(e){
     const [sx,sy]=point(fishingWater.x,fishingWater.y,.5);
     shoalHit=((x-sx)/26)**2+((y-sy)/12)**2<=1;
   }
-  return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null,shoalHit};
+  const hit=hitboxes.findLast(h=>inShape(x,y,h.shape));
+  const worldHit=crowdedRoom()&&hit?.item.type==='remotePlayer'
+    ?hitboxes.findLast(h=>h.item.type!=='remotePlayer'&&inShape(x,y,h.shape)):null;
+  const item=worldHit?.item??(crowdedRoom()&&(door||shoalHit)&&hit?.item.type==='remotePlayer'?null:hit?.item);
+  return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:item??null,shoalHit};
 }
 let homeNavigationLearned=load('movement-learned',false);
 function note(message,duration=3000){
@@ -4716,7 +4763,13 @@ function use(item){
       if(path&&(!shortest||path.length<shortest.length))shortest=path;
     }
   }
-  if(!shortest){note('There’s no clear path to that furniture.');return;}
+  if(!shortest&&currentRoom==='pond'&&item.type==='fishingPost'){
+    const alternatives=items.filter(other=>other.type==='fishingPost'&&other!==item)
+      .flatMap(post=>directions.map(([dx,dy])=>({x:post.x+dx,y:post.y+dy})))
+      .filter(({x,y})=>!exits.has(tileKey(x,y))&&!blocked(x,y,items)&&![...remotePeers.values()].some(peer=>peer.x===x&&peer.y===y));
+    shortest=alternatives.map(tile=>findPath(start,tile,items,exits)).filter(Boolean).sort((a,b)=>a.length-b.length)[0];
+  }
+  if(!shortest){note(item.type==='fishingPost'?'All nearby fishing spots are busy. Try another bank.':'There’s no clear path to that furniture.');return;}
   player.seat=null;player.waveStarted=null;route=shortest;interaction=item;target=route.at(-1)??null;
 }
 function usePondShoal(){
@@ -4771,6 +4824,8 @@ function reelFish(){
   updateAdventurePanel();
 }
 function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
+  ctx.save();
+  if(spot.remote&&currentRoom==='pond'&&remotePeers.size>=4)ctx.globalAlpha*=.42;
   const phase=fishingMoments.phase(session,time);
   const still=reducedMotion.matches;
   const [waterX,waterY]=point(session.water?.x??fishingSites[currentRoom]?.waterX??7.4,session.water?.y??Math.max(.7,Math.min(view.rows-.7,spot.y+.45)));
@@ -4809,12 +4864,13 @@ function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
     const pulse=still?.5:(time%420)/420;
     ctx.beginPath();ctx.ellipse(waterX,waterY+1,5+pulse*10,2+pulse*4,0,0,2*Math.PI);
     ctx.strokeStyle='#c2e2df';ctx.lineWidth=1;ctx.stroke();
-    if(phase==='bite'){
+    if(phase==='bite'&&!spot.remote){
       for(const side of [-1,1])rect(waterX+side*7,waterY-5-(still?0:Math.round(pulse*5)),2,2,'#dfefe0');
       ctx.save();ctx.textAlign='center';ctx.fillStyle='#ffe0a4';ctx.font='bold 10px monospace';
       ctx.fillText('BITE!',waterX,waterY-16);ctx.restore();
     }
   }
+  ctx.restore();
 }
 function drawCatchReveal(x,y,time){
   const element=$('catchReveal');
