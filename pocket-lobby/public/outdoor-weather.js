@@ -9,20 +9,6 @@ export function outdoorWeather(room,now){
   mist:room==='willowbank'&&phase==='dawn'?Math.min(1,(phaseMs-age)/20000):0,rain:phase==='rain'};
 }
 
-const fireStop={x:4,y:6},shelter={x:8,y:7};
-export function waystationTraveler(weather,reduced=false){
- if(!weather)return null;
- const path=[fireStop,{x:5,y:6},{x:6,y:6},{x:7,y:6},{x:8,y:6},shelter];
- const returning=weather.phase==='clear'&&((weather.seed%5)+5)%5===4;
- const journey=weather.rain?path:returning?[...path].reverse():null;
- if(!journey)return {...fireStop,direction:'right',moving:false,sheltered:false};
- const progress=reduced?path.length-1:Math.min(path.length-1,weather.age/650);
- const from=journey[Math.floor(progress)],to=journey[Math.ceil(progress)],fraction=progress%1;
- const x=from.x+(to.x-from.x)*fraction,y=from.y+(to.y-from.y)*fraction;
- return {x,y,direction:returning?'left':'right',back:returning,moving:progress<path.length-1,
-  sheltered:weather.rain&&progress===path.length-1};
-}
-
 export function drawOutdoorWeather(room,weather,{ctx,point,surface,rect,reduced}){
  if(!weather)return;
  const time=reduced?0:weather.age;

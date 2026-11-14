@@ -3668,7 +3668,8 @@ function updateWorldLabels(){
 }
 const willowbankFlock=createWillowbankFlock();
 function draw(time){
-  const weather=outdoorWeather(currentRoom,combatNow());
+  const worldNow=combatNow();
+  const weather=outdoorWeather(currentRoom,worldNow);
   window.courtyardEnvironment?.update();
   renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
@@ -3756,7 +3757,11 @@ function draw(time){
     if(crossing.deer)items.push(crossing.deer);
     items.push(...willowbankFlock(wildlifeNow,[player,...[...remotePeers.values()].map(p=>({x:p.rx,y:p.ry}))]));
   }
-  if(currentRoom===waystationRoom)items.push({type:'waystationTraveler',...waystationTraveler(weather,reducedMotion.matches)});
+  const travelers=currentRoom===waystationRoom?waystationRoutines(worldNow,weather,waystationBoard,reducedMotion.matches):null;
+  if(travelers){
+    items.push(...travelers.visitors);
+    if(travelers.delivery)items.push({type:'waystationDelivery',x:8,y:5});
+  }
   if(enemy&&victory){
     const monster=stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
     if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
@@ -3831,9 +3836,23 @@ function draw(time){
       drawWillowbankAnimal(item,time,{ctx,point,polygon,rect,reduced:reducedMotion.matches});
       continue;
     }
-    if(item.type==='waystationTraveler'){
-      const [x,y]=point(item.x+.5,item.y+.5);
-      sprite(ctx,x,y,{outfit:3,hair:2,trousers:1,boots:1},{direction:item.direction,back:item.back,cycle:item.moving?weather.age/STEP_MS:0,time});
+    if(item.type==='waystationDelivery'){
+      block(item.x+.28,item.y+.25,.46,.45,0,8,['#cfac74','#674c42','#93714d']);
+      continue;
+    }
+    if(item.type==='waystationVisitor'){
+      const [x,y]=point(item.x+.5,item.y+.5,item.seated?8:0);
+      sprite(ctx,x,y,{outfit:item.outfit,hair:2,trousers:1,boots:1},{
+        direction:item.direction,back:item.back,seated:!!item.seated,cycle:item.moving?time/STEP_MS:0,time
+      });
+      if(item.crate){
+        polygon([[x-9,y-19],[x-4,y-23],[x+7,y-21],[x+3,y-17]],'#d4af73');
+        rect(x-9,y-19,12,8,'#9d744f');rect(x-7,y-19,2,8,'#d0a978');
+      }
+      renderedActors.push({id:'waystation:'+item.id,enemy:true,name:item.name,detail:item.activity,x,y:y-42,action:()=>{
+        if(Math.abs(item.x-player.cx)+Math.abs(item.y-player.cy)>3){note('Move closer to speak.',3500);return;}
+        note(item.id==='scout'?travelers.report:item.crate?'I’m bringing supplies from Beaconwatch.':item.activity==='Sheltering'?'I’ll wait here until the rain lets up.':'Supplies are at the counter. Bring timber to help restore the outpost.',7500);
+      }});
       continue;
     }
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
