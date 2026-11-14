@@ -203,19 +203,58 @@ export function tailorTowerFrame(pixels,source,width,height,appearance,selection
     const waist=legs.filter(p=>p[1]<top+4),center=waist.reduce((a,p)=>a+p[0],0)/waist.length;
     const sway=selection.state==='walk'?Math.sin(selection.frame/8*Math.PI*2)*1.5:0;
     for(let y=top-1;y<=bottom;y++){
-      const t=(y-top+1)/Math.max(1,bottom-top+1),half=10+t*7,c=center+sway*t;
+      const t=(y-top+1)/Math.max(1,bottom-top+1),half=style===9?9+t*3:10+t*7,c=center+sway*t;
       for(let x=Math.floor(c-half);x<=Math.ceil(c+half);x++){
         if(x<0||x>=width)continue;const i=at(x,y),m=material(x,y),opaque=source[i+3]>0;
         // Hands, sleeves and equipment stay in front of the skirt.
         if(m===1||m===3||m===4||opaque&&m!==2&&Math.max(source[i],source[i+1],source[i+2])>110)continue;
         const edge=Math.abs(x-c)>half-1.5,hem=y>=bottom-1;
-        const fold=Math.floor((x-c+half)/5)%3;
+        if(style===9&&t>.65&&Math.abs(x-c)<1&&material(x,y)!==2)continue;
+        const fold=Math.floor((x-c+half)/(style===9?4:5))%3;
         put(x,y,edge?(style===9?'#222c52':'#35263f'):hem?'#d7b979':fold===0?JACKETS[style][0]:fold===1?JACKETS[style][2]:base);
       }
     }
     if(!armour)for(let dx=-8;dx<=8;dx++){cloth(cx+dx,cy+19,'#ddbf82');cloth(cx+dx,cy+20,'#9f7d54');}
     if(!back&&!armour){cloth(cx,cy+6,'#eed49a');cloth(cx,cy+7,'#eed49a');if(style===9){for(const [dx,dy] of [[4,10],[3,11],[4,12],[5,11],[4,14]])cloth(cx+dx,cy+dy,'#dcdda9');}}
   }
+}
+// Shape hems and workwear from the moving waist mask, keeping skin and hands intact.
+export function shapeTowerGarment(pixels,source,width,height,appearance,selection,armour){
+ const style=appearance.outfit,body=[],legs=[],boots=[],at=(x,y)=>(y*width+x)*4;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=at(x,y);if(source[i]!==250||!source[i+3])continue;const g=source[i+1];if(g===1)body.push([x,y]);if(g===2)legs.push([x,y]);if(g===3)boots.push([x,y]);}
+ if(!body.length||!legs.length)return;
+ const waist=Math.min(...legs.map(p=>p[1])),belt=legs.filter(p=>p[1]<waist+3),cx=Math.round(belt.reduce((n,p)=>n+p[0],0)/belt.length),top=waist-21,back=selection.row>=2;
+ const [dark,mid,light]=JACKETS[style]??JACKETS[0];
+ const patch=(x,y,color,overLegs=false)=>{x=Math.round(x);y=Math.round(y);if(x<0||x>=width||y<0||y>=height)return;const i=at(x,y),g=source[i]===250?source[i+1]:0;if(source[i+3]&&g!==1&&!(overLegs&&g===2))return;pixels.set([...rgb(color),255],i);};
+ if(!armour||armour==='prospectorsGloves'){
+  if(style===5){
+   for(const side of [-1,1])for(let dy=0;dy<7;dy++)for(let dx=8;dx<13-dy/3;dx++)patch(cx+side*dx,top+3+dy,dy===0?light:dark);
+   for(let dx=-9;dx<=9;dx++)if(Math.abs(dx)>2)patch(cx+dx,waist-1,Math.abs(dx)>7?dark:mid);
+  }
+  if(style===10){
+   for(let y=waist-5;y<waist+16;y++){const t=(y-waist+5)/21,half=10+t*7;for(let dx=-Math.ceil(half);dx<=half;dx++){if(Math.abs(dx)<(back?2:6))continue;patch(cx+dx,y,Math.abs(dx)>half-2||y>waist+13?'#e4be71':dx<0?dark:mid,true);}}
+   for(const side of [-1,1])for(let dy=0;dy<8;dy++)for(let dx=7;dx<12;dx++)patch(cx+side*dx,top+2+dy,dx===7?'#e4be71':dark);
+  }
+  if(style===7){
+   for(const side of [-1,1])for(let dy=0;dy<9;dy++)for(let dx=7;dx<=12;dx++)patch(cx+side*dx,waist-14+dy,dy===0||dx===12?'#b0b986':dy===5?'#d4c08a':dark);
+   if(!back){for(let dx=-7;dx<=7;dx++)patch(cx+dx,waist-3,'#443e34');patch(cx-5,waist-2,'#e5d19f');}
+  }
+  if(style===8){
+   for(const side of [-1,1])for(let dy=0;dy<6;dy++)for(let dx=8;dx<15-dy/2;dx++)patch(cx+side*dx,top+4+dy,dy<2?'#e1bc91':mid);
+   for(let dx=-10;dx<=10;dx++)patch(cx+dx,waist,'#5a3e2e');
+   for(let dy=1;dy<8;dy++)for(let dx=9;dx<14;dx++)patch(cx+dx,waist+dy,dx===13||dy===7?'#3d302c':'#ad8050',true);
+  }
+  if(style===9){
+   for(const side of [-1,1])for(let dy=0;dy<9;dy++)for(let dx=3;dx<8-dy/3;dx++)patch(cx+side*dx,top+dy,dark);
+   for(const [x,y] of body)if(Math.abs(x-cx)>9&&y>top+8&&y<waist-2&&y%5<2)patch(x,y,'#c2c3e9');
+   if(!back)for(let dy=3;dy<17;dy++)patch(cx,top+dy,dy%4===0?'#e9d99e':'#9caae1');
+  }
+  if(style===6&&!back){for(const side of [-1,1])for(let dy=0;dy<5;dy++)patch(cx+side*(4-dy/2),top+dy,'#d8aaca');for(let dx=-8;dx<=8;dx++)patch(cx+dx,waist-1,'#eccd83');}
+ }
+ // Leg and boot material masks travel with the limbs, including walking and sitting.
+ const trouser=appearance.trousers??0,boot=appearance.boots??0;
+ for(const [x,y] of legs){if([4,5,8,9].includes(trouser)&&y>waist+6){const band=(y-waist)%12;if(trouser===4&&band<2)patch(x,y,'#809273',true);if(trouser===5&&band<4&&Math.abs(x-cx)>3)patch(x,y,'#9a7957',true);if(trouser===8&&band<2)patch(x,y,'#b8ab77',true);if(trouser===9&&Math.abs(x-cx)>5)patch(x,y,'#1b2234',true);}}
+ if(boots.length){const by=Math.min(...boots.map(p=>p[1]));for(const [x,y] of boots){const i=at(x,y);let color=null;if(boot===8&&(y-by)%4===1)color='#bcaa7d';if(boot===6&&y>=by+5&&(y-by)%5===1&&x%3===0)color='#d0b5ed';if(boot===12&&y<by+5&&(x-cx+30)%5<2)color='#f0cc80';if(boot===5&&y===by+1)color='#e1b983';if(color)pixels.set([...rgb(color),255],i);}}
 }
 export function uniqueTowerOutfit(pixels,source,width,height,appearance,selection,armour){
   const style=appearance.outfit,veil=style===13,hood=style===16||style===11||style===12||style===14||style===15||veil,plate=armour==='towerPlate',leather=armour==='scoutLeather';
@@ -242,20 +281,29 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
         if(edge&&source[i+3]===0)put(x,y,Math.abs(x-cx)>half-1?dark:mid);
       }
     }
-    const shoulder=bottom+2,hem=Math.min(height-10,(legs.length?Math.min(...legs.map(p=>p[1])):shoulder+22)+12),sway=selection.state==='walk'?Math.round(Math.sin(selection.frame*Math.PI/4)*2):0;
+    const cut={11:{length:10,spread:7,split:true},12:{length:0,spread:1,asymmetric:true},13:{length:22,spread:11,torn:true},14:{length:5,spread:9,square:true},15:{length:18,spread:2,point:true},16:{length:4,spread:7,rain:true}}[style];
+    if([11,12,15].includes(style))for(let dy=1;dy<=(style===15?7:4);dy++)for(let dx=-Math.ceil(((style===15?8:5)-dy)*.65);dx<=Math.ceil(((style===15?8:5)-dy)*.65);dx++){const x=Math.round(cx+dx),y=top-dy;if(x>=0&&x<width&&y>=0&&!source[at(x,y)+3])put(x,y,dx<0?dark:mid);}
+    const shoulder=bottom+2,waist=legs.length?Math.min(...legs.map(p=>p[1])):shoulder+22,hem=Math.min(height-7,waist+cut.length),sway=selection.state==='walk'?Math.round(Math.sin(selection.frame*Math.PI/4)*2):0;
     for(let y=shoulder;y<=hem;y++){
-      const t=(y-shoulder)/Math.max(1,hem-shoulder),half=10+(veil?7:5)*t,center=cx+sway*t;
+      const t=(y-shoulder)/Math.max(1,hem-shoulder),half=cut.square?18-t*4:10+cut.spread*t,center=cx+sway*t;
       for(let x=Math.floor(center-half);x<=Math.ceil(center+half);x++){
-        const i=at(x,y);if(x<0||x>=width||source[i+3])continue;
-        if(style===12&&x>center+3||style===11&&t>.7&&Math.abs(x-center)<2)continue;
-        put(x,y,Math.abs(x-center)>half-2?dark:y>=hem-1?light:mid);
+        const i=at(x,y);if(x<0||x>=width)continue;const material=source[i]===250?source[i+1]:0;
+        if(source[i+3]&&!(back&&(material===1||material===2)||!back&&material===2&&Math.abs(x-center)>half*.35))continue;
+        if(cut.asymmetric&&(x>center+3||y>hem-Math.max(0,x-center+8)*.65)||cut.split&&t>.65&&Math.abs(x-center)<2+t*2||cut.torn&&y>hem-((Math.floor(x-center+40)%7<3)?4:0)||cut.point&&t>.8&&Math.abs(x-center)>(1-t)*half*5||cut.rain&&y>hem-(Math.abs(x-center)>half*.65?3:0))continue;
+        const fold=Math.abs(x-center)<2||Math.floor(x-center+30)%9===0;
+        const highlight=back&&style===13&&Math.abs(x-center)>half*.55&&Math.abs(x-center)<half*.7;
+        put(x,y,Math.abs(x-center)>half-2?dark:y>=hem-1?light:highlight?'#82a6b8':back&&fold?dark:mid);
       }
     }
+    if(style===14){for(const side of [-1,1])for(let dy=0;dy<7;dy++)for(let dx=8;dx<18-dy/2;dx++){const x=Math.round(cx+side*dx),y=shoulder+dy;if(x>=0&&x<width&&y>=0&&y<height&&!source[at(x,y)+3])put(x,y,dy===0?'#e7d198':dy<3?light:dark);}}
+    if(style===16&&!back)for(let dx=-7;dx<=7;dx++)if(source[at(Math.round(cx+dx),shoulder+4)]===250)put(Math.round(cx+dx),shoulder+4,'#a7dccc');
     if(style===12&&!back){
       const skin=[];for(let y=top+6;y<Math.min(height,bottom+9);y++)for(let x=left;x<=right;x++){const i=at(x,y);if(source[i]>175&&source[i+1]>100&&source[i+2]<200&&source[i]>source[i+1]+10)skin.push([x,y]);}
       const chin=skin.length?Math.max(...skin.map(p=>p[1])):0;
       for(const [x,y] of skin)if(y>=chin-5)put(x,y,y===chin-5?light:dark);
     }
+    const scarfColors=new Set(['35,63,80','121,182,190','52,101,118','141,197,199','41,83,97','131,189,195']);
+    if(!armour)for(let y=shoulder;y<shoulder+16;y++)for(let x=left;x<=right;x++){const i=at(x,y);if(scarfColors.has(source[i]+','+source[i+1]+','+source[i+2]))put(x,y,x<cx?dark:mid);}
     if(back&&!armour)for(const [x,y] of cloth)if(y>=shoulder&&y<hem)put(x,y,Math.abs(x-cx)<3?dark:mid);
     for(const [x,y] of cloth){if(y>=shoulder+3&&y<shoulder+7&&Math.abs(x-cx-5)<2)put(x,y,veil?'#9be0df':style===11?'#d4b974':'#c1cbd3');}
   }
@@ -300,6 +348,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
       pixels[target]=color?color[0]:r;pixels[target+1]=color?color[1]:g;pixels[target+2]=color?color[2]:b;pixels[target+3]=atlas.data[source+3];
     }
     tailorTowerFrame(pixels,sourcePixels,width,height,appearance,selection,vest);
+    shapeTowerGarment(pixels,sourcePixels,width,height,appearance,selection,vest);
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
     if(selection.state==='meditate')meditateTowerFrame(pixels,sourcePixels,width,height,appearance,selection);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');

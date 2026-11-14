@@ -110,7 +110,7 @@ test('hoods and real armour have different rendered pixels and separate cached f
  for(let y=17;y<35;y++)for(let x=30;x<49;x++)set(normal,x,y,[250,4,1,255]);
  for(let y=43;y<55;y++)for(let x=31;x<48;x++)set(armour,x,y,[105,137,137,255]);
  const images=[],renderer=createTowerCharacterRenderer({metadata:meta,atlases:{normal,armour},createCanvas:(width,height)=>{const c={width,height,getContext:()=>({putImageData:image=>c.pixels=image.data})};return c;}}),ctx={save(){},restore(){},drawImage:image=>images.push(image)};
- renderer.draw(ctx,0,0,{outfit:11},{direction:'left'});const ranger=images.at(-1).pixels.slice();renderer.draw(ctx,0,0,{outfit:12},{direction:'left'});assert.notDeepEqual(images.at(-1).pixels,ranger,'distinct hood colors and silhouettes');
+ renderer.draw(ctx,0,0,{outfit:11},{direction:'left'});const ranger=images.at(-1).pixels.slice();renderer.draw(ctx,0,0,{outfit:12},{direction:'left'});assert.notDeepEqual(images.at(-1).pixels,ranger,'distinct hood colors and silhouettes');assert.notDeepEqual([...images.at(-1).pixels].filter((_,i)=>i%4===3),[...ranger].filter((_,i)=>i%4===3),'cape cut changes the outline independently of colour');
  renderer.draw(ctx,0,0,{outfit:0},{direction:'left',vest:'scoutLeather'});const leather=images.at(-1);renderer.draw(ctx,0,0,{outfit:0},{direction:'left',vest:'towerPlate'});const plate=images.at(-1);assert.notEqual(leather,plate);assert.notDeepEqual(leather.pixels,plate.pixels,'plate and leather never share a cached image');
  renderer.draw(ctx,0,0,{outfit:0},{direction:'left',vest:'scoutLeather'});assert.equal(images.at(-1),leather);
 });
