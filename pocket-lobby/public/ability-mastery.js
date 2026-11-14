@@ -1,6 +1,7 @@
 import {styleAbilities,abilityStatLevel} from './style-abilities.js';
 
 export const masteryBenefits={
+ bindBeast:['Base ally strength and duration','+1 strike damage · +5 seconds','+2 strike damage · +10 seconds'],
  sanctuary:['Absorbs up to 30 shared damage','Absorbs up to 40 shared damage','Absorbs up to 50 shared damage'],
  packTactics:['+1.5 seconds to counter','+2 seconds to counter','+2.5 seconds to counter'],
  lockbreaker:['30 seconds inside','40 seconds inside','50 seconds inside'],
@@ -22,6 +23,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ bindBeast:'Have a bound beast land a strike in another fight.',
  sanctuary:'Place a Sanctuary during a co-op Vault fight.',
  packTactics:'Trigger Pack Tactics with a perfect dodge and an equipped familiar.',
  lockbreaker:'Successfully enter another player’s room.',

@@ -151,12 +151,12 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   const plating=!target&&r.phase===1?physicalPlating({...coopEncounter(r),arenaPlayer:m.pos,arenaLockedFor:now>=r.warningAt?r.landsAt:0,brainRecoveryUntil:r.lastAttack?r.warningAt-600:0},stats.damage,9,0,now):null;
   damage=plating?.damage??Math.max(1,stats.damage-armour);if(plating?.flanked)text='Flank hit! ';if(now<m.counterUntil){damage=Math.ceil(damage*(1+(weapon.counterMultiplier??.5)+build.counter));m.counterUntil=0;text+='Counter! ';}if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
   const raised=s.styleAbilities?.raised;
-  if(s.styleAbilities?.learned?.includes('raiseFallen')&&raised?.summonedAt<=now&&raised.until>now&&raised.nextAt<=now){
+  if(s.styleAbilities?.learned?.includes(raised?.living?'bindBeast':'raiseFallen')&&raised?.summonedAt<=now&&raised.until>now&&raised.nextAt<=now){
    damage+=raised.damage;
    raised.nextAt=now+3000;
    raised.lastStrikeAt=now;
-   awardAbilityUse(s,'raiseFallen',raised.id);
-   text+='Undead ally joined the strike. ';
+   awardAbilityUse(s,raised.living?'bindBeast':'raiseFallen',raised.id);
+   text+=raised.living?'Bound beast joined the strike. ':'Undead ally joined the strike. ';
   }
   m.lastStrike=now;
   if(!target){r.stagger+=Math.ceil(weaponStagger(m.weapon,s.combatGear.activeSwordUpgrade)*build.stagger)+(build.id==='vanguard'&&m.ward>0&&m.wardUntil>now?8:0);if(r.stagger>=160){r.stagger=0;r.exposedUntil=now+3000;r.landsAt=Math.max(r.landsAt,now+2000);text='Stagger break! Core exposed. ';}

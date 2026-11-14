@@ -18,8 +18,8 @@ export function undeadStrike(state,now){
  if(!ally||!encounter||now<ally.nextAt)return null;
  const add=activeAdd(encounter),target=add&&add.spawnAt<=now?add:null,view=target?addEncounter(encounter,target):encounter;
  const damage=Math.min(view.health,roleDamage(view,ally.damage,now,{magic:true}).damage),next={...view,health:view.health-damage};
- const raw={action:'undead',power:'Undead Strike',powerColor:'#8de8b2',powerForm:'sword',effect:'strikes for '+damage+' damage',damage,taken:0,health:state.health,encounter:next.health?next:null,...(!next.health?{killedEncounter:next}:{}),outcome:next.health?'fighting':'victory'};
+ const raw={action:'undead',power:ally.living?'Bound Beast Strike':'Undead Strike',powerColor:'#8de8b2',powerForm:'sword',effect:'strikes for '+damage+' damage',damage,taken:0,health:state.health,encounter:next.health?next:null,...(!next.health?{killedEncounter:next}:{}),outcome:next.health?'fighting':'victory'};
  ally.nextAt=now+3000;ally.lastStrikeAt=now;
- awardAbilityUse(state,'raiseFallen',ally.id);
+ awardAbilityUse(state,ally.living?'bindBeast':'raiseFallen',ally.id);
  return target?mergeAddEvent(encounter,target,raw,now):transitionVaultPhase(raw,encounter,now);
 }

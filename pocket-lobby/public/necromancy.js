@@ -5,10 +5,11 @@ export const undeadNames={boar:'Undead Boar',beetle:'Undead Beetle',stag:'Undead
 export const raisedRoom=room=>typeof room==='string'&&(pvpRooms.has(room)||room.startsWith('depths')||room==='millCellar'||room==='crystaldeep');
 const time=n=>Number.isSafeInteger(n)&&n>0;
 export function normalizeNecromancy(input,learned=[]){
- if(!learned.includes('raiseFallen'))return {};
+ const canRaise=learned.includes('raiseFallen');
+ if(!canRaise&&!learned.includes('bindBeast'))return {};
  const f=input?.fallen,a=input?.raised,id=value=>typeof value==='string'&&value.length>0&&value.length<=100;
- const fallen=id(f?.id)&&Object.hasOwn(raisableBeasts,f?.enemy)&&raisedRoom(f.room)&&time(f.until)&&Number.isInteger(f.x)&&f.x>=0&&f.x<30&&Number.isInteger(f.y)&&f.y>=0&&f.y<30?{id:f.id,enemy:f.enemy,room:f.room,until:f.until,x:f.x,y:f.y}:null;
- const raised=id(a?.id)&&Object.hasOwn(raisableBeasts,a?.enemy)&&time(a.summonedAt)&&time(a.until)&&a.until>a.summonedAt&&a.until<=a.summonedAt+60000&&time(a.nextAt)&&Number.isInteger(a.damage)&&a.damage>=1&&a.damage<=16?{id:a.id,enemy:a.enemy,summonedAt:a.summonedAt,until:a.until,nextAt:a.nextAt,damage:a.damage,...(time(a.lastStrikeAt)?{lastStrikeAt:a.lastStrikeAt}:{})}:null;
+ const fallen=canRaise&&id(f?.id)&&Object.hasOwn(raisableBeasts,f?.enemy)&&raisedRoom(f.room)&&time(f.until)&&Number.isInteger(f.x)&&f.x>=0&&f.x<30&&Number.isInteger(f.y)&&f.y>=0&&f.y<30?{id:f.id,enemy:f.enemy,room:f.room,until:f.until,x:f.x,y:f.y}:null;
+ const raised=learned.includes(a?.living?'bindBeast':'raiseFallen')&&id(a?.id)&&Object.hasOwn(raisableBeasts,a?.enemy)&&time(a.summonedAt)&&time(a.until)&&a.until>a.summonedAt&&a.until<=a.summonedAt+60000&&time(a.nextAt)&&Number.isInteger(a.damage)&&a.damage>=1&&a.damage<=16?{id:a.id,enemy:a.enemy,...(a.living?{living:true}:{}),summonedAt:a.summonedAt,until:a.until,nextAt:a.nextAt,damage:a.damage,...(time(a.lastStrikeAt)?{lastStrikeAt:a.lastStrikeAt}:{})}:null;
  return {...(fallen?{fallen}:{}),...(raised?{raised}:{})};
 }
 export function raisedProfile(stats,stage=1){
@@ -17,7 +18,7 @@ export function raisedProfile(stats,stage=1){
 }
 export function activeRaised(state,now=Date.now()){
  const a=state.styleAbilities?.raised;
- return state.styleAbilities?.learned?.includes('raiseFallen')&&state.health>0&&!state.vaultCoop&&!state.hunting?.recoveryUntil&&raisedRoom(state.location)&&a?.summonedAt<=now&&a.until>now?a:null;
+ return state.styleAbilities?.learned?.includes(a?.living?'bindBeast':'raiseFallen')&&state.health>0&&!state.vaultCoop&&!state.hunting?.recoveryUntil&&raisedRoom(state.location)&&a?.summonedAt<=now&&a.until>now?a:null;
 }
 export function drawUndeadAlly(ctx,x,y,ally,time,reduced=false,{attackAge=Infinity,flipped=false}={}){
  if(!ally)return;
@@ -26,6 +27,16 @@ export function drawUndeadAlly(ctx,x,y,ally,time,reduced=false,{attackAge=Infini
  ctx.save();ctx.translate(Math.round(x+(flipped?-lunge:lunge)),Math.round(y+bob));if(flipped)ctx.scale(-1,1);ctx.imageSmoothingEnabled=false;
  const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
  ctx.strokeStyle='#84e4b4';ctx.globalAlpha=.35;ctx.beginPath();ctx.ellipse(0,0,15,5,0,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+ if(ally.living){
+  const color=kind==='beetle'?'#568b69':'#a5734b';
+  p(-10,-13,19,9,color);p(-8,-15,15,3,'#cf9b62');
+  p(6,-16,8,9,color);p(10,-12,7,4,'#c89157');
+  p(10,-15,2,2,'#201927');p(6,-17,2,10,'#a2e6ae');
+  for(const dx of [-8,-3,4,8])p(dx,-5,2,5,'#59433b');
+  if(kind==='stag'){p(7,-23,2,8,'#e3c497');p(12,-22,2,7,'#e3c497');}
+  if(kind==='beetle'){p(-12,-9,4,2,'#99ba80');p(-2,-14,2,10,'#385b4c');}
+  ctx.restore();return;
+ }
  const feet=reduced?0:Math.round(Math.sin(phase));
  if(kind==='beetle'){
   for(const side of [-1,1])for(let i=0;i<3;i++){p(side<0?-14:8,-10+i*3,6,1,'#e3d9ad');p(side<0?-15:13,-9+i*3,2,3,'#8dafa4');}

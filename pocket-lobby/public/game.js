@@ -6419,6 +6419,12 @@ async function castStyleAbility(id,body){
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
     if(dialog.open)dialog.close();
+    if(id==='bindBeast'){
+      setPlayerCombat(false);resetCombatArt();updateCombatPanel();worldLabelKey='';
+      abilityBursts.push({id:'raiseFallen',room:currentRoom,tile:{x:player.cx,y:player.cy},phase:'arrival',started:performance.now()});
+      note('Bind Beast · Your new ally will help in creature fights.');
+      refreshStyleAbilityBar();return;
+    }
     if(id==='raiseFallen'){
       abilityBursts.push({id,room:currentRoom,tile:{x:player.cx,y:player.cy},phase:'arrival',started:performance.now()});
       note('Raise Fallen · Your undead ally will help in wild hunts and solo dungeons.');

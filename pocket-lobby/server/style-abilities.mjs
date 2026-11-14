@@ -1,4 +1,6 @@
-import {activeRaised,raisedProfile} from '../public/necromancy.js';
+import {moonbackSite} from '../public/moonback.js';
+import {huntEnemy} from '../public/hunting.js';
+import {activeRaised,raisedProfile,raisableBeasts} from '../public/necromancy.js';
 import {styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
@@ -31,6 +33,26 @@ export function styleAbilityAction(state,action,body,now){
   return true;
  }
  if((abilities.readyAt[id]??0)>now)throw invalid('This ability is still recharging.');
+ if(id==='bindBeast'){
+  if(activeRaised(state,now))throw invalid('You already have a temporary beast ally.');
+  const enemy=encounter&&huntEnemy(encounter);
+  if(!enemy||state.depthsRun||!Object.hasOwn(raisableBeasts,enemy.id))throw invalid('Use Bind Beast against a living wild beast.');
+  if(encounter.health<=0||encounter.health>=enemy.health/2)throw invalid('Weaken the beast below half health first.');
+  const tile=encounter.arenaEnemy??(enemy.id==='moonbackStag'?moonbackSite(state.location):null)??{x:6,y:5};
+  if(!state.position||Math.hypot(state.position.x-tile.x,state.position.y-tile.y)>2)throw invalid('Move within two tiles of the beast.');
+  requireActionPoint(state);
+  const profile=raisedProfile(state.stats,abilityMastery(state,id).stage);
+  abilities.raised={id:state.combatId??crypto.randomUUID(),enemy:enemy.id,living:true,summonedAt:now,until:now+profile.duration,nextAt:now+1500,damage:profile.damage};
+  abilities.readyAt[id]=now+styleAbilities[id].cooldown;
+  state.styleAbilities=abilities;
+  state.hunting.encounter=null;
+  const respawn=enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt';
+  state.hunting[respawn]=Math.max(state.hunting[respawn]??0,now+profile.duration);
+  if(enemy.id==='moonbackStag')state.hunting.moonbackSighting=encounter.moonbackId;
+  if(enemy.id==='dusktusk'&&abilities.preyTrail)abilities.preyTrail.cleared=true;
+  delete state.combatId;delete state.combatReceipt;
+  spendActionPoint(state,now);return true;
+ }
  if(id==='raiseFallen'){
   if(activeRaised(state,now))throw invalid('You already have an undead ally.');
   const fallen=abilities.fallen;

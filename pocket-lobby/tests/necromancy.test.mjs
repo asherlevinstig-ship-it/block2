@@ -76,3 +76,20 @@ test('Spectators see one bounded undead ally and its pose expires without extra 
  const s=make();const ally=summon(s),meta={room:'clearing',id:'public',health:100,undead:ally};assert(publicPeer(meta,12000).undead);assert.equal(publicPeer(meta,ally.until).undead,null);assert.equal(publicPeer({...meta,room:'hub'},12000).undead,null);
  assert.equal(normalizeStyleAbilities({learned:[],raised:ally}).raised,undefined);
 });
+
+test('Bind Beast requires a weakened living target and ends combat without kill rewards',()=>{
+ const s=make({styleAbilities:{learned:['bindBeast']}});
+ startCombatEncounter(s,huntEnemies.boar,10000);
+ assert.throws(()=>act(s,'abilityCast',{id:'bindBeast'},10100),/half health/);
+ s.hunting.encounter.health=1;
+ const before=s.huntingLoot.boar;
+ act(s,'abilityCast',{id:'bindBeast'},10200);
+ assert.equal(s.hunting.encounter,null);
+ assert.equal(s.huntingLoot.boar,before);
+ assert.equal(s.actionPoints.value,19);
+ assert.equal(normalizeState(s).styleAbilities.raised.living,true);
+ startCombatEncounter(s,huntEnemies.boar,11000);
+ const event=undeadStrike(s,12500);
+ assert.equal(event.power,'Bound Beast Strike');
+ assert.equal(s.styleAbilities.mastery.bindBeast.uses,1);
+});
