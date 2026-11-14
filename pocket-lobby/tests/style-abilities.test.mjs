@@ -111,3 +111,29 @@ test('Ambush hits for 50% extra damage once, charges one AP, and rejects a front
  assert.equal(hunter.styleAbilities.readyAt.ambush,61000);
  assert.equal(normalizeState(hunter).styleAbilities.readyAt.ambush,61000);
 });
+
+test('Stoneguard reduces creature damage for five seconds and awards one mastery use per cast',async()=>{
+ const {advanceServerCombat}=await import('../server/activities.mjs');
+ const guard=make({location:'clearing',position:{x:5,y:5},styleAbilities:{learned:['stoneguard']}});
+ act(guard,'fight',{});
+ act(guard,'abilityCast',{id:'stoneguard'});
+ assert.equal(guard.actionPoints.value,4);
+ assert.equal(guard.styleAbilities.stoneguard.until,6000);
+ guard.hunting.encounter.nextPlayerAt=999999;
+ const plain=structuredClone(guard);
+ delete plain.hunting.encounter.stoneguardUntil;delete plain.hunting.encounter.stoneguardReduction;
+ delete plain.styleAbilities.stoneguard;
+ const protectedEvents=advanceServerCombat(guard,2300,()=>.99);
+ const normalEvents=advanceServerCombat(plain,2300,()=>.99);
+ const hit=protectedEvents.find(event=>event.action==='enemy'),base=normalEvents.find(event=>event.action==='enemy');
+ assert.ok(hit.stoneguardBlocked>0);
+ assert.equal(hit.taken,base.taken-Math.floor(base.taken*.3));
+ assert.equal(guard.styleAbilities.mastery.stoneguard.uses,1);
+ advanceServerCombat(guard,5900,()=>.99);
+ assert.equal(guard.styleAbilities.mastery.stoneguard.uses,1);
+ const saved=normalizeState(guard);
+ const later=advanceServerCombat(saved,9000,()=>.99).filter(event=>event.action==='enemy'&&event.at>=6000);
+ assert.ok(later.length);
+ assert.ok(later.every(event=>!event.stoneguardBlocked));
+ assert.throws(()=>act(saved,'abilityCast',{id:'stoneguard'},10000),/recharging/);
+});

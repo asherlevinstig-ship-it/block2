@@ -2,6 +2,7 @@ import {skillLevel} from './skill-curve.js';
 import {styleAbilities} from './style-abilities.js';
 
 export const masteryBenefits={
+ stoneguard:['30% damage reduction','40% damage reduction','50% damage reduction'],
  waypoint:['3-minute cooldown','150-second cooldown','2-minute cooldown'],
  shadowstep:['45-second cooldown','38-second cooldown','30-second cooldown'],
  trackPrey:['3-minute trail','4-minute trail','5-minute trail'],
@@ -11,6 +12,7 @@ export const masteryBenefits={
  appraise:['60-second cooldown','45-second cooldown','30-second cooldown']
 };
 export const masteryPractice={
+ stoneguard:'Absorb creature damage while Stoneguard is active. One successful use per cast.',
  waypoint:'Travel successfully to a discovered waypoint.',
  shadowstep:'Reposition successfully during arena combat.',
  trackPrey:'Finish the tracking trail and defeat its Dusktusk Boar.',

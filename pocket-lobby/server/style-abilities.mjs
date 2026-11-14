@@ -46,6 +46,15 @@ export function styleAbilityAction(state,action,body,now){
   state.styleAbilities=abilities;
   return true;
  }
+ if(id==='stoneguard'){
+  requireActionPoint(state);
+  abilities.stoneguard={until:now+5000,reduction:30+(abilityMastery(state,id).stage-1)*10,credited:false};
+  abilities.readyAt[id]=now+styleAbilities[id].cooldown;
+  state.styleAbilities=abilities;
+  if(encounter){encounter.stoneguardUntil=abilities.stoneguard.until;encounter.stoneguardReduction=abilities.stoneguard.reduction;}
+  spendActionPoint(state,now);
+  return true;
+ }
  if(id==='appraise')throw invalid('Choose an ore listing in Market stalls to appraise it.');
  if(id==='ambush')throw invalid('Use Ambush beside a wild boar before combat.');
  if(id==='shareHearth')throw invalid('Invite a player from the Share a Hearth panel.');

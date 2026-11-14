@@ -50,6 +50,8 @@ export function startCombatEncounter(state,enemy,now){
   if(state.outfitMagic)state.outfitMagic.veilUntil=0;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
+  const guard=state.styleAbilities?.stoneguard;
+  if(guard?.until>now)Object.assign(state.hunting.encounter,{stoneguardUntil:guard.until,stoneguardReduction:guard.reduction});
   if(state.vitals?.mealBuff)state.hunting.encounter.mealBuff=state.vitals.mealBuff;
   if(rareBootsPenalty(state))state.hunting.encounter.fortuneBoots=true;
   state.hunting.encounter.buildId=detectCombatBuild(state).id;
@@ -79,6 +81,10 @@ function result(state,event,now,random=Math.random){
   if(event.counter){summary.counters++;summary.counterBonus+=event.counterBonus??0;}
   if(event.staggered)summary.staggers++;
   if(event.weakSpot){summary.weakSpotHits++;summary.staggerBonus+=event.staggerBonus??0;}
+  if(event.stoneguardBlocked&&state.styleAbilities?.stoneguard&&!state.styleAbilities.stoneguard.credited){
+    awardAbilityUse(state,'stoneguard');
+    state.styleAbilities.stoneguard.credited=true;
+  }
   summary.prevented+=(event.weakened??0)+(event.warded??0)+(event.absorbed??0);
   if(event.encounter)event.encounter.summary=summary;
   if((event.addKill||event.outcome==='victory')&&state.combatGear.equippedWeapon==='vampiricSword'&&event.health>0){const heal=Math.min(4,playerMaxHealth(state,now)-event.health);event.health+=heal;event.healed=(event.healed??0)+heal;event.lifeSteal=heal;if(heal)recordEquipmentEffect(state,'vampire',heal,now,'vampire:'+state.combatId+':'+now+':'+(event.targetId??'leader'));}

@@ -126,6 +126,12 @@ function drawPreview(canvas,id,time,drawCharacter,reduced){
   drawCharacter(ctx,218,115,reduced?0:time);
   ctx.fillStyle='#f49a53';ctx.beginPath();ctx.moveTo(173,117);ctx.quadraticCurveTo(161,107,177,92);ctx.quadraticCurveTo(193,110,182,117);ctx.fill();
   ctx.fillStyle=tint;ctx.font='16px system-ui';ctx.fillText('♥',143,65-(reduced?0:t*12));ctx.fillText('♥',214,65-(reduced?0:t*12));
+ }else if(id==='stoneguard'){
+  for(let i=0;i<4;i++){
+   const x=126+i*12,y=100+(i%2)*8;
+   ctx.fillStyle=i%2?'#b6bbaf':'#74888c';ctx.fillRect(x,y-12,9,16);
+   ctx.strokeStyle='#f4d59b';ctx.strokeRect(x,y-12,9,16);
+  }
  }else if(id==='appraise'){
   ctx.font='bold 16px system-ui';ctx.fillText('6g / 8g',191,81);
   ctx.beginPath();ctx.arc(219,101,12,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(228,111);ctx.lineTo(238,122);ctx.stroke();

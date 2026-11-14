@@ -276,6 +276,11 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
+    if(input.encounter.stoneguardUntil!==undefined){
+      result.encounter.stoneguardUntil=time(input.encounter.stoneguardUntil);
+      if(![30,40,50].includes(input.encounter.stoneguardReduction))throw new Error('Invalid Stoneguard protection.');
+      result.encounter.stoneguardReduction=input.encounter.stoneguardReduction;
+    }
     for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
@@ -422,6 +427,11 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(encounter.brainVersion===2){result.encounter.brainMisses=result.spatialAvoided?(encounter.brainMisses??0)+1:0;result.encounter.brainBlockedCount=result.covered?(encounter.brainBlockedCount??0)+1:0;}
     const response=scheduleEnemyResponse(result.encounter,enemy,move,result.timedDodge,now);
     if(response)result.nextMove=response.name;
+    if(result.taken&&now<(encounter.stoneguardUntil??0)){
+      result.stoneguardBlocked=Math.floor(result.taken*(encounter.stoneguardReduction??30)/100);
+      result.taken-=result.stoneguardBlocked;
+      result.absorbed=(result.absorbed??0)+result.stoneguardBlocked;
+    }
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}
   }

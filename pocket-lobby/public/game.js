@@ -1556,6 +1556,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
   if(result.weakened)combatMessage+=(combatMessage?' ':'')+'Shadow prevented '+result.weakened+' damage.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
+  if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
   if(result.outOfRange)combatMessage='Move closer to strike. Your weapon reaches 2 tiles.';
   if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
@@ -4070,6 +4071,11 @@ function draw(time){
   }
   if(!drawn)drawPlayer();
   drawFamiliarScout(time);
+  const stoneProtection=window.playerCloud?.initial?.styleAbilities?.stoneguard;
+  if(stoneProtection?.until>combatNow()){
+    const [gx,gy]=point(player.x+.5,player.y+.5);
+    window.drawStoneguard?.(ctx,gx,gy,time,stoneProtection.until-combatNow(),reducedMotion.matches);
+  }
   if(time-hearthFxAt<750){
     const [x,y]=point(player.x+.5,player.y+.5,14);
     window.drawScoutSignal?.(ctx,x,y,time,reducedMotion.matches);
@@ -6333,6 +6339,10 @@ async function castStyleAbility(id,body){
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
     if(dialog.open)dialog.close();
+    if(id==='stoneguard'){
+      note('Stoneguard · Stone plates protect you for 5 seconds.');
+      refreshStyleAbilityBar();return;
+    }
     if(id==='scoutAhead'){
       const site=scoutedKeeperClue();
       if(site)animateFamiliarScout(site);

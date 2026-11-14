@@ -120,3 +120,19 @@ export function drawScoutSignal(ctx,x,y,time,reduced){
  ctx.fillStyle='#fff2bd';ctx.fill();
  ctx.restore();
 }
+
+export function drawStoneguard(ctx,x,y,time,remaining,reduced){
+ const rise=reduced?1:Math.min(1,(5000-remaining)/220);
+ const fade=Math.min(1,remaining/500);
+ ctx.save();ctx.globalAlpha=fade;
+ ellipse(ctx,x,y,20,'#d6c28c',1);
+ for(let i=0;i<5;i++){
+  const angle=i*Math.PI*2/5+(reduced?0:Math.sin(time/650)*.12);
+  const px=x+Math.cos(angle)*17,py=y+Math.sin(angle)*7;
+  const height=(13+(i%2)*5)*rise;
+  ctx.fillStyle=i%2?'#a1ada8':'#677f88';ctx.strokeStyle='#e4d39f';ctx.lineWidth=.8;
+  ctx.beginPath();ctx.moveTo(px-5,py);ctx.lineTo(px-6,py-height+3);ctx.lineTo(px,py-height-2);ctx.lineTo(px+5,py-height+1);ctx.lineTo(px+5,py-1);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.strokeStyle='#f8e3aa';ctx.beginPath();ctx.moveTo(px-1,py-height+4);ctx.lineTo(px+2,py-height+7);ctx.lineTo(px-1,py-height+10);ctx.stroke();
+ }
+ ctx.restore();
+}
