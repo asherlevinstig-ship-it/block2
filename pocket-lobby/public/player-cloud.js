@@ -165,7 +165,7 @@
         if(error.status===402){await recoverActionPoints();throw error;}
         // Retry only server settlement revisions; another window still triggers conflict handling.
         if((['presence','control'].includes(path)||path.startsWith('learning/'))&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
-        if(path.startsWith('learning/')||path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'){
+        if(path.startsWith('learning/')||path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'||path==='market-stalls'){
           if((error.status===undefined||path==='timber-orders'&&error.status===503)&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
@@ -635,6 +635,18 @@
         },
         balances:()=>window.towerTimberOrderBalances?.()??{credits:0,timber:0},
         apply:(state,receipt)=>window.towerApplyTimberOrder?.(state,receipt)
+      });
+      const {initializeMarketStalls}=await import('./market-stalls.js');
+      initializeMarketStalls({
+        read:async item=>{await flush();return request('market-stalls?item='+encodeURIComponent(item));},
+        change:async body=>{
+          if(gameplayBusy)throw new Error('Wait for your current action to finish.');
+          await flush();gameplayBusy=true;
+          try{return await action('market-stalls',body);}
+          finally{gameplayBusy=false;}
+        },
+        state:()=>packet.state,
+        apply:(state,receipt)=>window.towerApplyMarketStall?.(state,receipt)
       });
       const {initializeQuarryForge}=await import('./forge-ui.js');
       window.quarryForgeUI=initializeQuarryForge({

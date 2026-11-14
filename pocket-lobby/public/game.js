@@ -6020,6 +6020,11 @@ function updatePlayerStats(){
   $('attribute-luck-fishing').textContent=(luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.')+' Also improves pickpocketing odds.';
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
+window.towerApplyMarketStall=(state,receipt)=>{
+  applyServerGameplay(state);
+  updateInventory();updateTradingPost();
+  if(receipt?.gold)showTransaction(receipt.kind==='claim'?'Stall proceeds collected':'Market purchase',[],receipt.kind==='claim'?receipt.gold:-receipt.gold);
+};
 function applyServerGameplay(state){
   vaultCoopState=state.vaultCoop??null;
   mining=normalizeMining(state.mining);miningCut=state.miningCut??null;miningReceipt=state.miningReceipt??null;

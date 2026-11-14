@@ -21,6 +21,7 @@ import {readOreDeposits,mineAction,writeOreStrike} from './mining.mjs';
 import {advanceMiningWork} from './mining-work.mjs';
 import {normalizeMining} from '../public/mining.js';
 import {trailCamp} from '../public/trail-camp.js';
+import {readMarketStalls,changeMarketStall} from './market-stalls.mjs';
 import {readTimberOrders,changeTimberOrder,atTradingPost,matchAutoTimberOrders,writeAutoTimberSale} from './timber-orders.mjs';
 import {timberMarketCounter,timberMarketSurplus,completeTimberMarketTrip,completeOreSale} from './routine-queue.mjs';
 import {GOLD_CAP} from '../public/bank.js';
@@ -273,6 +274,11 @@ export async function handlePlayerApi(request,env){
     if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/mining'&&request.method==='GET')return json({deposits:await readOreDeposits(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/shop-licences'&&request.method==='GET')return json(await shopLicenceBoard(env.TOWER_DB,id));
+    if(path==='/api/player/market-stalls'&&request.method==='GET'){
+      const row=await read(env.TOWER_DB,id);
+      if(!row||!atTradingPost(readPlayerState(row,env)))return json({error:'Visit the Trading Post to browse stalls.'},400);
+      return json(await readMarketStalls(env.TOWER_DB,id,new URL(request.url).searchParams.get('item')));
+    }
     if(path==='/api/player/timber-orders'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id);
       if(!row)return json({error:'Character not found.'},401);
@@ -317,6 +323,7 @@ export async function handlePlayerApi(request,env){
       return json({...playerPacket(result.updated),gift:result.receipt});
     }
     if(row.last_request===body.operation){
+      if(path==='/api/player/market-stalls')return json({...playerPacket(row),board:await readMarketStalls(env.TOWER_DB,id,body.filter)});
       if(path==='/api/player/gameplay/shopLicence')return json({...playerPacket(row),shopBoard:await shopLicenceBoard(env.TOWER_DB,id)});
       if(path==='/api/player/public-requests')return json({...playerPacket(row),board:await readPublicRequests(env.TOWER_DB)});
       if(path==='/api/player/pvp')return json({...playerPacket(row),receipt:body.kind==='strike'?JSON.parse(row.state_json).pvp?.lastStrike:undefined});
@@ -396,6 +403,10 @@ export async function handlePlayerApi(request,env){
         await room.fetch(new Request('https://room.internal/trail-camp',{method:'POST',body:JSON.stringify(result.camp)})).catch(()=>{});
       }
       return json({...playerPacket(result.updated),camp:result.camp});
+    }
+    if(path==='/api/player/market-stalls'){
+      const result=await changeMarketStall(env.TOWER_DB,row,state,body);
+      return json({...playerPacket(result.updated),board:await readMarketStalls(env.TOWER_DB,id,body.filter),receipt:result.receipt});
     }
     if(path==='/api/player/timber-orders'){
       const result=await changeTimberOrder(env.TOWER_DB,row,state,body,Date.now());
