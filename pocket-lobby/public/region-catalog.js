@@ -1,3 +1,4 @@
+export * from './willowbank-wildlife.js';
 export * from './waystation.js';
 export * from './outdoor-weather.js';
 export {watchAreas,watchRooms,watchMapPositions,watchDimensions,watchFlags,watchGuidance,watchWater,watchInteractLabel} from './watch-expedition.js';

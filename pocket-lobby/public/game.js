@@ -3666,6 +3666,7 @@ function updateWorldLabels(){
     add(names[currentRoom][0],...point(3.42,0,46),'sign',null,names[currentRoom][1],{side:'right',width:58,font:5.7});
   }
 }
+const willowbankFlock=createWillowbankFlock();
 function draw(time){
   const weather=outdoorWeather(currentRoom,combatNow());
   window.courtyardEnvironment?.update();
@@ -3718,6 +3719,9 @@ function draw(time){
     ctx.save();ctx.globalAlpha=1-age/950;ctx.strokeStyle='#c8f0e6';ctx.beginPath();ctx.ellipse(px,py,span,span*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();
    }
   }
+  const wildlifeNow=currentRoom==='willowbank'?combatNow():null;
+  const crossing=wildlifeNow===null?null:willowbankDeer(wildlifeNow);
+  if(crossing?.tracks)drawWillowbankTracks({surface});
   drawOutdoorWeather(currentRoom,weather,{ctx,point,surface,rect,reduced:reducedMotion.matches});
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
@@ -3748,6 +3752,10 @@ function draw(time){
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
   const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
+  if(crossing){
+    if(crossing.deer)items.push(crossing.deer);
+    items.push(...willowbankFlock(wildlifeNow,[player,...[...remotePeers.values()].map(p=>({x:p.rx,y:p.ry}))]));
+  }
   if(currentRoom===waystationRoom)items.push({type:'waystationTraveler',...waystationTraveler(weather,reducedMotion.matches)});
   if(enemy&&victory){
     const monster=stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
@@ -3819,6 +3827,10 @@ function draw(time){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
     if(item.type==='remotePlayer'){drawRemote(item.peer,time);const [px,py]=point(item.peer.rx+.5,item.peer.ry+.5);hitboxes.push({item,shape:[[px-9,py+3],[px+9,py+3],[px+9,py-38],[px-9,py-38]]});continue;}
     if(item.type==='wildAnimal'){drawWildAnimal(item,time);continue;}
+    if(item.type==='willowbankBird'||item.type==='willowbankDeer'){
+      drawWillowbankAnimal(item,time,{ctx,point,polygon,rect,reduced:reducedMotion.matches});
+      continue;
+    }
     if(item.type==='waystationTraveler'){
       const [x,y]=point(item.x+.5,item.y+.5);
       sprite(ctx,x,y,{outfit:3,hair:2,trousers:1,boots:1},{direction:item.direction,back:item.back,cycle:item.moving?weather.age/STEP_MS:0,time});
@@ -7967,6 +7979,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
     if($('trailCampDialog').open)$('trailCampDialog').close();
     if(next===moonwood.trailCamp.room)campReadAt=-Infinity;
   }
+  if(currentRoom!==next)willowbankFlock(0,null);
   currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;
