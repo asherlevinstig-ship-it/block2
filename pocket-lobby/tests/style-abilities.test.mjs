@@ -155,3 +155,24 @@ test('Patient Cast widens the next bite and earns mastery only after landing a m
  applyGameplayAction(state,'catch',{castId:cast.id},landedAt+1,()=>.5);
  assert.equal(state.styleAbilities.mastery.patientCast.uses,1);
 });
+
+test('Pack Tactics extends a perfect dodge counter once for an equipped familiar',async()=>{
+ const {startCombatEncounter,advanceServerCombat}=await import('../server/activities.mjs');
+ const {huntEnemies}=await import('../public/hunting.js');
+ const state=make({location:'clearing',familiars:{owned:['fox'],equipped:'fox'},styleAbilities:{learned:['packTactics']}});
+ startCombatEncounter(state,huntEnemies.boar,10000);
+ const at=state.hunting.encounter.nextBoarAt;
+ Object.assign(state.hunting.encounter,{nextPlayerAt:at+500,dodgeUntil:at+100});
+ const ordinary=structuredClone(state);
+ ordinary.styleAbilities.learned=[];
+ const normal=advanceServerCombat(ordinary,at,()=>.99).find(event=>event.perfectDodge);
+ const triggered=advanceServerCombat(state,at,()=>.99).find(event=>event.packTactics);
+ assert.equal(triggered.packTactics.familiar,'fox');
+ assert.equal(state.hunting.encounter.counterUntil,normal.encounter.counterUntil+1500);
+ assert.equal(state.styleAbilities.readyAt.packTactics,at+24000);
+ assert.equal(state.actionPoints.value,5);
+ assert.equal(normalizeState(state).hunting.encounter.counterUntil,state.hunting.encounter.counterUntil);
+ const next=state.hunting.encounter.nextBoarAt;
+ Object.assign(state.hunting.encounter,{nextPlayerAt:next+500,dodgeUntil:next+100});
+ assert(advanceServerCombat(state,next,()=>.99).every(event=>!event.packTactics));
+});

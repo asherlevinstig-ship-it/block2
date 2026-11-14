@@ -48,7 +48,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   cancel();selected=id;
   const ability=catalog[id];title.textContent=ability.name;description.textContent=ability.description;
   requirements.textContent=Object.entries(ability.requirements).map(([key,level])=>(key==='magicKnowledge'?'Magic Knowledge':key==='familiarConnection'?'Familiar Connection':key[0].toUpperCase()+key.slice(1))+' '+level).join(' · ');
-  cost.textContent=ability.passive?'Passive · Activates at most once per minute':(ability.cost===0?'0 AP':(ability.cost??1)+' AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
+  cost.textContent=ability.passive?'Passive · '+Math.round(ability.cooldown/1000)+'s cooldown':(ability.cost===0?'0 AP':(ability.cost??1)+' AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
   accept.textContent='Hold to accept '+ability.name;
   for(const button of choices.children)button.setAttribute('aria-pressed',String(button.dataset.ability===id));
  }

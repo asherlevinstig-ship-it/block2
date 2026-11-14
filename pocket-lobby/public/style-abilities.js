@@ -31,6 +31,7 @@ export function activePreyTrail(state,now){
  return state.location===preyTrail.room&&trail?.until>now&&!trail.cleared?trail:null;
 }
 export const styleAbilities={
+ packTactics:{name:'Pack Tactics',icon:'🐾',cost:0,passive:true,cooldown:24000,description:'After a perfect dodge against a creature, your equipped familiar distracts it, extending your counterattack window by 1.5 seconds. Works in hunts and solo dungeons.',requirements:{familiarConnection:3,agility:3}},
  lockbreaker:{name:'Lockbreaker',icon:'⚿',cost:20,cooldown:300000,description:'Attempt to enter a nearby player’s room from the Grand Lobby. Success gives you 30 seconds to explore. The homeowner receives a notice either way.',requirements:{stealth:7,agility:5}},
  lightFingers:{name:'Light Fingers',icon:'✥',cost:10,cooldown:90000,description:'A careful pickpocket technique: +10 percentage points to success chance, up to 85%. Choose it for a nearby player’s steal attempt. Success and failure cost 10 AP.',requirements:{stealth:3,luck:2}},
  cutpurse:{name:'Cutpurse',icon:'◈',cost:10,cooldown:90000,description:'A bold pickpocket technique: steal 20% more gold on success, capped at 25% of wallet gold. Banked gold and the first 50 wallet gold remain safe. Each attempt costs 10 AP.',requirements:{stealth:4,trading:3}},
@@ -88,5 +89,5 @@ export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
  if(learned.length>=abilitySlots||state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
-   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen','lightFingers','cutpurse','lockbreaker'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
+   (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen','lightFingers','cutpurse','lockbreaker','packTactics'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
 }

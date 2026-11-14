@@ -90,7 +90,19 @@ function result(state,event,now,random=Math.random){
   for(let i=0;i<(event.splashKills??0);i++)awardFamiliarBond(state,'fox',5);
   if(event.dodged)summary.dodges++;
   if(event.automaticDodge)summary.automaticDodges++;
-  if(event.perfectDodge)summary.perfectDodges++;
+  if(event.perfectDodge){
+    summary.perfectDodges++;
+    const familiar=state.familiars?.equipped;
+    const abilities=state.styleAbilities;
+    if(event.encounter?.counterUntil>now&&familiar&&state.familiars.owned?.includes(familiar)&&
+      abilities?.learned?.includes('packTactics')&&(abilities.readyAt?.packTactics??0)<=now){
+      const extension=1000+500*abilityMastery(state,'packTactics').stage;
+      event.encounter.counterUntil+=extension;
+      event.packTactics={familiar,extension};
+      awardAbilityUse(state,'packTactics');
+      state.styleAbilities.readyAt.packTactics=now+styleAbilities.packTactics.cooldown;
+    }
+  }
   if(event.counter){summary.counters++;summary.counterBonus+=event.counterBonus??0;}
   if(event.staggered)summary.staggers++;
   if(event.weakSpot){summary.weakSpotHits++;summary.staggerBonus+=event.staggerBonus??0;}

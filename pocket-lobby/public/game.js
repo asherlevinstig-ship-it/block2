@@ -1571,12 +1571,14 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   else if(result.wardAbsorbed)combatMessage+=' Rune Ward absorbed '+result.wardAbsorbed+' damage · Defeat its Rune Wisp.';
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
+  if(result.packTactics&&playEffects)familiarReaction={id:result.packTactics.familiar,pose:'cast',at:performance.now()};
   if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for '+(1.8+(currentCombatBuild().counterWindow??0)/1000).toFixed(1)+' seconds.';
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
   if(result.flanked)combatMessage+=' Flank hit · Plating bypassed or reduced.';
   if(result.recoveryOpening)combatMessage+=' Recovery opening!';
   if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
+  if(result.packTactics)combatMessage='Pack Tactics · Your familiar buys you '+result.packTactics.extension/1000+' extra seconds to counter.';
   if(result.phaseChange)combatMessage='Phase '+result.phaseChange.index+' · '+result.phaseChange.name+'. '+result.phaseChange.hint;
   if(result.automaticDodge)combatMessage='Auto dodge · Attack avoided.';
   if(result.decision)combatMessage=result.decision.reason+' '+combatMessage;
@@ -6353,7 +6355,7 @@ function refreshStyleAbilityBar(){
       else if(id==='shareHearth')openHearth();
       else if(id==='ambush')useAmbush();
       else if(id==='appraise')openAppraisalMarket();
-      else if(id==='bloodlust')openStyleAbilities();
+      else if(id==='bloodlust'||id==='packTactics')openStyleAbilities();
       else if(['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id))window.towerRobbery?.openPower(id);
       else castStyleAbility(id,{});
     };

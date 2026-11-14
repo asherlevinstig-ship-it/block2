@@ -72,6 +72,7 @@ export function styleAbilityAction(state,action,body,now){
   spendActionPoint(state,now);
   return true;
  }
+ if(id==='packTactics')throw invalid('Pack Tactics activates automatically after a perfect dodge with your familiar equipped.');
  if(id==='lockbreaker')throw invalid('Use Lockbreaker from the hotbar in the Grand Lobby.');
  if(['lightFingers','cutpurse'].includes(id))throw invalid('Choose a nearby player and use this technique in Pickpocket. Each attempt costs 10 AP.');
  if(['deathmark','bloodlust','shadowPursuit','siphon'].includes(id))throw invalid('Use PvP powers from Nearby players. Bloodlust activates after a player defeat.');
