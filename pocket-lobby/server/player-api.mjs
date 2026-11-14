@@ -492,7 +492,7 @@ export async function handlePlayerApi(request,env){
     const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation,pondCatchAt);
     if(!updated&&treeMutation){const latest=await read(env.TOWER_DB,id);if(latest?.revision===row.revision)return json({error:'Invalid cut: another player felled this tree. Choose a standing tree.'},400);}
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
-    await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision,{fresh:!!treeMutation||Date.now()-(row.updated_at??0)<10000});
+    await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision,{pondCatchAt,fresh:!!treeMutation||Date.now()-(row.updated_at??0)<10000});
     if(updated.silverfinContributed)return json({...packet(updated),silverfinWatch:await readSilverfinWatch(env.TOWER_DB,id,pondCatchAt)});
     return json(packet(updated));
   }catch(error){

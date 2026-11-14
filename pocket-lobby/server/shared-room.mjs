@@ -5,6 +5,7 @@ import {factionHall} from '../public/faction-hall.js';
 import {moonwood} from '../public/moonwood.js';
 import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
 import {isFamiliar,normalizeFamiliarName,moonSightActive,familiarBond} from '../public/familiars.js';
+import {fishingTogetherAction,fishingTogetherCatch} from './fishing-together.mjs';
 import {sharedActivity} from '../public/world-activity.js';
 import {armourSelection} from '../public/hunting.js';
 import {isSmartlyDressed} from '../public/wardrobe.js';
@@ -186,7 +187,7 @@ export class SharedRoom{
     }
   }
   async activity(request){
-    const {playerId,revision,events=[],room,treesChanged}=await request.json();
+    const {playerId,revision,events=[],room,treesChanged,pondCatchAt}=await request.json();
     if(treesChanged){await this.loadTrees(room);this.snapshot();await this.scheduleVeilExpiry();}
     const entry=[...this.sessions.entries()].find(([,meta])=>meta.playerId===playerId);
     const actor=this.autoPeers.get(playerId);
@@ -201,6 +202,7 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
     meta.activityRevision=revision;
     if(state.robbery?.lastReceived?.at>Date.now()-5000)this.send(ws,{type:'robbery',receipt:state.robbery.lastReceived,revision});
+    if(Number.isSafeInteger(pondCatchAt)&&room==='pond'&&state.location==='pond'&&state.fishingReceipt?.room==='pond'&&state.fishingReceipt.at===pondCatchAt)await fishingTogetherCatch(this,ws,meta,pondCatchAt);
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
     const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge','perk'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
@@ -255,6 +257,7 @@ export class SharedRoom{
     if(now-meta.windowAt>1000){meta.windowAt=now;meta.packets=0;}if(++meta.packets>30){ws.close(1008,'Too many messages');return;}
     let message;try{message=JSON.parse(raw);}catch{return;}
     if(message?.type==='ping'){this.send(ws,{type:'pong'});return;}
+    if(message?.type==='fishTogether'){fishingTogetherAction(this,ws,meta,message,now);return;}
     if(message?.type==='meditate'){
       if(typeof message.active!=='boolean'||meta.meditationRequested===message.active)return;
       meta.meditationRequested=message.active;ws.serializeAttachment(meta);this.snapshot();return;
@@ -308,6 +311,6 @@ export class SharedRoom{
       ws.serializeAttachment(meta);for(const peer of this.sessions.keys())this.send(peer,{type:'chat',message:chat});
     }
   }
-  webSocketClose(ws){const meta=this.sessions.get(ws);if(meta)recordPlayUsage(this.env,meta,Date.now(),{flush:true});this.sessions.delete(ws);try{ws.close(1000,'Goodbye');}catch{}this.snapshot();}
+  webSocketClose(ws){const meta=this.sessions.get(ws);if(meta){const now=Date.now();if(meta.fishTogether?.status!=='complete')fishingTogetherAction(this,ws,meta,{action:'cancel'},now);recordPlayUsage(this.env,meta,now,{flush:true});}this.sessions.delete(ws);try{ws.close(1000,'Goodbye');}catch{}this.snapshot();}
   webSocketError(ws){this.webSocketClose(ws);}
 }

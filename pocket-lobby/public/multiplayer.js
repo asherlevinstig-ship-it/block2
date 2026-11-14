@@ -1,8 +1,8 @@
 import {socialRooms} from './shared-world.js';
-export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onRobbery=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
+export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onRobbery=()=>{},onFishTogether=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
   let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',lastMeditating=false,profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
-  function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);}
+  function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);onFishTogether({session:null});}
   async function join(next){
     disconnect();next=getLocal().room??next;room=next;stopped=false;const current=generation;
     if(!Object.hasOwn(socialRooms,next)){onStatus('Personal adventure');return;}
@@ -34,6 +34,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
         if(data.type==='trailCamp')onTrailCamp(data.camp);
         if(data.type==='trailNotice')onTrailNotice(data.text);
         if(data.type==='activity'&&data.player!==selfId&&Array.isArray(data.events))onActivity(data.player,data.events);
+        if(data.type==='fishTogether')onFishTogether(data);
         if(data.type==='robbery')onRobbery(data.receipt);
         if(data.type==='chat')onChat(data.message);
         if(data.type==='correction')onCorrection(data);
@@ -42,7 +43,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
         if(data.type==='autoDisconnected'&&!stopped){stopped=true;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);onStatus('Out of Action Points · Home and disconnected');onAutoDisconnected();}
       };
       ws.onclose=event=>{
-        if(current!==generation)return;socket=null;clearInterval(tick);clearInterval(ping);onPeers([]);onTrails([]);
+        if(current!==generation)return;socket=null;clearInterval(tick);clearInterval(ping);onPeers([]);onTrails([]);onFishTogether({session:null});
         if(event.code===4004){const notify=!stopped;stopped=true;onStatus('Out of Action Points · Home and disconnected');if(notify)onAutoDisconnected();return;}
         if(stopped)return;
         if(event.code===4001){stopped=true;onStatus('Open in another window');onSessionChanged('This character opened in another window.');return;}
@@ -71,5 +72,5 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
       flush().then(()=>{if(current===generation){send({type:'profile'});profileKey=local.profileKey;}}).catch(()=>{}).finally(()=>{profiling=false;});
     }
   }
-  return {join,disconnect,reconnect:()=>{if(room)join(room);},shareTrail:route=>send({type:'shareTrail',route}),sendChat:text=>send({type:'chat',text}),wave:()=>send({type:'wave'}),get selfId(){return selfId;},get room(){return room;},get connecting(){return !!retry||socket?.readyState===0;},get connected(){return socket?.readyState===1;}};
+  return {join,disconnect,reconnect:()=>{if(room)join(room);},shareTrail:route=>send({type:'shareTrail',route}),sendChat:text=>send({type:'chat',text}),fishTogether:(action,details={})=>send({type:'fishTogether',action,...details}),wave:()=>send({type:'wave'}),get selfId(){return selfId;},get room(){return room;},get connecting(){return !!retry||socket?.readyState===0;},get connected(){return socket?.readyState===1;}};
 }

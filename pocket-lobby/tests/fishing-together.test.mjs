@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fishingTogetherAction,fishingTogetherCatch} from '../server/fishing-together.mjs';
+test('a nearby opt-in pair completes once from two distinct catches and waves thanks',async()=>{
+  const now=Date.now(), sent=[];
+  const socket=()=>({serializeAttachment(){}});
+  const a=socket(),b=socket(),observer=socket();
+  const ari={id:'a',name:'Ari',playerId:'a',room:'pond',x:4,y:5};
+  const bea={id:'b',name:'Bea',playerId:'b',room:'pond',x:10,y:5};
+  let credits=0,waves=0;
+  const db={prepare(){return {bind(){return this;}};},async batch(rows){credits+=rows.length;}};
+  const room={sessions:new Map([[a,ari],[b,bea],[observer,{id:'c',room:'pond'}]]),env:{TOWER_DB:db},send:(socket,packet)=>sent.push({socket,packet}),snapshot:()=>waves++};
+  const act=(ws,p,action,details={})=>fishingTogetherAction(room,ws,p,{action,...details},now);
+  act(a,ari,'invite',{target:'b'});assert.equal(bea.fishTogether,undefined);
+  bea.x=5;act(a,ari,'invite',{target:'b'});const id=bea.fishTogether.id;
+  await fishingTogetherCatch(room,a,ari,now);assert.equal(ari.fishTogether.caught,undefined);
+  act(b,bea,'accept',{id});
+  await fishingTogetherCatch(room,a,ari,now-1);assert.equal(ari.fishTogether.caught,false);
+  await fishingTogetherCatch(room,a,ari,now);await fishingTogetherCatch(room,a,ari,now);
+  assert.equal(ari.fishTogether.status,'fishing');
+  await fishingTogetherCatch(room,b,bea,now);
+  assert.equal(ari.fishTogether.status,'complete');assert.equal(bea.fishTogether.status,'complete');assert.equal(credits,2);
+  act(a,ari,'thanks',{id});act(a,ari,'thanks',{id});
+  assert.equal(waves,1);assert.equal(ari.waveAt,now);
+  assert(sent.some(({socket,packet})=>socket===b&&packet.text==='Ari waved thanks.'));
+  assert(!sent.some(({socket})=>socket===observer));
+});

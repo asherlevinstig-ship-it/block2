@@ -37,8 +37,8 @@ test('two distinct pond catches complete the watch, keep fish and credit the fac
  const {watch}=await b.call('silverfin-watch');assert(watch.complete);
  assert.deepEqual(watch.contributors.map(p=>[p.name,p.faction]).sort(),[['Ari','River Guild'],['Bea',null]]);
  assert.equal(watch.contributors.find(p=>p.name==='Bea').self,1);
- assert.deepEqual(await readFactionSilverfin(db,'river',now),{total:1,today:1});
+ assert.deepEqual(await readFactionSilverfin(db,'river',now),{total:1,today:1,paired:0});
  now+=86400000;
  assert.deepEqual((await a.call('silverfin-watch')).watch.contributors,[]);
- assert.deepEqual(await readFactionSilverfin(db,'river',now),{total:1,today:0});
+ assert.deepEqual(await readFactionSilverfin(db,'river',now),{total:1,today:0,paired:0});
 });

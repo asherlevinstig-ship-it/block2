@@ -22,5 +22,6 @@ export async function readFactionSilverfin(db,factionId,now=Date.now()){
   const row=await db.prepare(
     'SELECT COUNT(*) AS total, SUM(CASE WHEN day=? THEN 1 ELSE 0 END) AS today FROM tower_silverfin_watch WHERE faction_id=?'
   ).bind(dayAt(now),factionId).first();
-  return {total:row.total,today:row.today??0};
+  const pairs=await db.prepare('SELECT COUNT(*) AS total FROM tower_silverfin_pairs WHERE faction_id=?').bind(factionId).first();
+  return {total:row.total,today:row.today??0,paired:pairs.total};
 }

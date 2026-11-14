@@ -6450,6 +6450,58 @@ function updateActivityPrompt(){
   else if(prompt.action==='moonbackTracks')button.textContent='Follow tracks';
   else button.textContent=$(prompt.action).textContent||prompt.title;
 }
+let fishTogetherSession=null,fishTogetherNotice='',fishTogetherExpiry=null;
+function renderFishTogether(){
+  const session=fishTogetherSession, status=$('fishTogetherStatus'), actions=$('fishTogetherActions');
+  actions.replaceChildren();
+  $('fishTogetherTitle').textContent=session?.status==='complete'?'Fishing together complete':'Fish together';
+  const action=(label,run)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=run;actions.append(button);};
+  const send=(kind,details={})=>{if(multiplayer?.fishTogether(kind,details))return true;status.textContent='Reconnect to the pond to fish together.';return false;};
+  const close=()=>$('fishTogetherDialog').close();
+  if(!session){
+    const anglers=[...remotePeers.values()].filter(peer=>!peer.auto&&Math.abs(peer.x-player.cx)+Math.abs(peer.y-player.cy)<=5);
+    status.textContent=fishTogetherNotice||(anglers.length?'Invite a nearby angler. Anyone at the pond can join.':'No anglers within five tiles. Move closer to another player and reopen this panel.');
+    for(const peer of anglers)action('Invite '+peer.name,()=>send('invite',{target:peer.id}));
+    return;
+  }
+  const {name,id,status:phase}=session;
+  if(phase==='complete'){
+    status.textContent=avatar.name+' and '+name+' each landed a fish. You both keep your catches.';
+    if(!session.thanked)action('Wave thanks',()=>{if(send('thanks',{id})){close();player.waveStarted=performance.now();}});
+    action('Keep fishing',close);
+    return;
+  }
+  status.textContent=fishTogetherNotice||(phase==='invited'?name+' invited you to fish together.':phase==='sent'?'Waiting for '+name+' to accept.': 'You '+(session.caught?'caught a fish':'still need a catch')+' · '+name+' '+(session.partnerCaught?'caught a fish':'still needs a catch')+'.');
+  if(phase==='invited')action('Accept',()=>send('accept',{id}));
+  if(phase==='fishing')action('Back to fishing',close);
+  action(phase==='invited'?'Decline':'Cancel',()=>{send('cancel',{id});close();});
+}
+function receiveFishTogether(message){
+  if(currentRoom!=='pond'&&message.session)return;
+  const previous=fishTogetherSession,dialog=$('fishTogetherDialog');
+  fishTogetherNotice=message.text??'';
+  if(Object.hasOwn(message,'session')){
+    fishTogetherSession=message.session;
+    clearTimeout(fishTogetherExpiry);
+    if(fishTogetherSession)fishTogetherExpiry=setTimeout(()=>receiveFishTogether({session:null,text:'That fishing session ended.'}),Math.max(0,fishTogetherSession.until-combatNow()));
+  }
+  if(fishTogetherNotice&&!dialog.open&&currentRoom==='pond')note(fishTogetherNotice);
+  if(fishTogetherSession?.status==='fishing'&&previous?.status!=='fishing'&&dialog.open)dialog.close();
+  if(fishTogetherSession?.status==='invited'&&previous?.id!==fishTogetherSession.id)note(fishTogetherSession.name+' invited you to fish together. Open Silverfin Watch to respond.',9000);
+  if(fishTogetherSession?.status==='complete'&&previous?.status!=='complete'){
+    showTransaction('Fishing together complete',[{icon:'✦',text:avatar.name+' and '+fishTogetherSession.name+' each landed a fish.'}]);
+    if(!document.querySelector('dialog[open]')&&!player.inCombat)dialog.showModal();
+  }
+  if(dialog.open)renderFishTogether();
+}
+$('fishTogetherClose').onclick=()=>$('fishTogetherDialog').close();
+$('silverfinInviteOpen').onclick=()=>{
+  $('silverfinWatchDialog').close();
+  fishTogetherNotice='';
+  renderFishTogether();
+  $('fishTogetherDialog').showModal();
+  multiplayer?.fishTogether('sync');
+};
 let silverfinWatchTimer=null,silverfinWatchLoading=false;
 async function refreshSilverfinWatch(){
   const dialog=$('silverfinWatchDialog'),status=$('silverfinWatchStatus');
@@ -8050,7 +8102,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
+    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onFishTogether:receiveFishTogether,onRobbery:receipt=>{if(!receipt?.id||receipt.id===lastRobberyNotice)return;lastRobberyNotice=receipt.id;note(receipt.success?'Pickpocketed! −'+receipt.gold+' wallet gold. Your bank is safe.':'You caught a pickpocket. No gold lost.');addWorldFloat('self',{id:'robbery:victim:'+receipt.id,kind:receipt.success?'loss':'push',label:receipt.success?'−'+receipt.gold+' gold · Pickpocketed':'Caught a pickpocket',amount:receipt.gold,at:receipt.at,room:currentRoom});window.playerCloud.refreshRobbery?.();},onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,onAutoDisconnected:()=>window.playerCloud.pauseAuto?.(),
