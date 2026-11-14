@@ -8,9 +8,16 @@ export async function readWaystation(db){
  const row=await db.prepare(`SELECT
    COUNT(CASE WHEN site='fire' THEN 1 END) AS fire,
    COUNT(CASE WHEN site='supplies' THEN 1 END) AS supplies,
-   (SELECT json_object('site',site,'name',name) FROM tower_waystation_donations ORDER BY rowid DESC LIMIT 1) AS last
+   (SELECT json_object('site',site,'name',name) FROM tower_waystation_donations ORDER BY rowid DESC LIMIT 1) AS last,
+   (SELECT json_group_array(json_object('name',name,'timber',timber)) FROM (
+     SELECT (SELECT recent.name FROM tower_waystation_donations recent WHERE recent.player_id=d.player_id ORDER BY recent.rowid DESC LIMIT 1) AS name, COUNT(*) AS timber FROM tower_waystation_donations d GROUP BY d.player_id ORDER BY MIN(d.rowid)
+   )) AS names,
+   (SELECT json_group_array(json_object('name',name,'timber',timber)) FROM (
+     SELECT faction_name AS name,COUNT(*) AS timber FROM tower_waystation_donations
+     WHERE faction_id IS NOT NULL GROUP BY faction_id ORDER BY timber DESC,MIN(rowid)
+   )) AS factions
    FROM tower_waystation_donations`).first();
- return {fire:row.fire,supplies:row.supplies,last:row.last?JSON.parse(row.last):null,revision:row.fire+row.supplies};
+ return {fire:row.fire,supplies:row.supplies,last:row.last?JSON.parse(row.last):null,revision:row.fire+row.supplies,contributors:JSON.parse(row.names),factions:JSON.parse(row.factions)};
 }
 export async function useWaystation(db,row,state,body,now){
  const {site,kind,operation}=body;
@@ -21,9 +28,11 @@ export async function useWaystation(db,row,state,body,now){
     ||state.fishingCast||state.timberCut||state.miningCut||state.gambling?.round?.status==='playing'
     ||state.hunting?.encounter||state.hunting?.recoveryUntil)throw invalid('Finish your current activity before using the Waystation.');
  if(kind==='donate'){
-  const result=await db.prepare(`INSERT INTO tower_waystation_donations(player_id,operation,site,name,at)
-   SELECT player_id,?,?,json_extract(state_json,'$.avatar.name'),? FROM tower_players
-   WHERE player_id=? AND revision=? AND COALESCE(json_extract(state_json,'$.woodcutting.timber'),0)>0
+  const result=await db.prepare(`INSERT INTO tower_waystation_donations(player_id,operation,site,name,at,faction_id,faction_name)
+   SELECT p.player_id,?,?,json_extract(p.state_json,'$.avatar.name'),?,f.faction_id,f.name
+   FROM tower_players p LEFT JOIN tower_faction_members m ON m.player_id=p.player_id
+   LEFT JOIN tower_factions f ON f.faction_id=m.faction_id
+   WHERE p.player_id=? AND revision=? AND COALESCE(json_extract(state_json,'$.woodcutting.timber'),0)>0
    AND (SELECT COUNT(*) FROM tower_waystation_donations WHERE site=?)<?
    ON CONFLICT(player_id,operation) DO NOTHING RETURNING operation`)
    .bind(operation,site,now,row.player_id,row.revision,site,project.target).first();

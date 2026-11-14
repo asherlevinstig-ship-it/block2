@@ -28,10 +28,11 @@ test('shared timber contributions are atomic and unlock public services once com
  const act=(id,site,kind,operation)=>useWaystation(db,row(id),JSON.parse(row(id).state_json),{kind,site,operation},1000);
  await assert.rejects(act('a','fire','rest','early'),/Finish rebuilding/);
  await assert.rejects(act('a','supplies','donate','distance'),/Walk beside/);
+ sql.prepare('INSERT INTO tower_factions(faction_id,name,name_key,description,leader_id,created_at) VALUES (?,?,?,?,?,?)').run('ridge','Ridge Guild','ridge guild','Trail builders','a',1000);
  await act('a','fire','donate','first');
  await assert.rejects(act('a','fire','donate','first'),/still needs/);
  for(let i=1;i<8;i++)await act('b','fire','donate','fire-'+i);
- assert.deepEqual(await readWaystation(db),{fire:8,supplies:0,last:{site:'fire',name:'Bea'},revision:8});
+ assert.deepEqual(await readWaystation(db),{fire:8,supplies:0,last:{site:'fire',name:'Bea'},revision:8,contributors:[{name:'Ari',timber:1},{name:'Bea',timber:7}],factions:[{name:'Ridge Guild',timber:1}]});
  await assert.rejects(act('a','fire','donate','overflow'),/still needs/);
  assert.equal(JSON.parse(row('a').state_json).woodcutting.timber,19);
  assert.equal(JSON.parse((await act('a','fire','rest','heal')).state_json).health,100);

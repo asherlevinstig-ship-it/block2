@@ -9,11 +9,27 @@ export const waystationArea={
  palette:['#425562','#5b6d73','#b6a189'],
  authored:[...Object.values(waystationSites).map(({type,x,y})=>[type,x,y]),
  ['riverCypress',2,1],['riverCypress',9,1],['riverCypress',10,8],['riverRock',2,3],['riverRock',7,1],
- ['riverCrates',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8],['waystationAwning',8,7]]
+ ['riverCrates',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8],['waystationSign',2,5],['waystationAwning',8,7]]
 };
 
 export function drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced,weather},board){
  const {x,y,type}=item;
+ if(type==='waystationSign'){
+  const [px,py]=point(x+.5,y+.5);
+  const wood=['#a9845a','#574843','#765849'];
+  block(x+.45,y+.42,.13,.16,0,32,wood);
+  rect(px-15,py-37,30,16,'#634d3e');
+  rect(px-13,py-35,26,12,'#b48b61');
+  for(let i=0;i<3;i++)rect(px-9,py-33+i*3,18,1,'#685343');
+  const bannerColors=['#527889','#785987','#557c59'];
+  for(const [i,faction] of (board?.factions??[]).slice(0,3).entries()){
+   const left=px+9+i*9,top=py-27+i*3;
+   polygon([[left,top],[left+8,top],[left+8,top+18],[left+4,top+14],[left,top+18]],bannerColors[i],'#dfbc81');
+   const marks=Math.min(3,faction.timber);
+   for(let mark=0;mark<marks;mark++)rect(left+3,top+3+mark*3,2,2,'#ecd19b');
+  }
+  return;
+ }
  if(type==='waystationAwning'){
   const wood=['#a9845a','#574843','#765849'];
   for(const [u,v] of [[.04,.04],[.86,.04],[.04,.86],[.86,.86]])block(x+u,y+v,.09,.09,0,37,wood);

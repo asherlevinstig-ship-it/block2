@@ -2806,7 +2806,7 @@ function dimensions(item) {
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
 function object(item,highlight=false,time=0,weather=null) {
-  if(['waystationFire','waystationSupplies','waystationAwning'].includes(item.type)){
+  if(['waystationFire','waystationSupplies','waystationAwning','waystationSign'].includes(item.type)){
     drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced:reducedMotion.matches,weather},waystationBoard);
     return;
   }
@@ -3585,6 +3585,8 @@ function updateWorldLabels(){
   if(currentRoom==='millbrook'){const crack=roomFurniture().find(item=>item.type==='cellarCrack');if(crack&&(adventure.millCellarFound||Math.hypot(player.x-crack.x,player.y-crack.y)<3))add(adventure.millCellarFound?'Mill cellar':'Loose bricks',...point(crack.x+.5,crack.y+.5,35),'npc',()=>use(crack));}
   if(currentRoom==='millCellar')for(const item of roomFurniture()){const label={cellarStairs:'Back to Millbrook',cellarChest:adventure.millCellarClaimed?'Opened chest':adventure.millCellarCleared?'Millkeeper’s chest':'Sealed chest',cellarJournal:'Millkeeper’s journal'}[item.type];if(label)add(label,...point(item.x+.5,item.y+.5,(moonwood.heights[item.type]??20)+9),'npc',()=>use(item));}
   if(currentRoom===waystationRoom){
+    const sign=roomFurniture().find(item=>item.type==='waystationSign');
+    add('Restoration sign',...point(sign.x+.5,sign.y+.5,42),'npc',()=>use(sign));
     for(const [site,project] of Object.entries(waystationSites)){
       const amount=waystationBoard?.[site];
       const title=amount>=project.target?(site==='fire'?'Rest at the campfire':'Buy rations'):project.name+(amount===undefined?'':' · '+amount+'/'+project.target);
@@ -3758,6 +3760,7 @@ function draw(time){
     items.push(...willowbankFlock(wildlifeNow,[player,...[...remotePeers.values()].map(p=>({x:p.rx,y:p.ry}))]));
   }
   const travelers=currentRoom===waystationRoom?waystationRoutines(worldNow,weather,waystationBoard,reducedMotion.matches):null;
+  if(currentRoom==='willowbank')items.push({type:'waystationVisitor',id:'willowbankGuide',name:'River traveler',outfit:2,x:7,y:11});
   if(travelers){
     items.push(...travelers.visitors);
     if(travelers.delivery)items.push({type:'waystationDelivery',x:8,y:5});
@@ -3851,7 +3854,7 @@ function draw(time){
       }
       renderedActors.push({id:'waystation:'+item.id,enemy:true,name:item.name,detail:item.activity,x,y:y-42,action:()=>{
         if(Math.abs(item.x-player.cx)+Math.abs(item.y-player.cy)>3){note('Move closer to speak.',3500);return;}
-        note(item.id==='scout'?travelers.report:item.crate?'I’m bringing supplies from Beaconwatch.':item.activity==='Sheltering'?'I’ll wait here until the rain lets up.':'Supplies are at the counter. Bring timber to help restore the outpost.',7500);
+        note(item.id==='willowbankGuide'?willowbankGuideReport(adventure.willowbankShortcut):item.id==='scout'?travelers.report:item.crate?'I’m bringing supplies from Beaconwatch.':item.activity==='Sheltering'?'I’ll wait here until the rain lets up.':'Supplies are at the counter. Bring timber to help restore the outpost.',7500);
       }});
       continue;
     }
@@ -4044,10 +4047,27 @@ function receiveWaystation(board){
       (board[board.last.site]===project.target?' · Restoration complete!':'.'),4500);
   }
   renderWaystation();
+  renderWaystationCredits();
 }
+function renderWaystationCredits(){
+  if(!$('waystationCreditsDialog').open)return;
+  const board=waystationBoard;
+  $('waystationCreditsStatus').textContent=!board?'Reading the sign…':board.revision
+    ?'The campfire and supply post were built by these travelers.':'Help restore the campfire or supply post to add your name.';
+  const fill=(id,rows)=>{
+    const list=$(id);list.replaceChildren();
+    for(const {name,timber} of rows){
+      const row=document.createElement('li');row.textContent=name+' · '+timber+' timber';list.append(row);
+    }
+  };
+  fill('waystationContributors',board?.contributors??[]);
+  fill('waystationFactionCredits',board?.factions??[]);
+  $('waystationFactionSection').hidden=!board?.factions?.length;
+}
+$('waystationCreditsClose').onclick=()=>$('waystationCreditsDialog').close();
 async function refreshWaystation(){
   try{receiveWaystation(await window.playerCloud?.readWaystation?.());}
-  catch(error){if($('waystationDialog').open)$('waystationStatus').textContent=error.message;}
+  catch(error){if($('waystationDialog').open)$('waystationStatus').textContent=error.message;if($('waystationCreditsDialog').open)$('waystationCreditsStatus').textContent=error.message;}
 }
 function renderWaystation(){
   if(!$('waystationDialog').open)return;
@@ -4862,6 +4882,10 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='waystationSign'){
+    $('waystationCreditsDialog').showModal();renderWaystationCredits();refreshWaystation();
+    return;
+  }
   if(item.type==='waystationFire'||item.type==='waystationSupplies'){
     openWaystationProject(item.type==='waystationFire'?'fire':'supplies');
     return;

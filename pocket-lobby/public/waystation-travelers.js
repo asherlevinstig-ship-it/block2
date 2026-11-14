@@ -18,6 +18,12 @@ function walk(path,age,duration,reduced){
 }
 const stand=([x,y])=>({x,y,direction:'right',moving:false});
 
+export function willowbankGuideReport(shortcutOpen){
+ return shortcutOpen
+  ?'You opened the old gate. I used it on my way back from Millbrook and saved myself a walk around the bank.'
+  :'The old gate is still locked from here. Take either trail and look for the latch on the Millbrook side.';
+}
+
 export function waystationRoutines(now,weather,board,reduced=false){
  const age=((now%period)+period)%period;
  const fireReady=board?.fire>=waystationSites.fire.target;
