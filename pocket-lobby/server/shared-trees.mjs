@@ -43,7 +43,7 @@ export function describeTreeCut(state,shared,cutId){
 
 // Both updates run atomically. A failed player revision or tree generation can
 // never consume a tree hit without paying its player, or pay a duplicate hit.
-export async function writeTreePlayer(db,id,revision,state,operation,mutation){
+export async function writeTreePlayer(db,id,revision,state,operation,mutation,extra=[]){
  const now=Date.now(),work=state.plan?.treeWork;
  const receipt=state.timberReceipt?.id===mutation.cutId;
  const pendingManual=state.timberCut?.key===mutation.key;
@@ -75,7 +75,8 @@ export async function writeTreePlayer(db,id,revision,state,operation,mutation){
     revision=revision+1,last_request=?,updated_at=?
     WHERE player_id=? AND revision=? AND EXISTS (SELECT 1 FROM paid_tree)
     RETURNING player_id,state_json,revision,last_request`)
-   .bind(mutation.key,mutation.cutId,id,JSON.stringify(state),'$.woodcutting.trees.'+JSON.stringify(mutation.key)+'.cuts','$.woodcutting.trees.'+JSON.stringify(mutation.key)+'.regrowsAt',receipt?1:0,pendingAuto?1:0,pendingManual?1:0,operation,now,id,revision)
+   .bind(mutation.key,mutation.cutId,id,JSON.stringify(state),'$.woodcutting.trees.'+JSON.stringify(mutation.key)+'.cuts','$.woodcutting.trees.'+JSON.stringify(mutation.key)+'.regrowsAt',receipt?1:0,pendingAuto?1:0,pendingManual?1:0,operation,now,id,revision),
+   ...extra
  ]);
  return result[1].results?.[0]??null;
 }

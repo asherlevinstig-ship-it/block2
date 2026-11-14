@@ -1,3 +1,4 @@
+import {recordShopPurchase} from './shop-licences.mjs';
 import {awardTradingXp} from './activity-xp.mjs';
 import {availableActionPoints} from '../public/action-points.js';
 import {openRewardChest,chestEquipmentComparison} from '../public/dungeon-chests.js';
@@ -212,7 +213,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(!position||Math.abs(position.x-foodStall.x)+Math.abs(position.y-foodStall.y)!==1)throw new Error('Travel to the Tower Bakery counter first.');
     const quantity=body.quantity,cost=quantity*towerBread.price,count=state.meals[towerBread.id]??0;
     if(!Number.isInteger(quantity)||quantity<1||quantity>10||cost>state.credits||count+quantity>1000000)throw new Error('Choose up to 10 rations within your wallet and inventory limits.');
-    state.credits-=cost;state.meals[towerBread.id]=count+quantity;return;
+    state.credits-=cost;state.meals[towerBread.id]=count+quantity;recordShopPurchase(state,'bakery',cost,now);return;
   }
   if(action==='cook'||action==='eat'){
     available(state);
@@ -342,7 +343,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(skillLevel(state.stats.patienceXp)<rod.patience)throw new Error('Patience is too low for this rod.');
     if(!owned&&state.credits<rod.price)throw new Error('Invalid balance. Earn more gold first.');
     if(!owned){
-      state.credits-=rod.price;state.fishingGear.ownedRods.push(body.id);
+      state.credits-=rod.price;state.fishingGear.ownedRods.push(body.id);recordShopPurchase(state,'store',rod.price,now);
       // One first-cast bait accompanies the guided Oak Rod upgrade only.
       if(body.id==='oak'&&state.firstUpgrade.unlocked&&state.firstUpgrade.choice==='fishing'&&!state.firstUpgrade.complete&&state.fishingGear.bait===0)state.fishingGear.bait=1;
     }
@@ -354,7 +355,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     location(state,['store']);
     const bait=fishingCatalog.bait;
     if(state.credits<bait.price||state.fishingGear.bait>1000000-bait.quantity)throw new Error('Invalid bait purchase. Check your gold and inventory.');
-    state.credits-=bait.price;state.fishingGear.bait+=bait.quantity;
+    state.credits-=bait.price;state.fishingGear.bait+=bait.quantity;recordShopPurchase(state,'store',bait.price,now);
     return;
   }
   if(action==='riverRestStop'){if(state.location!=='millbrook'||state.plan||state.report||state.hunting.encounter||state.health<=0)throw new Error('Choose Get up at the Millbrook bench.');state.hunting.recoveryUntil=0;return;}

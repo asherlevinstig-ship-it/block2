@@ -37,7 +37,7 @@ export async function matchAutoTimberOrders(db,sellerId,minimumPrice,surplus,wal
   return matches;
 }
 
-export async function writeAutoTimberSale(db,row,state,operation,now,matches){
+export async function writeAutoTimberSale(db,row,state,operation,now,matches,extra=[]){
   const payload=JSON.stringify(matches);
   // A changed order or seller revision aborts the whole sale before any order is filled.
   const [saved]=await db.batch([
@@ -51,7 +51,8 @@ export async function writeAutoTimberSale(db,row,state,operation,now,matches){
       )
       UPDATE tower_timber_orders SET remaining=remaining-matches.quantity,ready=ready+matches.quantity,mutation=?
       FROM matches WHERE order_id=matches.id AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=? AND last_request=?)
-      RETURNING order_id`).bind(payload,operation,row.player_id,row.revision+1,operation)
+      RETURNING order_id`).bind(payload,operation,row.player_id,row.revision+1,operation),
+   ...extra
   ]);
   return saved.results[0]??null;
 }

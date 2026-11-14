@@ -561,7 +561,7 @@
       const {autoWalkPosition}=await import('./auto-walk.js');
       const playerVitals=await import('./player-vitals.js');window.towerActionPoints=await import('./action-points.js');const familiars=await import('./familiars.js');const wildlife=await import('./wildlife.js');
       const autoFeedback=await import('./auto-feedback.js');
-      Object.assign(window,await import('./activity-skills.js'),await import('./public-requests.js'),await import('./home-chest.js'),{vaultBagCount:(await import('./vault.js')).vaultBagCount});
+      Object.assign(window,await import('./shop-licences.js'),await import('./activity-skills.js'),await import('./public-requests.js'),await import('./home-chest.js'),{vaultBagCount:(await import('./vault.js')).vaultBagCount});
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
       const essences=await import('./essences.js');
@@ -595,6 +595,7 @@
         try{return await action('gameplay/'+name,body);}
         finally{gameplayBusy=false;}
       },setupExplorer:async()=>{await flush();await action('auto/explore/setup');pending=retryJob=null;backup(null);lastInputAt=Date.now();lastReportedInputAt=lastInputAt;window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);showReport(packet.state);schedulePresence(150);return packet.state;},get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},startSimpleAuto:async(mode,options)=>{await flush();await action('auto/simple',{mode,options});pending=retryJob=null;backup(null);window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);schedulePresence(150);return packet.state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get characterKey(){return packet.characterKey;},get initial(){return packet.state;}};
+      window.playerCloud.readShopLicences=()=>request('shop-licences');
       window.playerCloud.refreshPvp=refreshPvp;
       window.playerCloud.mostWanted=()=>request('pvp');
       window.playerCloud.refreshWanted=async()=>{try{const latest=await request('state');if(latest.characterKey===packet.characterKey&&latest.revision>=packet.revision){packet=latest;window.towerWantedChanged?.(packet.state);}}catch{}};

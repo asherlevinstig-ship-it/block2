@@ -3516,7 +3516,56 @@ function nextExplorationDoor(){
   }
   return trackedDestination&&!depthsRun?hudNextDoor(trackedDestination):null;
 }
+let shopBoard=null,shopLicenceBusy=false,shopBoardRequest=null,shopBoardVersion=0,shopLicenceError='';
+function currentShopLicence(){
+  return window.shopLicences?.[currentRoom]?shopBoard?.shops[currentRoom]:null;
+}
+function renderShopLicence(){
+  const room=currentRoom,offer=currentShopLicence(),panel=$(room==='bakery'?'bakeryLicence':'fishingLicence');
+  if(!panel||!window.shopLicences?.[room])return;
+  const content=panel.querySelector('div');content.replaceChildren();
+  const text=(value,tag='p')=>{const element=document.createElement(tag);element.textContent=value;content.append(element);return element;};
+  if(!offer){text(shopLicenceError||'Loading ownership…');return;}
+  const active=offer.owner&&offer.endsAt>combatNow();
+  text(active?'Licensed to '+offer.owner:'Available to license','strong');
+  if(active)text('Expires '+new Date(offer.endsAt).toLocaleString());
+  const percent=window.shopCommissionPercent;
+  text(window.shopLicenceDays+' days · '+percent+'% of other players’ purchases.');
+  text(offer.price.toLocaleString()+' gold · Trading level '+offer.trading);
+  text(offer.recentSales.toLocaleString()+' gold in sales over the last seven calendar days · '+Math.ceil(offer.price*100/percent).toLocaleString()+' in eligible sales to break even.');
+  const action=(label,kind,disabled)=>{
+    const button=document.createElement('button');button.type='button';button.textContent=label;
+    button.disabled=disabled||shopLicenceBusy;button.onclick=()=>submitShopLicence(kind);content.append(button);
+  };
+  if(!active)action('Buy 7-day licence','buy',!!shopBoard.owned||credits<offer.price||skillLevel(playerStats.tradingXp)<offer.trading);
+  if(shopBoard.owned&&shopBoard.owned!==room)text('You already hold a licence at '+window.shopLicences[shopBoard.owned].name+'.');
+  if(shopBoard.owned===room||shopBoard.claimable)action('Collect '+shopBoard.claimable.toLocaleString()+' gold','claim',!shopBoard.claimable||credits>=100000000);
+  if(shopLicenceError)text(shopLicenceError).role='status';
+}
+async function refreshShopLicence(){
+  if(!window.shopLicences?.[currentRoom]||!window.playerCloud?.readShopLicences||shopBoardRequest)return;
+  const version=shopBoardVersion;
+  shopBoardRequest=window.playerCloud.readShopLicences();
+  try{
+    const board=await shopBoardRequest;
+    if(version===shopBoardVersion){shopBoard=board;if(shopLicenceError==='Ownership is temporarily unavailable.')shopLicenceError='';}
+  }catch{
+    if(!shopBoard)shopLicenceError='Ownership is temporarily unavailable.';
+  }finally{shopBoardRequest=null;renderShopLicence();}
+}
+async function submitShopLicence(kind){
+  if(shopLicenceBusy)return;
+  shopLicenceBusy=true;shopLicenceError='';renderShopLicence();
+  try{
+    const result=await serverGameplay('shopLicence',{kind});
+    shopBoardVersion++;shopBoard=result.shopBoard;
+  }catch(error){
+    shopLicenceError=error.message;
+    await refreshShopLicence();
+  }finally{shopLicenceBusy=false;renderShopLicence();}
+}
 let worldLabelKey='';
+
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
@@ -3527,7 +3576,9 @@ function updateWorldLabels(){
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
   const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
-  const labelKey=key+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  const owner=currentShopLicence();
+  const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
+  const labelKey=key+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
   worldLabelBounds=[];
@@ -3608,6 +3659,7 @@ function updateWorldLabels(){
       add(label,...point(item.x+.5,item.y+.5,height),'npc',()=>use(item));
     }
   }
+  if(shopOwner)add('SHOP OWNER',...point(currentRoom==='bakery'?4:3.4,0,48),'sign',null,shopOwner,{side:'right',width:66,font:6});
   if(currentRoom==='bakery')add('Baker',...point(foodStall.x+.5,foodStall.y+.5,47),'npc',()=>use(bakeryFurniture[0]),'Buy Tower Bread');
   if(currentRoom==='hub'){
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
@@ -5372,6 +5424,7 @@ $('silverfinSupperGift').onclick=()=>refreshSilverfinSupper('gift');
 
 let buyingBread=false;
 function renderFoodStall(){
+  renderShopLicence();
   $('foodStallStock').textContent=(meals[towerBread.id]??0)+' in bag · '+credits+' gold in wallet';
   for(const button of $('foodStallDialog').querySelectorAll('[data-bread-quantity]')){
     const quantity=Number(button.dataset.breadQuantity);
@@ -5382,6 +5435,7 @@ function renderFoodStall(){
 function openFoodStall(){
   $('foodStallArt').innerHTML=mealArt(towerBread.id);
   $('foodStallStatus').textContent='';renderFoodStall();$('foodStallDialog').showModal();
+  shopLicenceError='';renderShopLicence();refreshShopLicence();
 }
 for(const button of $('foodStallDialog').querySelectorAll('[data-bread-quantity]')){
   button.onclick=async()=>{
@@ -5692,6 +5746,8 @@ function openMerchant(){
   if(currentRoom==='furnishings'){use(furnishingsFurniture.find(item=>item.type==='reception'));return;}
   if(!['store','armory','market','furnishings'].includes(currentRoom))return;
   $('publicRequestOpen').hidden=currentRoom!=='market';
+  if($('fishingLicence'))$('fishingLicence').hidden=currentRoom!=='store';
+  if(currentRoom==='store'){shopLicenceError='';renderShopLicence();refreshShopLicence();}
   updateFishingShop();updateArmoryShop();updateTradingPost();
   $('merchantTitle').textContent=roomDetails[currentRoom].name;
   if(!$('merchantDialog').open)$('merchantDialog').showModal();
@@ -6356,6 +6412,7 @@ function updateFishingShop(){
     option.value=id;option.textContent=fishingCatalog.rods[id].name;selector.append(option);
   }
   selector.value=fishingGear.equippedRod;
+  if(currentRoom==='store')renderShopLicence();
   const offers=$('rodOffers');offers.replaceChildren();
   const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),fishingGear.equippedRod,playerStats.luckXp,anglerQualityBonus({wardrobe}));
   for(const [id,rod] of Object.entries(fishingCatalog.rods)){
@@ -8169,7 +8226,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
     if(next===moonwood.trailCamp.room)campReadAt=-Infinity;
   }
   if(currentRoom!==next)willowbankFlock(0,null);
-  currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
+  currentRoom=next;refreshShopLicence();selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;
   const exploring=moonwood.has(next);
@@ -8476,6 +8533,10 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
 }else $('networkStatus').textContent='Local preview';
 if(window.playerCloud?.initial?.fishingCast&&(isFishingRoom(currentRoom)||currentRoom===moonfinPool.room)){
   restoreServerCast(window.playerCloud.initial.fishingCast,window.playerCloud.serverTime);
+}
+if(window.playerCloud?.readShopLicences){
+  refreshShopLicence();
+  setInterval(()=>{if(!document.hidden)refreshShopLicence();},60000);
 }
 requestAnimationFrame(animation);
 

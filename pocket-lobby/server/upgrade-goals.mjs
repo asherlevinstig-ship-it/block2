@@ -1,3 +1,4 @@
+import {recordShopPurchase} from './shop-licences.mjs';
 import {upgradeGoalProgress} from '../public/upgrade-goals.js';
 // A goal is resolved once per saved target/mode, inside the same revision as its rewards.
 export function resolveQueueGoal(state,plan,at){
@@ -10,7 +11,7 @@ export function resolveQueueGoal(state,plan,at){
   else{
    state.credits-=item.price;plan.goldSpent+=item.price;plan.goalSpent=item.price;
    if(item.kind==='weapon'){state.combatGear.ownedWeapons.push(item.id);state.combatGear.equippedWeapon=item.id;}
-   else{state.fishingGear.ownedRods.push(item.id);state.fishingGear.equippedRod=item.id;}
+   else{recordShopPurchase(state,'store',item.price,at);state.fishingGear.ownedRods.push(item.id);state.fishingGear.equippedRod=item.id;}
    receipt.status='purchased';receipt.spent=item.price;
   }
  }

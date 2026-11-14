@@ -1,3 +1,4 @@
+import {recordShopPurchase} from './shop-licences.mjs';
 import {awardTradingXp} from './activity-xp.mjs';
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {rollFishingReward} from '../public/fishing.js';
@@ -317,13 +318,13 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if((p.rationGoldSpent??0)+cost>(food.breadBudget??0))return finish(state,p,'food-budget',at);
       if(p.goldSpent+cost>p.queue.budget)return finish(state,p,'spending-limit',at);
       if(state.credits-cost<p.queue.reserveGold)return finish(state,p,'gold-reserve',at);
-      state.credits-=cost;state.meals[towerBread.id]=(state.meals[towerBread.id]??0)+quantity;p.goldSpent+=cost;p.rationGoldSpent=(p.rationGoldSpent??0)+cost;p.rationsBought=(p.rationsBought??0)+quantity;p.stepCount=quantity;
+      state.credits-=cost;recordShopPurchase(state,'bakery',cost,at);state.meals[towerBread.id]=(state.meals[towerBread.id]??0)+quantity;p.goldSpent+=cost;p.rationGoldSpent=(p.rationGoldSpent??0)+cost;p.rationsBought=(p.rationsBought??0)+quantity;p.stepCount=quantity;
       nextStep(p,at,'Bought '+quantity+' bread for '+cost+' gold');changed=true;continue;
     }else if(type==='buyBait'){
       const packs=Math.max(0,Math.ceil((step.amount-state.fishingGear.bait)/fishingCatalog.bait.quantity)),cost=packs*fishingCatalog.bait.price;
       if(p.goldSpent+cost>p.queue.budget)return finish(state,p,'spending-limit',at);
       if(cost&&(state.credits-cost<p.queue.reserveGold||state.credits<cost))return finish(state,p,'gold-reserve',at);
-      state.credits-=cost;state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;autoStoreVault(state,p,at);
+      state.credits-=cost;recordShopPurchase(state,'store',cost,at);state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;autoStoreVault(state,p,at);
       nextStep(p,at,'Bought '+p.stepCount+' bait for '+cost+' gold');changed=true;continue;
     }else if(type==='explore'){const room=state.location;if(room!=='outside'&&!state.adventure.discovered.includes(room))state.adventure.discovered.push(room);p.exploreIndex=(p.exploreIndex??0)+1;p.explored=(p.explored??0)+1;nextStep(p,at,'Explored '+room);changed=true;if(spendAutoPoint(state,p,at))return true;continue;
     }else if(type==='rest'){state.health=playerMaxHealth(state,at);nextStep(p,at,'Rested at home');changed=true;if(spendAutoPoint(state,p,at))return true;continue;}

@@ -1,3 +1,4 @@
+import {recordShopPurchase} from './shop-licences.mjs';
 import {consumeMeal} from '../public/cooking.js';
 import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
 import {feedPlayer,isExhausted,LOW_HUNGER} from '../public/player-vitals.js';
@@ -42,7 +43,7 @@ export function buyAutoWorkBread(state,plan,now,motion){
  if(order.reason)return order;
  const cost=order.quantity*towerBread.price;
  state.meals[towerBread.id]=(state.meals[towerBread.id]??0)+order.quantity;
- state.credits-=cost;
+ state.credits-=cost;recordShopPurchase(state,'bakery',cost,now);
  plan.goldSpent=(plan.goldSpent??0)+cost;
  plan.rationsBought=(plan.rationsBought??0)+order.quantity;
  plan.rationGoldSpent=(plan.rationGoldSpent??0)+cost;

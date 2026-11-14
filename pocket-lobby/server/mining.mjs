@@ -25,13 +25,14 @@ export function awardOreStrike(state,node,cut,now,broken=false){
  state.miningReceipt={id:cut.id,ore:node.ore,amount,bonus,prospector,runic,room:depositRoom(node),xp:state.mining.xp-before,at:now,node:node.id,broken,find:awarded};
  return state.miningReceipt.xp;
 }
-export async function writeOreStrike(db,row,state,operation,now,{node,revision,hits,readyAt}){
+export async function writeOreStrike(db,row,state,operation,now,{node,revision,hits,readyAt},extra=[]){
  const mutation=crypto.randomUUID();
  const [,updated]=await db.batch([
   db.prepare('UPDATE tower_ore_deposits SET hits=?,ready_at=?,revision=revision+1,mutation=? WHERE node_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?) RETURNING node_id')
    .bind(hits,readyAt,mutation,node,revision,row.player_id,row.revision),
   db.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? AND EXISTS (SELECT 1 FROM tower_ore_deposits WHERE node_id=? AND mutation=?) RETURNING *')
-   .bind(JSON.stringify(state),operation,now,row.player_id,row.revision,node,mutation)
+   .bind(JSON.stringify(state),operation,now,row.player_id,row.revision,node,mutation),
+   ...extra
  ]);
  return updated.results[0]??null;
 }

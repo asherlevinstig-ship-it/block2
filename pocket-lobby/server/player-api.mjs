@@ -42,6 +42,7 @@ import {configureExplorerLesson} from './exploration-plan.mjs';
 import {migrateHomeSafe} from '../public/home-safe.js';
 import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
+import {changeShopLicence,shopLicenceBoard,shopSaleStatements} from './shop-licences.mjs';
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
 import {publicPlayerState} from './gambling.mjs';
@@ -88,11 +89,17 @@ async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
 async function write(db,id,revision,state,operation,factionId=null,treeMutation=null,pondCatchAt=null){
-  if(treeMutation)return writeTreePlayer(db,id,revision,state,operation,treeMutation);
+  const sales=shopSaleStatements(db,state,id,revision+1,operation);
+  if(treeMutation)return writeTreePlayer(db,id,revision,state,operation,treeMutation,sales);
   const update=db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId);
-  if(pondCatchAt===null)return update.first();
-  const [saved,contribution]=await db.batch([update,silverfinContribution(db,id,state,pondCatchAt)]);
+  if(pondCatchAt===null){
+    if(!sales.length)return update.first();
+    const [saved]=await db.batch([update,...sales]);
+    return saved.results[0]??null;
+  }
+  const [saved,...rest]=await db.batch([update,...sales,silverfinContribution(db,id,state,pondCatchAt)]);
+  const contribution=rest.at(-1);
   const row=saved.results[0];
   if(row&&contribution.results.length)row.silverfinContributed=true;
   return row??null;
@@ -170,8 +177,9 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(initial===JSON.stringify(state)&&!migrated)return row;
     const operation="settle:"+crypto.randomUUID();
-    const updated=oreMutation?await writeOreStrike(db,row,state,operation,now,oreMutation)
-      :timberSale.length?await writeAutoTimberSale(db,row,state,operation,now,timberSale):await write(db,id,row.revision,state,operation,null,treeMutation);
+    const saleStatements=shopSaleStatements(db,state,id,row.revision+1,operation);
+    const updated=oreMutation?await writeOreStrike(db,row,state,operation,now,oreMutation,saleStatements)
+      :timberSale.length?await writeAutoTimberSale(db,row,state,operation,now,timberSale,saleStatements):await write(db,id,row.revision,state,operation,null,treeMutation);
     if(updated){
       if(usage)usage.saves++;
       await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{usage,autoRelay,fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});
@@ -264,6 +272,7 @@ export async function handlePlayerApi(request,env){
     if(path==='/api/player/waystation'&&request.method==='GET')return json({waystation:await readWaystation(env.TOWER_DB)});
     if(path==='/api/player/trail-camp'&&request.method==='GET')return json({camp:await readTrailCamp(env.TOWER_DB),serverTime:Date.now()});
     if(path==='/api/player/mining'&&request.method==='GET')return json({deposits:await readOreDeposits(env.TOWER_DB),serverTime:Date.now()});
+    if(path==='/api/player/shop-licences'&&request.method==='GET')return json(await shopLicenceBoard(env.TOWER_DB,id));
     if(path==='/api/player/timber-orders'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id);
       if(!row)return json({error:'Character not found.'},401);
@@ -308,6 +317,7 @@ export async function handlePlayerApi(request,env){
       return json({...playerPacket(result.updated),gift:result.receipt});
     }
     if(row.last_request===body.operation){
+      if(path==='/api/player/gameplay/shopLicence')return json({...playerPacket(row),shopBoard:await shopLicenceBoard(env.TOWER_DB,id)});
       if(path==='/api/player/public-requests')return json({...playerPacket(row),board:await readPublicRequests(env.TOWER_DB)});
       if(path==='/api/player/pvp')return json({...playerPacket(row),receipt:body.kind==='strike'?JSON.parse(row.state_json).pvp?.lastStrike:undefined});
       if(path==='/api/player/robbery')return json({...playerPacket(row),receipt:JSON.parse(row.state_json).robbery?.lastAttempt});
@@ -397,6 +407,10 @@ export async function handlePlayerApi(request,env){
       if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
       Object.assign(state,normalizeState(state));
       const gameplay=path.slice('/api/player/gameplay/'.length);
+      if(gameplay==='shopLicence'){
+        const updated=await changeShopLicence(env.TOWER_DB,row,state,body);
+        return json({...playerPacket(updated),shopBoard:await shopLicenceBoard(env.TOWER_DB,id)});
+      }
       if(gameplay==='factionHall'){
         if(state.location!=='hub'||state.plan||state.report||state.hunting.encounter||state.hunting.recoveryUntil||state.health<=0)throw new Error('Travel to the Grand Lobby and finish your current activity first.');
         const access=await factionHallAccess(env.TOWER_DB,id);
