@@ -3,7 +3,12 @@ import {signaturePoses} from './signature-poses.js';
 
 const clamp=value=>Math.max(0,Math.min(1,value));
 const pulse=(age,duration)=>age>=0&&age<duration?Math.sin(age/duration*Math.PI):0;
-export function playerCombatPose({time,now,encounter,events,reduced=false}){
+export function recordCharacterReaction(events,hit,time){
+  if(hit.damage>0){events.hurtAt=time;events.hurtHeavy=hit.heavy===true||hit.damage>=20;}
+  if(hit.shielded>0)events.shieldAt=time;
+  if(hit.perfectDodge)events.perfectDodgeAt=time;
+}
+export function playerCombatPose({time,now,encounter,events,reduced=false,health=100,maxHealth=100}){
   const victoryAge=time-events.victoryAt;
   const victory=victoryAge>=0&&victoryAge<1000;
   const ready=!!encounter;
@@ -15,12 +20,19 @@ export function playerCombatPose({time,now,encounter,events,reduced=false}){
   const swing=!casting&&strikeAge>=0&&strikeAge<360;
   const strike=swing?clamp(strikeAge/140):0;
   const recover=swing?clamp((strikeAge-140)/220):0;
+  const hitDuration=events.hurtHeavy?460:230,hitAge=time-events.hurtAt;
+  const hurt=hitAge>=0&&hitAge<hitDuration;
+  const shieldAge=time-events.shieldAt,evadeAge=time-events.perfectDodgeAt;
   return {
+    hurt,heavyHit:hurt&&events.hurtHeavy===true,
+    strained:ready&&health>0&&health<=maxHealth*.2,
+    shieldPulse:shieldAge>=0&&shieldAge<420?shieldAge/420:null,
+    perfectEvade:evadeAge>=0&&evadeAge<350?evadeAge/350:null,
     armed:ready||victory||casting,ready,victory,castKind:casting&&signature?events.castKind:null,casting:casting?clamp(castAge/duration):null,attack:swing?clamp(strikeAge/360):null,
     angle:reduced?-.45:victory?-1.05:casting?-.55-pulse(castAge,380)*1.15:swing?-.95+strike*2.55-recover*1.95:-.45-windup*.7,
     lunge:reduced||!swing?0:pulse(strikeAge,340)*5,
-    recoil:reduced?0:pulse(time-events.hurtAt,280)*4,
-    hurtProgress:clamp((time-events.hurtAt)/280),
+    recoil:reduced?0:pulse(hitAge,hitDuration)*(events.hurtHeavy?6:2),
+    hurtProgress:clamp(hitAge/hitDuration),
     dodge:reduced?0:pulse(time-events.dodgeAt,430)*6,
     crouch:reduced?0:ready?1+windup:0,
     lift:reduced?0:victory?pulse(victoryAge,700)*3:casting?pulse(castAge,380)*2:0

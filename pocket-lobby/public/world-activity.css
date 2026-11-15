@@ -8,3 +8,4 @@
 #fishTogetherDialog{width:min(440px,calc(100vw - 24px))}
 #fishTogetherActions{display:flex;flex-wrap:wrap;gap:8px}
 #fishTogetherActions button{width:auto;min-width:0;white-space:normal}
+.world-float[data-kind=shield]{color:#a0f8e8}

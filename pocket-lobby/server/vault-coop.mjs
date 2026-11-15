@@ -36,7 +36,8 @@ function plan(r,at,pause=0){
 }
 function hurt(r,m,amount,move,at){
  m.hp=Math.min(m.hp,playerMaxHealth(m,at));if(m.hp<=0||m.left)return;
- let damage=amount;if(m.dodgeUntil>=at&&m.dodgeUntil-at<=350){damage=0;m.counterUntil=at+1800+(m.build.counterWindow??0);m.lastFeedback='Perfect dodge · Counter ready';}
+ const perfectDodge=m.dodgeUntil>=at&&m.dodgeUntil-at<=350;
+ let damage=amount;if(perfectDodge){damage=0;m.counterUntil=at+1800+(m.build.counterWindow??0);m.lastFeedback='Perfect dodge · Counter ready';}
  let shielded=0;
  if(damage&&m.ward>0&&at<=(m.wardUntil??0)){const block=Math.min(damage,m.ward);damage-=block;m.ward-=block;shielded+=block;}
  const sanctuary=r.sanctuary;
@@ -49,7 +50,8 @@ function hurt(r,m,amount,move,at){
  }
  if(damage)m.lastFeedback=move+' hit you for '+damage+' HP.';
  m.shielded=(m.shielded??0)+shielded;
- m.hp=Math.max(0,m.hp-damage);m.lastHit={at,damage,shielded,move};if(!m.hp){m.cause=move;m.tip=vaultDefeatTip(move);m.lastFeedback='Defeated by '+move;}
+ m.reactionId=(m.reactionId??0)+1;
+ m.hp=Math.max(0,m.hp-damage);m.lastHit={id:m.reactionId,at,damage,shielded,perfectDodge,heavy:damage>=20,move};if(!m.hp){m.cause=move;m.tip=vaultDefeatTip(move);m.lastFeedback='Defeated by '+move;}
 }
 export function advanceVaultParty(r,now){
  if(r.status!=='battle')return;
@@ -93,7 +95,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
  const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,marks:r.marks,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
-  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0,castKind:m.castKind??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
+  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,maxHealth:playerMaxHealth(m,now),lastHit:m.lastHit&&now>=m.lastHit.at&&now-m.lastHit.at<900?m.lastHit:null,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0,castKind:m.castKind??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
  s.routineLastSeen=now;

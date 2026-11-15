@@ -57,6 +57,8 @@ export function worldActivityEvents(before,after,now=Date.now()){
   const key='combat:'+after.combatId+':'+e.at+':'+e.action,eventRoom=before.hunting?.encounter?before.location:room;
   if(['Stoneguard','Ambush','Undead Strike','Bound Beast Strike'].includes(e.power))add(key+':ability','ability',e.power+(e.damage?' · '+e.damage+' damage':''),e.damage??0,e.at,eventRoom);
   if(e.taken>0)add(key+':hurt','damage','−'+e.taken+' HP',e.taken,e.at,eventRoom);
+  const shielded=(e.warded??0)+(e.absorbed??0)+(e.bloodPriceBlocked??0);
+  if(shielded>0)add(key+':shield','shield','Shield absorbed '+shielded,shielded,e.at,eventRoom);
   if(e.healed>0&&!e.lifeSteal)add(key+':heal','heal','+'+e.healed+' HP',e.healed,e.at,eventRoom);
   if(e.dodged)add(key+':dodge','dodge',e.perfectDodge?'Perfect dodge':'Dodge',0,e.at,eventRoom);
  }

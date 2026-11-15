@@ -30,12 +30,16 @@ export function initializeVaultCoop(api){
    }
    for(const member of raid.members){
     const before=old?.members.find(m=>m.id===member.id);
+    const hit=member.lastHit;
+    if(hit&&hit.id!==before?.lastHit?.id&&raid.observedAt-hit.at>=0&&raid.observedAt-hit.at<900){
+      api.reaction?.({id:member.peerId,self:member.id===raid.self?.id,hit,age:raid.observedAt-hit.at});
+    }
     if(!before)continue;
     const delta=member.hp-before.hp,blocked=(member.shielded??0)-(before.shielded??0);
     if(delta)popup((delta>0?'+':'−')+Math.abs(delta)+' HP',member.position,delta>0?'#94f4b4':'#ff8c9e');
     if(blocked>0)popup('Shield absorbed '+blocked,member.position,'#8ef4e2',1);
    }
-   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,castAge:Math.max(0,raid.observedAt-m.castAt)});}
+   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,castAge:Math.max(0,raid.observedAt-m.castAt)});}
   }
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
   if(result.state&&result.receipt&&raid?.status==='victory'&&!result.state.vaultCoop&&result.state.depthsRun?.cleared===3)api.reward?.(result.state);

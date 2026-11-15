@@ -89,7 +89,8 @@ export function towerCharacterPose(meta,options={}){
   else if(options.meditating){state='blink';frame=0;}
   else if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
   else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
-  else if(pose.recoil>1){state='hurt';frame=reduced?0:pose.hurtProgress>.5?1:0;}
+  else if(pose.perfectEvade!==null&&pose.perfectEvade!==undefined){state='dodge';frame=reduced?3:pose.perfectEvade<.5?2:3;}
+  else if(pose.hurt||pose.recoil>1){state='hurt';frame=reduced?0:pose.hurtProgress>.5?1:0;}
   else if(pose.casting!==null&&pose.casting!==undefined){
     const phase=clamp(pose.casting,0,.999);
     if(pose.castKind==='faultbreaker'){
@@ -111,6 +112,7 @@ export function towerCharacterPose(meta,options={}){
   else if(wave!==null){state='wave';frame=reduced?1:Math.floor(wave*12)%4;}
   else if(pose.victory){state='victory';frame=reduced?2:Math.floor(time/180)%4;}
   else if(cycle){state='walk';frame=reduced?0:Math.floor((cycle%2)*4)%8;}
+  else if(pose.strained){state='hurt';frame=1;}
   else if(pose.ready){state='ready';frame=0;}
   else if(!reduced&&time%3700>3550){state='blink';frame=0;}
   if(!options.reading&&!options.meditating&&options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
@@ -526,6 +528,16 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     if(options.meditating)options={...options,weapon:false,sheathed:false};
     const selection=towerCharacterPose(meta,options),image=frameImage(appearance,selection,options.vest);
     const [gx,gy]=grip(x,y,options);ctx.save();ctx.imageSmoothingEnabled=false;
+    const reaction=options.pose??{};
+    if(reaction.heavyHit&&!options.reduced){
+      const lean=Math.sin((reaction.hurtProgress??0)*Math.PI)*.10*(options.direction==='left'?-1:1);
+      ctx.translate(x,y);ctx.rotate(lean);ctx.translate(-x,-y);
+    }
+    if(reaction.perfectEvade!==null&&reaction.perfectEvade!==undefined&&!options.reduced){
+      ctx.save();ctx.globalAlpha*=Math.max(0,1-reaction.perfectEvade)*.28;
+      for(const offset of [-5,-9])ctx.drawImage(image,Math.round(x-meta.pivot[0]*meta.scale+offset),Math.round(y-meta.pivot[1]*meta.scale),width*meta.scale,height*meta.scale);
+      ctx.restore();
+    }
     const phase=options.pose?.casting??0,signature=selection.signature;
     const handCast=signature==='sanctuary'||signature==='bloodPrice';
     const toolAngle=signature==='faultbreaker'&&selection.frame===5?
@@ -544,6 +556,16 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     ctx.drawImage(image,Math.round(x-meta.pivot[0]*meta.scale),Math.round(y-meta.pivot[1]*meta.scale),width*meta.scale,height*meta.scale);
     if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&!options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
+    if(reaction.shieldPulse!==null&&reaction.shieldPulse!==undefined){
+      const progress=reaction.shieldPulse;
+      ctx.save();ctx.globalAlpha*=Math.max(0,1-progress);ctx.strokeStyle='#a0f8e8';ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.ellipse(x,y-16,options.reduced?15:12+progress*7,20,0,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
+    if(reaction.strained){
+      ctx.save();ctx.strokeStyle='#e8a4a4';ctx.globalAlpha*=.65;ctx.lineWidth=.8;
+      ctx.beginPath();ctx.ellipse(x,y+2,11,4,0,0,Math.PI*2);ctx.stroke();ctx.restore();
+    }
     if(signature){
       const fade=Math.sin(phase*Math.PI),reduced=options.reduced;
       ctx.save();ctx.globalAlpha*=reduced?.7:Math.max(.2,fade);

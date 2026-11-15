@@ -55,7 +55,8 @@ export function recordCombatFx(events,result,time){
   if(counter)events.counterAt=time;
   if(staggered)events.staggerAt=time;
   if(action==='enemy'&&!result.targetId)events.boarAttackAt=time;
-  if(taken)events.hurtAt=time;
+  if(taken){events.hurtAt=time;events.hurtHeavy=heavy===true||taken>=20;}
+  if(warded||absorbed||result.bloodPriceBlocked||result.stoneguardBlocked)events.shieldAt=time;
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
   if(power){events.castAt=time;events.castKind=null;}
   if(result.outcome==='victory')events.victoryAt=time;

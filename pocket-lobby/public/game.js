@@ -625,7 +625,7 @@ const remotePeers=new Map();let lastRobberyNotice=null;
 const worldActivityTracker=typeof createWorldActivityTracker==='function'?createWorldActivityTracker(savedPlayerState):null;
 const worldFloats=[],worldFloatSeen=new Set();
 function addWorldFloat(actor,event){
- if(!event||event.room!==currentRoom||!['gold','loss','push','catch','timber','damage','heal','dodge','perk'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
+ if(!event||event.room!==currentRoom||!['gold','loss','push','catch','timber','damage','heal','shield','dodge','perk'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
  if(actor!=='self'&&!remotePeers.has(actor))return;
  const key=actor+':'+event.id;if(worldFloatSeen.has(key))return;worldFloatSeen.add(key);if(worldFloatSeen.size>500)worldFloatSeen.delete(worldFloatSeen.values().next().value);
  const existing=worldFloats.filter(f=>f.actor===actor);if(existing.length>=4){existing[0].node.remove();existing[0].fx?.remove();worldFloats.splice(worldFloats.indexOf(existing[0]),1);}
@@ -634,7 +634,10 @@ function addWorldFloat(actor,event){
  let fx=null;if(event.kind==='perk'&&equipmentPerks[event.perk]){node.dataset.perk=event.perk;fx=document.createElement('span');fx.className='world-perk-burst';fx.dataset.perk=event.perk;fx.setAttribute('aria-hidden','true');fx.style.setProperty('--perk-color',equipmentPerks[event.perk].color);const symbol=document.createElement('b');symbol.textContent=equipmentPerks[event.perk].symbol;fx.append(symbol);for(let n=0;n<4;n++){const spark=document.createElement('i');spark.style.setProperty('--spark',n);fx.append(spark);}$('worldFloats').append(fx);}
  const peer=remotePeers.get(actor);
  worldFloats.push({actor,room:currentRoom,node,fx,started:performance.now(),lane:existing.length%4,anchor:peer?{rx:peer.rx,ry:peer.ry,seat:peer.seat}:null});
- if(event.kind==='damage'&&remotePeers.has(actor))remotePeers.get(actor).hurtUntil=performance.now()+250;
+ if(peer&&combatNow()-event.at>=0&&combatNow()-event.at<900&&['damage','shield','dodge'].includes(event.kind)){
+  peer.reactionFx??={};
+  recordCharacterReaction(peer.reactionFx,{damage:event.kind==='damage'?event.amount:0,shielded:event.kind==='shield'?event.amount:0,perfectDodge:event.kind==='dodge'&&event.label==='Perfect dodge'},performance.now()-Math.min(100,Math.max(0,combatNow()-event.at)));
+ }
 }
 function receiveWorldActivity(actor,events){
   for(const event of events.slice(-16)){
@@ -717,7 +720,11 @@ function drawRemote(peer,time){
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
   const cycle=characterWalkCycle(peer,peer.rx,peer.ry,moving);
-  const raidPose=time-(peer.raidStrikeAt??-10000)<950?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,castKind:peer.raidCastKind,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
+  const fighting=peer.raidCombat||peer.activity==='combat';
+  const reacting=peer.reactionFx&&Math.max(peer.reactionFx.hurtAt??-10000,peer.reactionFx.shieldAt??-10000,peer.reactionFx.perfectDodgeAt??-10000)>time-900;
+  const raidPose=fighting||reacting||time-(peer.raidStrikeAt??-10000)<950?
+    playerCombatPose({time,now,health:peer.health??100,maxHealth:peer.maxHealth??100,encounter:fighting?{nextPlayerAt:0}:null,
+      events:{strikeAt:peer.raidStrikeAt??-10000,castAt:peer.raidCastAt??-10000,castKind:peer.raidCastKind,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000,...peer.reactionFx},reduced:reducedMotion.matches}):null;
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
@@ -4120,7 +4127,7 @@ function draw(time){
     }
     const cycle=characterWalkCycle(player,player.x,player.y,!!step||autoServerWalking);
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:window.towerVaultCoop?.encounter(),events:combatArt,reduced:reducedMotion.matches});
+    const pose=playerCombatPose({time,now:combatNow(),health,maxHealth:maxHealth(),encounter:player.inCombat?hunting.encounter:window.towerVaultCoop?.encounter(),events:combatArt,reduced:reducedMotion.matches});
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
     const chopping=woodSession??(autoChop?automatic:null);
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
@@ -9477,6 +9484,14 @@ window.towerMillRaidHooks={
 function playerStepMs(){return STEP_MS*(vaultCoopState?(currentCombatBuild().move??1):1);}
 function faceVaultTarget(tile={x:6,y:5}){player.direction=(tile.x-player.cx)-(tile.y-player.cy)>=0?'right':'left';player.back=tile.x+tile.y<player.cx+player.cy;}
 window.towerVaultCoopHooks={
+ reaction:cue=>{
+  const events=cue.self?combatArt:remotePeers.get(cue.id)?.reactionFx;
+  if(cue.self)recordCharacterReaction(events,cue.hit,performance.now()-Math.min(100,cue.age));
+  else{
+   const peer=remotePeers.get(cue.id);
+   if(peer){peer.reactionFx??={};recordCharacterReaction(peer.reactionFx,cue.hit,performance.now()-Math.min(100,cue.age));}
+  }
+ },
  reward:state=>{
   const chest=state.depthsRun?.rewardChests?.depthsVault;
   showTransaction('Vault Guardian defeated',[{icon:'✦',text:chest&&!chest.opened?'Open the glowing Vault chest to reveal your reward.':'Your expedition rewards are ready.'},{icon:'↗',text:'Then use Bank spoils & leave at the exit to secure your haul.'}]);
@@ -9484,7 +9499,7 @@ window.towerVaultCoopHooks={
  },
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
- strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:(tile,kind)=>{faceVaultTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.blink)beginShadowstep(peer,cue.blink);if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}}
+ strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:(tile,kind)=>{faceVaultTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.health!==undefined){peer.health=cue.health;peer.maxHealth=cue.maxHealth;peer.raidCombat=cue.inCombat;}if(cue.blink)beginShadowstep(peer,cue.blink);if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}}
 };
 
 async function visitMillCellar(action){

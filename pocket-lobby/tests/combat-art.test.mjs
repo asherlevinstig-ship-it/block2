@@ -1,9 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {playerCombatPose,boarCombatPose} from '../public/combat-art.js';
+import {playerCombatPose,boarCombatPose,recordCharacterReaction} from '../public/combat-art.js';
 import {signatureCast} from '../public/signature-poses.js';
 
 const events={strikeAt:1000,hurtAt:2000,dodgeAt:3000,boarAttackAt:4000,boarHitAt:1000,victoryAt:5000};
+test('damage reactions distinguish heavy hits, shields, dodges and critical health',()=>{
+ const small={},large={},blocked={},evaded={};
+ recordCharacterReaction(small,{damage:6},1000);
+ recordCharacterReaction(large,{damage:28},1000);
+ recordCharacterReaction(blocked,{damage:0,shielded:30},1000);
+ recordCharacterReaction(evaded,{damage:0,perfectDodge:true},1000);
+ const pose=fx=>playerCombatPose({time:1300,now:1300,encounter:{nextPlayerAt:0},events:fx,health:18,maxHealth:100});
+ assert.equal(pose(small).hurt,false);
+ assert.equal(pose(large).heavyHit,true);
+ assert.equal(pose(blocked).hurt,false);
+ assert(pose(blocked).shieldPulse>0);
+ assert(pose(evaded).perfectEvade>0);
+ assert.equal(pose(evaded).strained,true);
+ const reduced=playerCombatPose({time:1100,now:1100,encounter:null,events:large,reduced:true});
+ assert.equal(reduced.recoil,0);assert.equal(reduced.hurt,true);
+});
 test('signature ability poses last for their own duration and settle without repeating',()=>{
  for(const [id,duration] of [['faultbreaker',900],['sanctuary',800],['bloodPrice',850]]){
   const cue={...events,strikeAt:-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000,castAt:1000,castKind:id};

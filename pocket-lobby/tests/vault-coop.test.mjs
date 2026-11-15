@@ -130,6 +130,8 @@ test('Sanctuary shares one damage pool with nearby allies and leaves distant all
  advanceVaultParty(unprotected,1600);
  const protectedDamage=r.members.a.hp+r.members.b.hp-unprotected.members.a.hp-unprotected.members.b.hp;
  assert(protectedDamage>0);
+ const reaction=publicVaultParty(r,'a',1600).members.find(m=>m.id===r.members.a.id).lastHit;
+ assert(reaction.shielded>0);assert.equal(reaction.damage,0);
  assert.equal(publicVaultParty(r,'a',1600).members.reduce((total,m)=>total+m.shielded,0),protectedDamage);
  const shielded=r.members.a.shielded+r.members.b.shielded;
  advanceVaultParty(r,1600);
