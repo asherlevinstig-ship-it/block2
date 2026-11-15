@@ -2592,7 +2592,28 @@ function drawEntryWalls(){
   }
   wall('left',0,.13,0,68,'#65758e');wall('right',0,.13,0,68,'#7a89a0');
   drawEntryWindow(7.15,9.25);
-  for(const [side,u] of [['left',2.1],['right',1.25],['right',8.75]])drawLobbySconce(side,u);
+  for(const [side,u] of [['left',2.1],['right',1.25]])drawLobbySconce(side,u);
+  drawEntryHearth();
+  // A shelf of keepsakes and a mat by the door.
+  wallShelf('left',2.9,4.4,42,[[.22,6,'#7fa36a'],[.2,7,'#c96b4a'],[.28,5,'#e0b56a'],[.2,6,'#6f8fc0']]);
+// A lit hearth in the corner makes the bare first room feel lived in before any furniture arrives.
+function drawEntryHearth(){
+  const p=(u,z)=>point(u,0,z),[gx,gy]=p(8.8,12),[fx,fy]=point(8.8,.9);
+  lobbyLight(gx,gy,44,'#ffb86a55');lobbyLight(fx,fy,40,'#ffb86a33',.5);
+  wall('right',8,9.6,0,36,'#5b677c');wall('right',8,8.12,0,36,'#75829a');
+  for(let z=6;z<36;z+=7)wall('right',8,9.6,z,z+.8,'#434d60');
+  wall('right',8.28,9.32,0,25,'#12161f');
+  polygon([p(8.28,25),p(8.8,29),p(9.32,25)],'#12161f');
+  polygon([p(8.45,1),p(8.6,11),p(8.72,6),p(8.85,15),p(8.98,7),p(9.1,11),p(9.2,1)],'#ff9a3c');
+  polygon([p(8.6,1),p(8.72,6),p(8.83,10),p(8.95,5),p(9.05,1)],'#ffd27a');
+  polygon([p(8.75,1),p(8.83,6),p(8.92,1)],'#fff3cf');
+  wall('right',8.36,9.24,0,2,'#3a2c30');
+  wall('right',7.88,9.72,36,39,'#bd9b61');wall('right',7.88,9.72,39,40,'#dbba7f');
+  surface(7.95,.02,1.7,.4,.4,'#69768c','#434d60');
+  const [cx,cy]=p(8.3,40);rect(cx-1,cy-6,2,6,'#f0e6cf');rect(cx-1,cy-8,2,2,'#ffd27a');
+  const [vx,vy]=p(9.3,40);rect(vx-2,vy-5,4,5,'#7fa9c9');rect(vx-1,vy-9,2,4,'#7fa36a');
+}
+  surface(.4,4.98,.95,1.04,.3,'#5d4458','#d0a675');surface(.52,5.1,.71,.8,.35,'#7a5a6e');
   drawHomeSign();
   drawDoor(homeExit);
 }
@@ -2954,20 +2975,90 @@ function drawCourtyard(){
     wall('left',u+.025,u+.13,32,37,'#ffd89b');
   }
 }
-function drawFishingStore(market=false){
-  const armory=market==='armory';
-  block(0,0,10,10,-8,8,['#998b83','#53465c','#443c53']);
-  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
-    surface(x,y,1,1,0,(x+y)%2?'#aa9485':'#a08b80','#7f6d71');
-    surface(x+.14,y+.28,.69,.025,.1,'#c0a38b');
+// Each Tower shop has its own walls, floor, rug and wall dressing, so the room says what it sells before any label does.
+const shopThemes={
+  store:{walls:['#46606a','#5b7680'],wains:'#384e5a',rail:'#bd9e81',cap:'#b7967e',slat:'#708891',floor:['#aa9485','#a08b80','#7f6d71'],grain:'#c0a38b',base:['#998b83','#53465c','#443c53'],rug:['#516d74','#c3aa89','#526e73','#779395']},
+  market:{walls:['#a9794f','#c08e5c'],wains:'#5d3f3a',rail:'#e3bd7a',cap:'#d9ad6c',slat:'#7f5a48',floor:['#b9785a','#a96b52','#7d4c41'],grain:'#d59a76',base:['#a9785c','#5b3b3f','#49303a'],rug:['#7a3140','#e0b56a','#a8473f','#e3c07c']},
+  armory:{walls:['#3d4354','#4a5165'],wains:'#2a2e3d',rail:'#a3483f',cap:'#8b8f9c',slat:'#565c70',floor:['#6f7280','#666a78','#484b59'],grain:'#888c99',base:['#6d707c','#3a3c4c','#2e3040'],rug:['#5a2630','#c9a25a','#8d3038','#c0564c']},
+  tailor:{walls:['#6b4a6e','#7f5a80'],wains:'#4a3350',rail:'#e3c9a0',cap:'#d9bfa0',slat:'#8c6c8f',floor:['#c7a988','#bd9e7e','#93775f'],grain:'#dcc09c',base:['#b89a7c','#5b465c','#493a4f'],rug:['#5c3a66','#e3c9a0','#7a4f86','#b089b8']},
+  furnishings:{walls:['#55684f','#66795c'],wains:'#3e4d3d',rail:'#cfae7c',cap:'#c2a377',slat:'#7d8f70',floor:['#b08f6c','#a68463','#7c6049'],grain:'#c9a57e',base:['#a48563','#544a4c','#443c44'],rug:['#4c5f4c','#d1b88a','#5d735a','#8ea684']}
+};
+function wallPennant(side,at,cloth,trim){
+  const tip=(u,z)=>lobbyWallPoint(side,at+u,z);
+  polygon([tip(-.4,62),tip(.4,62),tip(.4,34),tip(0,28),tip(-.4,34)],cloth,trim);
+  polygon([tip(-.18,52),tip(.18,52),tip(.18,44),tip(0,40),tip(-.18,44)],trim);
+  wall(side,at-.5,at+.5,62,64,trim);
+}
+// goods: [width in tiles, height in pixels, colour], repeated along the plank.
+function wallShelf(side,a,b,z,goods){
+  wall(side,a,b,z-1,z,'#3f2c2a');wall(side,a,b,z,z+2,'#6b4a38');
+  for(let u=a+.12,i=0;u<b-.2;i++){
+    const [w,h,c]=goods[i%goods.length];
+    wall(side,u,Math.min(u+w,b-.05),z+2,z+2+h,c);wall(side,u,Math.min(u+w,b-.05),z+1+h,z+2+h,'#ffffff30');
+    u+=w+.1;
   }
-  wall('left',0,10,0,70,'#46606a');
-  wall('right',0,10,0,70,'#5b7680');
+}
+function wallCrossedBlades(side,at){
+  const p=(u,z)=>lobbyWallPoint(side,at+u,z);
+  for(const d of [-1,1]){
+    polygon([p(-.55*d,34),p(-.47*d,33),p(.55*d,57),p(.47*d,58)],'#c9d3dc','#2a2e3d');
+    polygon([p(-.62*d,37),p(-.4*d,33.5),p(-.36*d,35),p(-.58*d,38.5)],'#c9a25a');
+  }
+  polygon([p(-.3,53),p(.3,53),p(.3,45),p(0,39),p(-.3,45)],'#8d3038','#c9a25a');
+  polygon([p(-.06,51),p(.06,51),p(.06,43),p(-.06,43)],'#c9a25a');
+}
+function wallNet(side,a,b){
+  for(let u=a;u<=b;u+=.26)wall(side,u,u+.03,28,58,'#d9c9a366');
+  for(let z=28;z<=58;z+=5)wall(side,a,b,z,z+.8,'#d9c9a366');
+  for(const u of [a+.3,a+1.1,b-.5]){const [x,y]=lobbyWallPoint(side,u,58);rect(x-2,y-2,4,4,'#d9655a');}
+}
+function wallTrophy(side,a){
+  const p=(u,z)=>lobbyWallPoint(side,a+u,z);
+  polygon([p(0,40),p(2.3,40),p(2.3,56),p(0,56)],'#6b4a38','#3f2c2a');
+  polygon([p(.3,48),p(.7,53),p(1.4,52),p(1.75,48),p(1.4,44),p(.7,43)],'#8fc3c9','#2c4a57');
+  polygon([p(1.7,48),p(2.1,53),p(2.1,43)],'#6fa7b3','#2c4a57');
+  polygon([p(.6,49),p(1.3,49.5),p(1.3,46),p(.7,45)],'#c9e6e2');
+  const [ex,ey]=p(.6,50);rect(ex,ey,1,1,'#1d2a33');
+}
+function wallPicture(side,a,b,lo,hi,sky,land){
+  wall(side,a,b,lo,hi,'#c9a25a');wall(side,a+.08,b-.08,lo+2,hi-2,sky);wall(side,a+.08,b-.08,lo+2,lo+2+(hi-lo-4)*.45,land);
+}
+const shopDecor={
+  store(){wallNet('left',6.9,9.5);wallTrophy('right',6.3);},
+  market(){
+    wallShelf('left',6.9,9.6,44,[[.3,7,'#c96b4a'],[.25,5,'#e0b56a'],[.35,8,'#7fa36a'],[.3,6,'#b98ad0']]);
+    wallShelf('left',6.9,9.6,28,[[.5,6,'#d9c39a'],[.4,7,'#a9744f'],[.45,5,'#e7d2a6']]);
+    // A striped valance runs under the cornice, like a row of stall awnings.
+    for(const [side,a,b] of [['left',0,4.4],['left',6.6,10],['right',8.7,10]])for(let u=a,i=0;u<b-.01;u+=.5,i++){
+      const end=Math.min(u+.5,b),cloth=i%2?'#b5413d':'#f0dfc0';
+      wall(side,u,end,60,66,cloth);polygon([lobbyWallPoint(side,u,60),lobbyWallPoint(side,end,60),lobbyWallPoint(side,(u+end)/2,57)],cloth);
+    }
+    drawLobbySconce('right',9.3);
+  },
+  armory(){
+    wallCrossedBlades('left',8.2);drawLobbySconce('left',7);drawLobbySconce('left',9.4);
+    wallPennant('right',6.6,'#8d3038','#c9a25a');wallPennant('right',9,'#8d3038','#c9a25a');drawLobbySconce('right',7.8);
+  },
+  tailor(){
+    wallShelf('left',6.9,9.6,44,[[.5,5,'#c06a8a'],[.5,5,'#e3c9a0'],[.5,5,'#6f8fc0'],[.5,5,'#8fb88a']]);
+    wallShelf('left',6.9,9.6,30,[[.5,5,'#d9a05c'],[.5,5,'#9a6fb8'],[.5,5,'#d0d6e2'],[.5,5,'#b5413d']]);
+  },
+  furnishings(){wallPicture('right',6.2,7.5,36,56,'#7fa9c9','#5d8a5a');wallPicture('right',8.1,9.3,40,54,'#e0b98a','#8a5a4a');drawLobbySconce('left',8);}
+};
+function drawFishingStore(market=false){
+  const kind=market===true?'market':market||'store',theme=shopThemes[kind]??shopThemes.store;
+  block(0,0,10,10,-8,8,theme.base);
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    surface(x,y,1,1,0,(x+y)%2?theme.floor[0]:theme.floor[1],theme.floor[2]);
+    surface(x+.14,y+.28,.69,.025,.1,theme.grain);
+  }
+  wall('left',0,10,0,70,theme.walls[0]);
+  wall('right',0,10,0,70,theme.walls[1]);
   for(const side of ['left','right']){
-    wall(side,0,10,0,15,'#384e5a');
-    wall(side,0,10,14,17,'#bd9e81');
-    wall(side,0,10,66,71,'#b7967e');
-    for(let i=.3;i<10;i+=.4)wall(side,i,i+.04,1,14,'#708891');
+    wall(side,0,10,0,15,theme.wains);
+    wall(side,0,10,14,17,theme.rail);
+    wall(side,0,10,66,71,theme.cap);
+    for(let i=.3;i<10;i+=.4)wall(side,i,i+.04,1,14,theme.slat);
   }
   wall('right',1.25,5.6,37,61,'#d1ac86');
   wall('right',1.36,5.49,39,59,'#314e5c');
@@ -2975,10 +3066,11 @@ function drawFishingStore(market=false){
   wall('left',1.42,3.38,32,54,'#395767');
   wall('left',1.49,3.31,33,46,'#7b9da3');
   wall('left',1.51,3.29,33,37,'#b5c1b0');
-  surface(3.1,4.9,3.8,3.7,.3,'#516d74');
-  surface(3.22,5.02,3.56,3.46,.35,'#c3aa89');
-  surface(3.35,5.15,3.3,3.2,.4,'#526e73');
-  for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,'#779395');
+  surface(3.1,4.9,3.8,3.7,.3,theme.rug[0]);
+  surface(3.22,5.02,3.56,3.46,.35,theme.rug[1]);
+  surface(3.35,5.15,3.3,3.2,.4,theme.rug[2]);
+  for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,theme.rug[3]);
+  shopDecor[kind]?.();
   drawDoor(storeExit);
 }
 function drawFactionHall(){
@@ -2987,8 +3079,14 @@ function drawFactionHall(){
   for(const side of ['left','right']){
     wall(side,0,10,0,65,side==='left'?'#485c61':'#53696d');
     wall(side,0,10,0,12,'#314449');wall(side,0,10,63,67,'#b6a17a');
+    // Stone pilasters divide the walls into bays for each faction's colours.
+    for(const u of [.1,3,7,9.7])wall(side,u,u+.2,12,63,side==='left'?'#5d7378':'#6a8286');
   }
   drawLobbyBanner('right',5.2);
+  wallPennant('right',2,'#8d3038','#e0b56a');wallPennant('right',8.4,'#3f7a5a','#e0b56a');
+  wallPennant('left',2,'#5c3f8a','#e0b56a');wallPennant('left',8.4,'#b9772f','#f0dfc0');
+  for(const [side,u] of [['right',3.6],['right',6.9],['left',3.6],['left',7.2]])drawLobbySconce(side,u);
+  surface(.3,5.05,2.75,.9,.2,'#63445e','#dfb875');
   surface(3,3.25,3.9,4.8,.2,'#63445e','#dfb875');
   surface(3.2,3.46,3.5,4.37,.3,'#7a4f68','#bb8a65');
   drawDoor(storeExit);
@@ -3020,6 +3118,11 @@ function drawBakery(){
   }
   surface(3.2,5.4,3.1,2.6,.2,'#693944','#e5ad71');
   surface(3.38,5.57,2.74,2.25,.3,'#a3514c','#cf8866');
+  // Loaves on the back wall, jars by the door and warm lamps.
+  wallShelf('right',1.2,4.7,44,[[.45,4,'#d9a05c'],[.35,5,'#c68846'],[.5,3,'#e6bb7a']]);
+  wallShelf('right',1.2,4.7,30,[[.5,3,'#e6bb7a'],[.4,5,'#b5733c'],[.45,4,'#d9a05c']]);
+  wallShelf('left',7,9.6,40,[[.3,6,'#c96b4a'],[.3,7,'#f0dfc0'],[.3,5,'#d9a05c']]);
+  drawLobbySconce('right',5.6);drawLobbySconce('left',2.2);
   drawDoor(bakeryExit);
 }
 const dungeonMobMotion=new Map();
