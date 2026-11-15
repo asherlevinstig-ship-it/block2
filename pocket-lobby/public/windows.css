@@ -659,6 +659,13 @@
   background:#102d2a;color:#b8f8d3;font:700 8px/11px system-ui;
 }
 [data-readiness=blocked] .ability-slot-readiness{background:#20283a;color:#ccd3df}
+.ability-hotbar-feedback{
+  position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  width:max-content;max-width:min(320px,85vw);padding:6px 10px;border-radius:7px;
+  border:1px solid #a18764;background:#111a2b;color:#ffe3ae;font-size:12px;
+  text-align:center;pointer-events:none;
+}
+.ability-hotbar-feedback:empty{display:none}
 .style-ability-bar .ability-wheel-toggle{border-color:#a98a5c;background:#202d46;color:#ffdd9d;font-weight:700}
 @media(max-width:560px){
   .style-ability-bar:has(.ability-shortcut-slots){bottom:78px;width:max-content;max-width:95%;gap:5px;padding:5px 7px}

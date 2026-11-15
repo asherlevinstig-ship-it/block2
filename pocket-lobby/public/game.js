@@ -6462,6 +6462,15 @@ document.addEventListener('keydown',event=>{
   useAbilitySet((active+abilitySetNames.length+(event.code==='BracketRight'?1:-1))%abilitySetNames.length);
 });
 const contextualCombatAbilities=new Set(['faultbreaker','bloodPrice','bindBeast','sanctuary']);
+let hotbarFeedbackTimer;
+function showHotbarFeedback(bar,message){
+  const feedback=bar.querySelector('.ability-hotbar-feedback')??document.createElement('div');
+  feedback.className='ability-hotbar-feedback';feedback.setAttribute('role','status');
+  if(!feedback.parentNode)bar.append(feedback);
+  feedback.textContent=message;
+  clearTimeout(hotbarFeedbackTimer);
+  hotbarFeedbackTimer=setTimeout(()=>{feedback.textContent='';},3000);
+}
 function hotbarAbilityBlock(id,state){
   if(!contextualCombatAbilities.has(id))return '';
   const party=vaultCoopState&&(window.towerVaultCoop?.view()??{status:'waiting'});
@@ -6483,7 +6492,7 @@ function refreshStyleAbilityBar(){
   bar.hidden=!learned.length&&!offers.length;
   let controls=bar.querySelector('.teacher-abilities');
   if(!teacher||!controls){
-    bar.replaceChildren();
+    for(const child of [...bar.children])if(!child.classList.contains('ability-hotbar-feedback'))child.remove();
     if(teacher){
       controls=document.createElement('details');
       controls.className='teacher-abilities';
@@ -6515,7 +6524,7 @@ function refreshStyleAbilityBar(){
     button.onclick=()=>{
       if(contextual){
         const block=hotbarAbilityBlock(id,window.playerCloud.initial);
-        if(block){note(block);return;}
+        if(block){showHotbarFeedback(bar,block);return;}
         if(needsLearningPoints()){window.towerLearning?.open();return;}
       }
       if(controls){controls.open=false;controls.querySelector('summary').focus();}
