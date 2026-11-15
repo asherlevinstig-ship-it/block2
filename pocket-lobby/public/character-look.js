@@ -1,4 +1,4 @@
-export const hairStyles={short:'Short',long:'Long',ponytail:'Ponytail'};
+export const hairStyles={short:'Side sweep',long:'Long locks',ponytail:'Ponytail'};
 export const faceStyles={classic:'Classic',soft:'Soft',angular:'Angular'};
 export const skinTones=['Original','Warm','Brown','Deep'];
 export function normalizeCharacterLook(appearance={}){

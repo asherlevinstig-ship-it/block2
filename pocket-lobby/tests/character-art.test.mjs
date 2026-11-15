@@ -70,15 +70,23 @@ test('skin tones recolour skin pixels while leaving garment materials intact',()
  assert.deepEqual([...pixels.slice(cloth,cloth+4)],[90,80,120,255]);
 });
 
-test('female hair follows the source head and leaves legacy frames untouched',()=>{
+test('hair choices have distinct rear outlines and stay under equipped hoods',()=>{
  const source=new Uint8ClampedArray(80*100*4),at=(x,y)=>(y*80+x)*4;
  for(let y=12;y<20;y++)for(let x=30;x<49;x++)source.set([250,4,1,255],at(x,y));
- const male=source.slice(),female=source.slice();
- shapeCharacterIdentity(male,source,80,100,{}, {row:0});
- shapeCharacterIdentity(female,source,80,100,{gender:'female',hair:2},{row:0});
- assert.deepEqual(male,source);
- assert.equal(female[at(30,24)+3],255);
- assert.equal(female[at(40,24)+3],0);
+ const choices=[{}, {gender:'female'}, {hairStyle:'ponytail'}];
+ const heads=choices.map(appearance=>{
+  const pixels=source.slice();
+  shapeCharacterIdentity(pixels,source,80,100,appearance,{row:2});
+  return pixels;
+ });
+ const silhouette=pixels=>pixels.filter((_,i)=>i%4===3);
+ assert.notDeepEqual(silhouette(heads[0]),silhouette(heads[1]));
+ assert.notDeepEqual(silhouette(heads[1]),silhouette(heads[2]));
+ assert.equal(heads[0][at(40,35)+3],0);
+ assert.equal(heads[1][at(40,35)+3],255);
+ const hood=source.slice();
+ shapeCharacterIdentity(hood,source,80,100,{outfit:13,hairStyle:'ponytail'},{row:2});
+ assert.deepEqual(hood,source);
 });
 
 test('meditation uses closed eyes in every facing, stable breathing frames and a still reduced-motion pose',()=>{

@@ -7,45 +7,77 @@ const PALETTES=[null,JACKETS,TROUSERS,BOOTS,HAIR].map(group=>group?.map(ramp=>ra
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
 export function shapeCharacterIdentity(pixels,source,width,height,appearance,selection){
   const style=appearance.hairStyle??(appearance.gender==='female'?'long':'short');
+  if([11,12,13,14,15,16].includes(appearance.outfit))return;
   const hair=[];
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const i=(y*width+x)*4;
-    if(source[i]===250&&source[i+1]===4&&source[i+3])hair.push({x,y});
+  const at=(x,y)=>(y*width+x)*4;
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      const i=at(x,y);
+      if(source[i]===250&&source[i+1]===4&&source[i+3])hair.push({x,y});
+    }
   }
   if(!hair.length)return;
   const left=Math.min(...hair.map(p=>p.x)),right=Math.max(...hair.map(p=>p.x));
   const top=Math.min(...hair.map(p=>p.y)),bottom=Math.max(...hair.map(p=>p.y));
-  const ramp=HAIR[appearance.hair??0]??HAIR[0],back=selection.row>=2;
-  const put=(x,y,color)=>{if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],(y*width+x)*4);};
-  if(style==='short')return;
-  const sway=selection.state==='walk'?[0,0,1,1,0,0,-1,-1][selection.frame%8]:0;
-  if(style==='ponytail'){
-    const edge=selection.row===0||selection.row===3?right:left;
-    const side=edge===right?1:-1;
-    for(let dx=0;dx<=5;dx++)for(let dy=0;dy<3;dy++)put(edge+side*dx,top+9+dy,dy===0?ramp[2]:ramp[1]);
-    for(let y=top+9;y<=bottom+11;y++){
-      const bend=Math.round((y-top-9)/7)+sway;
-      const half=y>bottom+7?1:2;
-      for(let dx=-half;dx<=half;dx++)put(edge+side*(4+bend)+dx,y,dx===-half?ramp[0]:dx===0?ramp[2]:ramp[1]);
-    }
-    for(let dx=-2;dx<=2;dx++)put(edge+side*4+dx,top+10,'#d6b675');
-    return;
+  const center=Math.round((left+right)/2),back=selection.row>=2;
+  const tieSide=selection.row===0||selection.row===3?1:-1;
+  const [dark,mid,light]=(HAIR[appearance.hair??0]??HAIR[0]).map(rgb);
+  const edge=rgb('#262333');
+  const put=(x,y,color,onlyClear=false)=>{
+    if(x<0||x>=width||y<0||y>=height)return;
+    const i=at(x,y);
+    if(onlyClear&&source[i+3])return;
+    pixels.set([...color,255],i);
+  };
+  // Large connected light and shade shapes hold up on the half-size sprite.
+  for(const {x,y} of hair){
+    const dy=y-top,dx=(x-center)*tieSide;
+    const gloss=dy>=3&&dy<=7&&dx>=-7+Math.floor(dy/2)&&dx<7;
+    put(x,y,dy>10&&dx>3||y>=bottom-2?dark:gloss?light:mid);
   }
-  // Anchor the longer hair to the authored head in every animation frame.
-  for(let y=top+7;y<=bottom+9;y++){
-    const taper=Math.max(0,Math.floor((y-bottom-3)/2));
-    for(const side of [-1,1]){
-      const edge=(side<0?left:right)+(y>bottom?sway:0);
-      for(let n=0;n<4-taper;n++){
-        const x=edge+(side<0?n:-n),i=(y*width+x)*4;
-        if(!back&&pixels[i+3]&&x>left+2&&x<right-2)continue;
-        put(x,y,n===0?'#292433':ramp[n===2&&y%5<3?2:1]);
+  const sway=selection.state==='walk'?[0,1,2,1,0,-1,-2,-1][selection.frame%8]:0;
+  if(style==='short'){
+    // A high side-swept crest and a compact nape.
+    for(let dy=-5;dy<=4;dy++){
+      const start=-9+Math.max(0,-dy)*2,end=8+Math.min(2,Math.floor((dy+5)/3));
+      for(let dx=start;dx<=end;dx++){
+        const rim=dy===-5||dx===start||dx===end;
+        put(center+tieSide*dx,top+dy,rim?edge:dy<0||dx<end-3?light:mid,dy>1);
       }
     }
+    return;
   }
-  // The back view has a continuous fall of hair across the nape.
-  if(back)for(let y=bottom-2;y<=bottom+5;y++)for(let x=left+2;x<=right-2;x++){
-    put(x,y,(x-left)%5===0?ramp[2]:ramp[1]);
+
+  if(style==='ponytail'){
+    const tieX=(tieSide>0?right:left)+tieSide*2,tieY=top+12;
+    for(let y=tieY-4;y<=top+35;y++){
+      const dy=y-tieY;
+      const bend=dy<5?dy*.55:3-Math.max(0,dy-12)*.28;
+      const x=Math.round(tieX+tieSide*bend+sway*Math.max(0,dy)/25);
+      const half=dy<0?3:dy<14?4:dy<20?3:1;
+      for(let dx=-half;dx<=half;dx++){
+        const border=Math.abs(dx)===half||y===top+35;
+        put(x+dx,y,border?edge:dx*tieSide<0?light:dx*tieSide>1?dark:mid);
+      }
+    }
+    for(let y=tieY-1;y<=tieY+1;y++)for(let dx=-3;dx<=3;dx++)put(tieX+dx,y,y===tieY-1?rgb('#c4dce0'):rgb('#4b8392'));
+    return;
+  }
+
+  // Long hair hangs in broad shoulder-length locks. The front keeps a clear face opening.
+  for(let y=top+9;y<=top+34;y++){
+    const dy=y-top,flare=dy<22?Math.floor(dy/7):4-Math.floor((dy-22)/3);
+    const shift=Math.round(sway*dy/34);
+    const l=left-flare+shift,r=right+flare+shift;
+    for(let x=l;x<=r;x++){
+      const nearEdge=Math.min(x-l,r-x);
+      if(!back&&nearEdge>(dy>=22?4:3))continue;
+      const across=x-center-shift;
+      if(dy>30&&(nearEdge<dy-30||back&&Math.abs(across)<dy-29))continue;
+      const border=nearEdge===0||dy===34;
+      const highlight=back?across>=-7+Math.floor(dy/10)&&across<=-2:nearEdge===2;
+      put(x,y,border?edge:highlight&&dy<31?light:nearEdge<3||dy>28?dark:mid);
+    }
   }
 }
 const skinPalette=[
@@ -55,31 +87,90 @@ const skinPalette=[
   ['#4e3534','#704738','#915f46','#b5825d']
 ];
 const skinSource=new Map([
- ['254,223,177',2],['248,212,159',2],['255,241,215',3],['255,249,232',3],
+ ['250,217,168',2],['254,223,177',2],['248,212,159',2],['255,241,215',3],['255,249,232',3],
  ['234,203,157',2],['230,171,131',1],['215,155,110',1],['255,229,183',2],
  ['183,123,89',0],['150,94,75',0],['222,167,119',1],['255,228,181',2],
  ['237,189,142',2],['168,109,80',0],['255,224,174',3],
  ['224,199,151',2],['167,123,80',0]
 ]);
 export function finishCharacterFace(pixels,width,height,appearance,selection){
-  const tone=skinPalette[appearance.skinTone??0],face=appearance.faceStyle??(appearance.gender==='female'?'soft':'classic');
-  const skin=[];
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const i=(y*width+x)*4;
-    if(!pixels[i+3])continue;
-    const shade=skinSource.get(pixels[i]+','+pixels[i+1]+','+pixels[i+2]);
-    if(shade===undefined)continue;
-    if(y<height*.48)skin.push({x,y,i,shade});
-    if(tone)pixels.set([...rgb(tone[shade]),255],i);
+  const tone=skinPalette[appearance.skinTone??0];
+  const face=appearance.faceStyle??(appearance.gender==='female'?'soft':'classic');
+  const at=(x,y)=>(y*width+x)*4,front=selection.row<2;
+  const skin=[],eyes=[],features=[];
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      const i=at(x,y);
+      if(!pixels[i+3])continue;
+      const [r,g,b]=pixels.subarray(i,i+3);
+      const pupil=r===49&&g===89&&b===104;
+      if(front&&y<height*.46){
+        if(pupil)eyes.push({x,y});
+        if(pupil||r===40&&g===51&&b===65||r===103&&g===70&&b===52||r===255&&(g===241||g===249))features.push({x,y});
+      }
+      const shade=skinSource.get(r+','+g+','+b);
+      if(shade===undefined)continue;
+      if(front&&y<height*.48)skin.push({x,y,shade});
+      if(tone)pixels.set([...rgb(tone[shade]),255],i);
+    }
   }
-  if(!skin.length||selection.row>=2||face==='classic')return;
-  const top=Math.min(...skin.map(p=>p.y)),bottom=Math.max(...skin.map(p=>p.y));
-  const chin=skin.filter(p=>p.y>=bottom-2),center=chin.reduce((n,p)=>n+p.x,0)/chin.length;
-  for(const p of skin){
-    if(p.y<top+7)continue;
-    if(face==='soft'&&p.shade===0)pixels.set([...rgb(tone?.[1]??'#dea777'),255],p.i);
-    if(face==='angular'&&p.y>=bottom-2&&Math.abs(p.x-center)>3)pixels.set([...rgb(tone?.[0]??'#b77b59'),255],p.i);
+  // Closed-eye frames have no pupil markers. Preserve the blink and meditation.
+  if(!eyes.length||!skin.length||!front||selection.state==='blink'||selection.state==='meditate')return;
+  const colors=(tone??['#b97956','#d79e6c','#f6d0a0','#ffe5bf']).map(rgb);
+  const white=rgb('#fff0d7'),ink=rgb('#262033'),brow=rgb(face==='angular'?'#3b2a30':'#634136');
+  const eyeTop=Math.min(...eyes.map(p=>p.y)),eyeBottom=Math.max(...eyes.map(p=>p.y));
+  const facePixels=skin.filter(p=>p.y>=eyeTop-4&&p.y<=eyeBottom+5);
+  const mask=new Set([...facePixels,...features].map(p=>at(p.x,p.y)));
+  const draw=(x,y,color)=>{
+    const i=at(x,y);
+    if(x>=0&&x<width&&y>=0&&y<height&&mask.has(i))pixels.set([...color,255],i);
+  };
+  const left=Math.min(...eyes.map(p=>p.x)),right=Math.max(...eyes.map(p=>p.x));
+  const center=(left+right)/2,look=selection.row===1?1:-1;
+  for(const p of facePixels){
+    const far=(p.x-center)*look<-3;
+    const cheek=p.y>=eyeBottom+1&&Math.abs(p.x-center)>=4;
+    const jaw=p.y>=eyeBottom+3;
+    let shade=far||cheek||p.shade===0?1:2;
+    if(face==='angular'&&jaw)shade=far?0:1;
+    if(face==='soft'&&p.y===eyeBottom+2&&!far)shade=3;
+    draw(p.x,p.y,colors[shade]);
   }
+  for(const p of features){
+    if(p.y>=eyeTop-3&&p.y<=eyeBottom+2)draw(p.x,p.y,colors[2]);
+  }
+
+  const columns=[...new Set(eyes.map(p=>p.x))].sort((a,b)=>a-b);
+  let cut=0;
+  for(let i=1;i<columns.length;i++){
+    if(columns[i]-columns[i-1]>=3){cut=columns[i];break;}
+  }
+  const groups=cut?[eyes.filter(p=>p.x<cut),eyes.filter(p=>p.x>=cut)]:[eyes];
+  for(const group of groups){
+    const x=Math.round(group.reduce((sum,p)=>sum+p.x,0)/group.length),y=Math.min(...group.map(p=>p.y));
+    const start=face==='soft'?y-1:y;
+    const end=face==='soft'?y+2:face==='angular'?y:y+1;
+    for(let dy=start;dy<=end;dy++){
+      draw(x,dy,ink);
+      draw(x+look,dy,ink);
+      draw(x-look,dy,white);
+    }
+    const eyebrowY=start-2;
+    draw(x-look,eyebrowY,brow);
+    draw(x,eyebrowY,brow);
+    if(face==='angular'){
+      draw(x+look,eyebrowY,brow);
+      draw(x+look*2,eyebrowY+1,brow);
+      draw(x+look*3,eyebrowY+1,brow);
+    }
+    if(face==='soft')draw(x+look,eyeBottom+2,colors[1]);
+  }
+
+  const mouthX=Math.round(center+look*2),mouthY=eyeBottom+4;
+  draw(mouthX,mouthY,colors[0]);
+  draw(mouthX+look,mouthY,colors[0]);
+  if(face==='soft')draw(mouthX+look*2,mouthY-1,colors[0]);
+  if(face==='angular')draw(mouthX-look,mouthY,colors[0]);
 }
 // Each pose moves the shoulders and hips relative to the planted foot line.
 // Values are in atlas pixels, before the sprite is scaled for the map.
@@ -719,7 +810,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
   }
   function head(ctx,appearance={},back=false,blink=false){
     const selection=towerCharacterPose(meta,{back,direction:'right',state:blink?'blink':'idle'}),image=frameImage(appearance,selection,false);
-    ctx.save();ctx.imageSmoothingEnabled=false;ctx.drawImage(image,27,14,26,29,-10,-38,20,22);ctx.restore();
+    ctx.save();ctx.imageSmoothingEnabled=false;ctx.drawImage(image,21,9,38,34,-11,-38,22,22);ctx.restore();
   }
   return {draw,head,grip,metadata:meta,cacheSize:()=>cache.size};
 }
