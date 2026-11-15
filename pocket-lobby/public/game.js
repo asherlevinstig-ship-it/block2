@@ -27,7 +27,7 @@ const shades = {
 const types = {...Object.fromEntries(Object.entries(furnitureCatalog).map(([id,item])=>[id,item.name])),moonbloom:'Moonbloom'};
 const hairColors = ['#704832','#383848','#a15a39','#d6ac60','#7b638a'];
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const STEP_MS = 141, WAVE_MS = 1100;
+const WALK_STEP_MS = 260, COMBAT_STEP_MS = 141, WAVE_MS = 1100;
 const defaultAvatar = {name:'Guest',outfit:0,hair:0};
 function load(key,fallback) {
   try { return JSON.parse(localStorage.getItem('pocket-lobby:'+key)) ?? fallback; }
@@ -4343,7 +4343,7 @@ function draw(time){
     if(item.type==='waystationVisitor'){
       const [x,y]=point(item.x+.5,item.y+.5,item.seated?8:0);
       sprite(ctx,x,y,{outfit:item.outfit,hair:2,trousers:1,boots:1},{
-        direction:item.direction,back:item.back,seated:!!item.seated,cycle:item.moving?time/STEP_MS:0,time
+        direction:item.direction,back:item.back,seated:!!item.seated,cycle:item.moving?time/COMBAT_STEP_MS:0,time
       });
       if(item.crate){
         polygon([[x-9,y-19],[x-4,y-23],[x+7,y-21],[x+3,y-17]],'#d4af73');
@@ -9672,7 +9672,10 @@ window.towerMillRaidHooks={
  approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),
  float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
 };
-function playerStepMs(){return STEP_MS*(vaultCoopState?(currentCombatBuild().move??1):1);}
+function playerStepMs(){
+  if(vaultCoopState)return COMBAT_STEP_MS*(currentCombatBuild().move??1);
+  return player.inCombat?COMBAT_STEP_MS:WALK_STEP_MS;
+}
 window.towerVaultCoopHooks={
  enemyReaction:hit=>recordEnemyReaction(combatArt,hit,performance.now()-Math.min(100,Math.max(0,combatNow()-hit.at))),
  reaction:cue=>{
