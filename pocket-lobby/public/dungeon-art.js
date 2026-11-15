@@ -102,5 +102,12 @@ export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced
   const covered=arenaBehindCover(encounter,move,{x,y});surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+'55',covered?'#93e6c4':danger);
   if(!covered){const [px,py]=point(x+.5,y+.5,1);ctx.globalAlpha=alpha+.35;ctx.fillStyle=danger;ctx.fillRect(px-1,py-3,2,4);ctx.fillRect(px-1,py+3,2,1);ctx.globalAlpha=1;}
  }
+ const target=encounter.arenaTarget??encounter.arenaEnemy??{x:6,y:5};
+ const [tx,ty]=point(target.x+.5,target.y+.5,52);
+ const seconds=Math.max(0,(encounter.nextBoarAt-now)/1000);
+ ctx.font='bold 9px system-ui';ctx.textAlign='center';ctx.lineWidth=3;
+ ctx.strokeStyle='#101525';ctx.fillStyle='#fff0cf';
+ const caption=move.name+' · '+seconds.toFixed(1)+'s';
+ ctx.strokeText(caption,tx,ty);ctx.fillText(caption,tx,ty);
  ctx.restore();return true;
 }

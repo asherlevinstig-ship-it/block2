@@ -9426,6 +9426,11 @@ window.towerMillRaidHooks={
 function playerStepMs(){return STEP_MS*(vaultCoopState?(currentCombatBuild().move??1):1);}
 function faceVaultTarget(tile={x:6,y:5}){player.direction=(tile.x-player.cx)-(tile.y-player.cy)>=0?'right':'left';player.back=tile.x+tile.y<player.cx+player.cy;}
 window.towerVaultCoopHooks={
+ reward:state=>{
+  const chest=state.depthsRun?.rewardChests?.depthsVault;
+  showTransaction('Vault Guardian defeated',[{icon:'✦',text:chest&&!chest.opened?'Open the glowing Vault chest to reveal your reward.':'Your expedition rewards are ready.'},{icon:'↗',text:'Then use Bank spoils & leave at the exit to secure your haul.'}]);
+  worldLabelKey='';
+ },
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
  strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:tile=>{faceVaultTarget(tile);combatArt.castAt=performance.now();},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}}

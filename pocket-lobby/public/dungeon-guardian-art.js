@@ -243,5 +243,15 @@ export function drawDungeonGuardian(type,time,options) {
     }else warden(draw,cue,pose.hit);
   }
   else if(type==='depthsSentinel')sentinel(draw,cue,pose.hit);
-  else if(type==='depthsColossus')vaultGuardian(draw,cue,pose.hit,vaultPhase(combat)?.index??1);
+  else if(type==='depthsColossus'){
+    if(pose.defeated){
+      const {poly,line}=draw,spread=reduced?9:4+(pose.death??0)*12;
+      for(let i=0;i<9;i++){
+        const x=(i-4)*spread*.48,y=-3-(i%3)*4;
+        poly([[x-8,y],[x-9,y-8],[x-3,y-14],[x+7,y-10],[x+10,y-2],[x+3,y+3]],i%2?'#807789':'#49465c','#242537');
+        line([[x-6,y-6],[x-1,y-10],[x+5,y-6]],'#b7a6bf');
+      }
+      poly([[-5,-9],[0,-16],[5,-9],[0,-3]],'#817085','#c6a3d7');
+    }else vaultGuardian(draw,cue,pose.hit,vaultPhase(combat)?.index??1);
+  }
 }

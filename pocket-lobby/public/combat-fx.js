@@ -61,7 +61,7 @@ export function recordCombatFx(events,result,time){
   if(result.outcome==='victory')events.victoryAt=time;
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
-  events.bursts=[...live,{time,splash:result.splash,flanked:result.flanked,recoveryOpening:result.recoveryOpening,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
+  events.bursts=[...live,{time,faultbreaker:result.faultbreaker,bloodPriceBlocked:result.bloodPriceBlocked,bloodPriceBroken:result.bloodPriceBroken,stoneguardBlocked:result.stoneguardBlocked,splash:result.splash,flanked:result.flanked,recoveryOpening:result.recoveryOpening,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
     wardBroken,wardAbsorbed,staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
@@ -198,7 +198,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
     const t=progress(time,effect.time,feedbackLife),rise=reduced?0:t*13;
     const [ex,ey]=effect.targetId&&effect.enemyTile?point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15):[bx,by];
     if(effect.damage&&enemyRow<3){
-      const suffix=effect.counter?' COUNTER':effect.weakSpot?' WEAK SPOT':effect.action==='burn'?' BURN':effect.flanked?' FLANK':effect.recoveryOpening?' OPENING':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
+      const suffix=effect.faultbreaker?' ARMOUR BROKEN':effect.counter?' COUNTER':effect.weakSpot?' WEAK SPOT':effect.action==='burn'?' BURN':effect.flanked?' FLANK':effect.recoveryOpening?' OPENING':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
       popup(ctx,'−'+effect.damage+suffix,ex,ey-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
@@ -207,12 +207,13 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
     if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',10);
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',9);
     for(const hit of effect.splash??[]){const [x,y]=point(hit.x+.5,hit.y+.5,15);popup(ctx,'−'+hit.damage+' SPLASH',x,y-26-rise,t,effect.powerColor??'#ffe49a',10);}
-    const blocks=(effect.warded??0)+(effect.absorbed??0);
+    const blocks=(effect.warded??0)+(effect.absorbed??0)+(effect.bloodPriceBlocked??0);
     const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.spatialAvoided?(effect.covered?'COVER':'CLEAR'):effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
-      :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
+      :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'SHIELD ABSORBED '+blocks:effect.ward?'WARD '+effect.ward:'';
     const tint=effect.taken?color.hurt:effect.healed?color.heal:effect.dodged?color.evade:effect.powerColor??color.ward;
     if(playerText&&playerRow<3)popup(ctx,playerText,px,py-34-rise-playerRow++*13,t,tint,effect.taken?13:10);
-    if(effect.taken&&blocks&&playerRow<3)popup(ctx,'BLOCK '+blocks,px,py-34-rise-playerRow++*13,t,color.ward,9);
+    if(effect.taken&&blocks&&playerRow<3)popup(ctx,'SHIELD ABSORBED '+blocks,px,py-34-rise-playerRow++*13,t,color.ward,9);
+    if(effect.bloodPriceBroken&&playerRow<3)popup(ctx,'BLOOD PRICE SHATTERED',px,py-34-rise-playerRow++*13,t,'#ffa3bc',9);
     if(effect.weakened&&playerRow<3)popup(ctx,'SHADOW −'+effect.weakened,px,py-34-rise-playerRow++*13,t,'#d0a5ff',9);
     if(effect.power&&playerRow<3)popup(ctx,effect.power,px,py-34-rise-playerRow++*13,t,effect.powerColor??'#cab6ff',9);
   }
