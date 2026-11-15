@@ -1592,9 +1592,19 @@ function combatAction(action){
   }
   applyCombatResult(result);
 }
+function faceCombatTarget(tile){
+  if(!tile)return;
+  const facing=combatFacing({x:player.cx,y:player.cy},tile);
+  if(facing)Object.assign(player,facing);
+}
 function applyCombatResult(result,authoritative=null,playEffects=true){
   if(!result)return;
   const action=result.action,enemy=huntEnemies[result.enemyId]??(result.targetId?Object.values(addKinds).find(a=>a.id===result.enemyId):null)??huntEnemy(hunting.encounter);
+  const encounter=result.encounter??hunting.encounter;
+  if(playEffects&&result.damage>0&&(action==='attack'||result.power)){
+    const tile=result.enemyTile??(encounter?.arenaVersion===1?combatTargetTile(encounter):null);
+    faceCombatTarget(tile);
+  }
   if(playEffects)recordCombatFx(combatArt,result,performance.now());
   hunting.encounter=result.encounter;health=result.health;
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
@@ -1607,7 +1617,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   else if(result.bloodPriceBlocked)combatMessage+=' Blood Price absorbed '+result.bloodPriceBlocked+' damage.';
   if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
-  if(result.outOfRange)combatMessage='Move closer to strike. Your weapon reaches 2 tiles.';
+  if(result.outOfRange)combatMessage='Out of reach · Move closer to your target.';
   if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
   if(result.behaviour)combatMessage=result.behaviour;
   if(result.action==='reinforcements'&&result.spawned)combatMessage='Reinforcements are summoning!';
@@ -2168,7 +2178,6 @@ function updateDungeonArenaHud(){
  let cue='Approach to fight · Click the floor to explore.';
  if(e){const move=enemyAttack(e),warn=e.nextBoarAt-combatNow()<=move.tell;
   cue=warn?(arenaInDanger(e,move)?'Move out of marked tiles!':'You are clear · Close in after the attack.'):'Click floor / arrows to move · Space to dodge';
-  if(Math.hypot(arenaPlayer(e).x-arenaEnemy(e).x,arenaPlayer(e).y-arenaEnemy(e).y)>(e.brainVersion===2?playerMeleeReach(combatGear.equippedWeapon):2.5))cue='Move closer to strike · Watch the marked tiles';
   if(e.brainVersion===2){
    const left=Math.max(0,(e.nextBoarAt-combatNow())/1000);
    if(combatNow()<e.brainRecoveryUntil)cue='Enemy recovering · Close in and punish the opening';
@@ -2185,7 +2194,8 @@ function updateDungeonArenaHud(){
   else if(now<(e.counterUntil??0))cue='Counter ready · Next strike +'+(e.counterPercent??50)+'%';
   else if(now<(e.exposedUntil??0))cue='Shell exposed · Strike now';
  }
- $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
+ const targetHint=combatTargetHint();
+ $('dungeonArenaCue').textContent=targetHint?cue+' · '+targetHint:cue;panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
 $('dungeonDodge').onclick=()=>combatAction('dodge');
@@ -4005,6 +4015,54 @@ function updateWorldLabels(){
   positionWorldLabels(p);
 }
 const willowbankFlock=createWillowbankFlock();
+let combatApproachCache={key:'',step:null};
+function selectedCombatTarget(){
+  const raid=vaultCoopState&&window.towerVaultCoop?.view(),e=hunting.encounter;
+  if(raid?.status==='battle'){
+    const tile=window.towerVaultCoop.targetPosition(),add=raid.adds.find(a=>a.hp>0&&a.x===tile?.x&&a.y===tile?.y);
+    if(!tile)return null;
+    return {tile,name:add?.name??'Vault Guardian',reach:playerMeleeReach(combatGear.equippedWeapon)};
+  }
+  if(!e||e.arenaVersion!==1)return null;
+  const add=activeAdd(e);
+  return {tile:combatTargetTile(e),name:add?addKinds[add.kind].name:huntEnemy(e).name,
+    reach:e.brainVersion===2?playerMeleeReach(combatGear.equippedWeapon):2.5};
+}
+function combatTargetGuidance(){
+  const selected=selectedCombatTarget();
+  if(!selected)return null;
+  const from={x:player.cx,y:player.cy},distance=Math.hypot(from.x-selected.tile.x,from.y-selected.tile.y);
+  const inRange=distance<=selected.reach;
+  if(inRange||!combatGear.equippedWeapon)return {...selected,inRange,step:null};
+  const items=roomFurniture();
+  const key=JSON.stringify([currentRoom,from,selected.tile,selected.reach,items.map(i=>[i.type,i.x,i.y,i.rot])]);
+  if(combatApproachCache.key!==key){
+    combatApproachCache={key,step:meleeApproach(from,selected.tile,selected.reach,tile=>!blocked(tile.x,tile.y,items))};
+  }
+  return {...selected,inRange,step:combatApproachCache.step};
+}
+function combatTargetHint(){
+  const guide=combatTargetGuidance();
+  if(!guide)return '';
+  if(!combatGear.equippedWeapon)return 'Equip a weapon to strike';
+  if(guide.inRange)return guide.name+' is in reach';
+  return 'Out of reach · '+(guide.step?'Step onto the gold tile':'No clear approach');
+}
+function drawCombatSelection(){
+  const guide=combatTargetGuidance();if(!guide)return;
+  const {tile,inRange}=guide,[x,y]=point(tile.x+.5,tile.y+.5,1);
+  ctx.save();ctx.strokeStyle=inRange?'#a4eee0':'#ffd18c';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(x,y,17,8,0,0,Math.PI*2);ctx.stroke();
+  for(const side of [-1,1]){
+    ctx.beginPath();ctx.moveTo(x+side*22,y-4);ctx.lineTo(x+side*18,y);ctx.lineTo(x+side*22,y+4);ctx.stroke();
+  }
+  if(guide.step){
+    const step=guide.step;surface(step.x+.15,step.y+.15,.7,.7,.5,'#ffcd6c20','#ffce8d');
+    const [sx,sy]=point(step.x+.5,step.y+.5,2);
+    ctx.fillStyle='#ffdf9d';ctx.fillRect(sx-1,sy-3,2,6);
+  }
+  ctx.restore();
+}
 function draw(time){
   const worldNow=combatNow();
   const weather=outdoorWeather(currentRoom,worldNow);
@@ -4069,6 +4127,7 @@ function draw(time){
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
+  drawCombatSelection();
   if(enemy)drawCombatGroundFx({ctx,point,time,now:combatNow(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(currentRoom==='depthsVault')window.towerVaultCoop?.draw({ctx,point,surface,now:combatNow(),time,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
@@ -6909,6 +6968,7 @@ async function sendServerCombat(input,slot){
       }
     }
     applyServerGameplay(packet.state);
+    if(input==='target')faceCombatTarget(combatTargetTile(hunting.encounter));
     setPlayerCombat(!!hunting.encounter);updatePlayerStats();updateCombatPanel();
     nextCombatPoll=performance.now()+80;
   }catch(error){nextCombatPoll=performance.now()+1000;note(error.message);}
@@ -9483,7 +9543,6 @@ window.towerMillRaidHooks={
  float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
 };
 function playerStepMs(){return STEP_MS*(vaultCoopState?(currentCombatBuild().move??1):1);}
-function faceVaultTarget(tile={x:6,y:5}){player.direction=(tile.x-player.cx)-(tile.y-player.cy)>=0?'right':'left';player.back=tile.x+tile.y<player.cx+player.cy;}
 window.towerVaultCoopHooks={
  enemyReaction:hit=>recordEnemyReaction(combatArt,hit,performance.now()-Math.min(100,Math.max(0,combatNow()-hit.at))),
  reaction:cue=>{
@@ -9501,7 +9560,23 @@ window.towerVaultCoopHooks={
  },
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
- strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:(tile,kind)=>{faceVaultTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.health!==undefined){peer.health=cue.health;peer.maxHealth=cue.maxHealth;peer.raidCombat=cue.inCombat;}if(cue.blink)beginShadowstep(peer,cue.blink);if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}}
+ face:faceCombatTarget,targetHint:combatTargetHint,
+ strike:tile=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();},
+ cast:(tile,kind)=>{faceCombatTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},
+ dodge:()=>{combatArt.dodgeAt=performance.now();},
+ victory:()=>{combatArt.victoryAt=performance.now();},
+ peer:cue=>{
+  const peer=remotePeers.get(cue.id);
+  if(!peer)return;
+  if(cue.health!==undefined){peer.health=cue.health;peer.maxHealth=cue.maxHealth;peer.raidCombat=cue.inCombat;}
+  if(cue.blink)beginShadowstep(peer,cue.blink);
+  if((cue.strike||cue.cast)&&cue.target&&cue.position){
+   const facing=combatFacing(cue.position,cue.target);
+   if(facing)Object.assign(peer,facing);
+  }
+  if(cue.strike)peer.raidStrikeAt=performance.now();
+  if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}
+ }
 };
 
 async function visitMillCellar(action){

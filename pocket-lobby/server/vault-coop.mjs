@@ -99,7 +99,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
  const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,marks:r.marks,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,enemyReaction:r.enemyReaction&&now>=r.enemyReaction.at&&now-r.enemyReaction.at<1000?r.enemyReaction:null,
-  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,maxHealth:playerMaxHealth(m,now),lastHit:m.lastHit&&now>=m.lastHit.at&&now-m.lastHit.at<900?m.lastHit:null,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0,castKind:m.castKind??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
+  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,maxHealth:playerMaxHealth(m,now),lastHit:m.lastHit&&now>=m.lastHit.at&&now-m.lastHit.at<900?m.lastHit:null,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0,castKind:m.castKind??null,attackTarget:m.attackTarget??null,attackPosition:m.attackPosition??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
  s.routineLastSeen=now;
@@ -176,6 +176,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   awardAbilityUse(s,'faultbreaker',body.operation);
   m.support++;
   m.castAt=now;m.castKind=kind;
+  m.attackTarget={...r.origin};m.attackPosition={...m.pos};
   m.lastFeedback='Armour fractured · '+hits+' empowered party hits.';
   spendActionPoint(s,now);
   syncPlayer(s,r,id,now);
@@ -195,6 +196,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   awardAbilityUse(s,'sanctuary',body.operation);
   m.support++;
   m.castAt=now;m.castKind=kind;
+  m.attackTarget=null;m.attackPosition=null;
   m.lastFeedback='Sanctuary placed · '+remaining+' shared protection.';
   spendActionPoint(s,now);
   syncPlayer(s,r,id,now);
@@ -249,6 +251,10 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='taunt'){if(now<(m.tauntReadyAt??0))throw invalid('Wait for Taunt to recover.');r.taunt=id;r.tauntUntil=now+6000;m.tauntReadyAt=now+8000;m.support++;text='Taunted! The next attack will focus you; the current warning stays locked.';}
  if(kind==='dodge'){if(now<m.nextDodgeAt)throw invalid('Wait for Dodge to recover.');m.dodgeUntil=now+350;m.nextDodgeAt=now+1300;text='Dodge started. Time it just before impact.';}
+ if(kind==='strike'||kind==='power'){
+  m.attackTarget=damage>0?{x:position.x,y:position.y}:null;
+  m.attackPosition=damage>0?{...m.pos}:null;
+ }
  if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(target)target.hp-=hit;else r.hp-=hit;if(m.weapon==='vampiricSword'&&(target?target.hp:r.hp)===0){const heal=Math.min(4,playerMaxHealth(m,now)-m.hp);m.hp+=heal;if(heal){recordEquipmentEffect(s,'vampire',heal,now,'vampire:coop:'+r.id+':'+(target?.id??'leader'));m.perk=s.equipmentEffects.at(-1);}}m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
  if(interrupted||!target&&(damage>0||broken))enemyReaction(r,{damage:target?0:damage,guarded,broken,interrupted},now);
  m.lastFeedback=text;if(kind!=='dodge')spendActionPoint(s,now);syncPlayer(s,r,id,now);return {text,hit:damage};

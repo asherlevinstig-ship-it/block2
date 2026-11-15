@@ -503,7 +503,11 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     const data=typeof ImageData==='function'?new ImageData(pixels,width,height):{data:pixels,width,height};ctx.putImageData(data,0,0);
     cache.set(key,canvas);if(cache.size>384)cache.delete(cache.keys().next().value);return canvas;
   }
-  function grip(x,y,options={}){const {detail}=towerCharacterPose(meta,options);return [x+(detail.grip[0]-meta.pivot[0])*meta.scale,y+(detail.grip[1]-meta.pivot[1])*meta.scale];}
+  function grip(x,y,options={}){
+    const {detail}=towerCharacterPose(meta,options);
+    const left=Math.round(x-meta.pivot[0]*meta.scale),top=Math.round(y-meta.pivot[1]*meta.scale);
+    return [left+detail.grip[0]*meta.scale,top+detail.grip[1]*meta.scale];
+  }
   function draw(ctx,x,y,appearance={},options={}){
     const blink=options.shadowstep;
     if(blink&&blink.age>=0&&blink.age<700){

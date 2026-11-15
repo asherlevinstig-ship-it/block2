@@ -125,6 +125,15 @@ test('runtime renderer caches frames, selects armour and keeps tools at the sele
   const options={weapon:true,weaponTier:'basicAxe',pose:{chop:.55},direction:'right'},pose=towerCharacterPose(meta,options),grip=renderer.grip(10,20,options);
   assert.deepEqual(grip,[10+(pose.detail.grip[0]-40)*.5,20+(pose.detail.grip[1]-84)*.5]);
   renderer.draw(ctx,10,20,{outfit:1},options);assert(grip.every(Number.isFinite));
+  for(const direction of ['left','right'])for(const back of [false,true]){
+    for(const attack of [.15,.5,.85]){
+      const options={weapon:true,direction,back,weaponTier:'ironSword',pose:{attack}};
+      let origin,toolGrip;
+      const rendered=renderer.draw({...ctx,scale(){},translate:(x,y)=>{toolGrip??=[x,y];},drawImage:(_image,x,y)=>{origin=[x,y];}},10.3,20.8,{},options);
+      const hand=rendered.detail.grip;
+      assert.deepEqual(toolGrip,origin.map((pixel,axis)=>pixel+hand[axis]*meta.scale));
+    }
+  }
   for(let n=0;n<420;n++)renderer.draw(ctx,0,0,{outfit:n%5,hair:Math.floor(n/5)%5,trousers:Math.floor(n/25)%3,boots:Math.floor(n/75)%3},{state:'walk',frame:n%8,direction:n%2?'left':'right'});
   assert(renderer.cacheSize()<=384);
 });

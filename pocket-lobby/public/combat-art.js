@@ -3,6 +3,23 @@ import {signaturePoses} from './signature-poses.js';
 
 const clamp=value=>Math.max(0,Math.min(1,value));
 const pulse=(age,duration)=>age>=0&&age<duration?Math.sin(age/duration*Math.PI):0;
+export function combatFacing(from,to){
+  const dx=to.x-from.x,dy=to.y-from.y;
+  return dx||dy?{direction:dx-dy>=0?'right':'left',back:dx+dy<0}:null;
+}
+export function meleeApproach(from,target,reach,walkable){
+  if(Math.hypot(from.x-target.x,from.y-target.y)<=reach)return null;
+  const queue=[{...from,first:null}],seen=new Set([from.x+','+from.y]);
+  for(const tile of queue){
+    if(tile.first&&Math.hypot(tile.x-target.x,tile.y-target.y)<=reach)return tile.first;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const next={x:tile.x+dx,y:tile.y+dy},key=next.x+','+next.y;
+      if(seen.has(key)||next.x===target.x&&next.y===target.y||!walkable(next))continue;
+      seen.add(key);queue.push({...next,first:tile.first??next});
+    }
+  }
+  return null;
+}
 export function recordCharacterReaction(events,hit,time){
   if(hit.damage>0){events.hurtAt=time;events.hurtHeavy=hit.heavy===true||hit.damage>=20;}
   if(hit.shielded>0)events.shieldAt=time;
