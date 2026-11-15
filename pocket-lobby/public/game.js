@@ -301,6 +301,17 @@ function timberCanopyOpacity(item){
   }
   return 1;
 }
+function riverTreeOpacity(item){
+  const [x,y]=point(item.x+.5,item.y+.5),width=item.type==='riverWillow'?42:25;
+  const covers=actor=>{
+    const [px,feet]=point((actor.rx??actor.x)+.5,(actor.ry??actor.y)+.5);
+    return Math.abs(px-x)<width&&feet<=y+2&&feet>y-72;
+  };
+  const familiar=familiarFollowers.get('self');
+  if(covers(player)||familiar&&covers(familiar))return .22;
+  for(const peer of remotePeers.values())if(covers(peer))return .32;
+  return 1;
+}
 function drawTimberTree(item,time){
   const tree=treeState(item);
   const shared=sharedTimber.get(timberKey(item)),hitAge=time-(shared?.impactAt??-Infinity);
@@ -3150,7 +3161,7 @@ function object(item,highlight=false,time=0,weather=null) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):currentRoom==='willowbank'&&(type==='riverWillow'||type==='riverCypress')?riverTreeOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -3873,6 +3884,7 @@ function positionWorldLabels(p){
     if(action)worldLabelBounds.push({left,right:left+width,top,bottom:top+height});
   }
 }
+const willowbankDistance=item=>Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y);
 let lastWorldLabelCheck=-Infinity;
 function updateWorldLabels(time){
   if(Number.isFinite(time)){
@@ -3889,7 +3901,7 @@ function updateWorldLabels(time){
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
   const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination].join('|');
+  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,hoverItem?.type,hoverItem?.id,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination].join('|');
   const owner=currentShopLicence();
   const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
   const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
@@ -4006,6 +4018,7 @@ function updateWorldLabels(time){
     const item=roomFurniture().find(item=>item.type===type);
     if(item){
       const marked=scout===clue;
+      if(currentRoom==='willowbank'&&!marked&&item!==hoverItem&&willowbankDistance(item)>2)continue;
       const label=add(marked?'Scouted clue':clue.label,...point(clue.x+.5,clue.y+.5,38),'npc',()=>use(item),marked?clue.label:'');
       if(marked)label.classList.add('scouted-keeper-label');
     }
@@ -4022,20 +4035,27 @@ function updateWorldLabels(time){
     }
   }
   if(currentRoom==='willowbank'){
-    if(player.cy>=8){
+    if(player.cy>=12){
       const forkY=13.5;
       add('Inland trail',...point(3.5,forkY,14),'npc',()=>walkTo({x:3,y:13}));
       add('Riverside walk',...point(11.5,forkY,14),'npc',()=>walkTo({x:11,y:13}));
     }
     for(const item of roomFurniture()){
-      if(item.type==='willowLatch'&&player.cy<=6&&!adventure.willowbankShortcut)add('Open shortcut',...point(item.x+.5,item.y+.5,32),'npc',()=>use(item));
-      if(item.type==='willowNook'&&(adventure.willowbankNook||player.cy<=4&&Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y)<=3))add(adventure.willowbankNook?'Moonlit Nook':'Light through the willows',...point(item.x+.5,item.y+.5,45),'npc',()=>use(item));
+      if(item.type==='willowLatch'&&player.cy<=6&&!adventure.willowbankShortcut&&(item===hoverItem||willowbankDistance(item)<=3))add('Open shortcut',...point(item.x+.5,item.y+.5,32),'npc',()=>use(item));
+      if(item.type==='willowNook'&&(adventure.willowbankNook||player.cy<=4)&&(item===hoverItem||willowbankDistance(item)<=3))add(adventure.willowbankNook?'Moonlit Nook':'Light through the willows',...point(item.x+.5,item.y+.5,45),'npc',()=>use(item));
     }
   }
   if(willowmereRooms.includes(currentRoom)){
-    for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)
-      &&!(item.type==='riverBench'&&player.seat===item)
-      &&!(currentRoom==='willowbank'&&item.type==='fishingPost'&&canvas.clientWidth<520&&Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y)>3))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
+    const props=roomFurniture(),willowbank=currentRoom==='willowbank';
+    const posts=props.filter(item=>item.type==='fishingPost');
+    const fishing=willowbank?(posts.find(item=>item===hoverItem)??posts.sort((a,b)=>willowbankDistance(a)-willowbankDistance(b))[0]):null;
+    for(const item of props){
+      if(item.type==='riverTrader')add('River trader',...point(item.x+.5,item.y+.5,42),'npc',()=>use(item));
+      if(item.type==='riverBench'&&player.seat!==item&&(!willowbank||item===hoverItem||willowbankDistance(item)<=2))add(willowbank?'Riverside bench':'Rest by the mill',...point(item.x+1,item.y+.5,24),'npc',()=>use(item));
+      if(item.type!=='fishingPost')continue;
+      if(!willowbank)add('Fishing station',...point(item.x+.5,item.y+.5,25),'npc',()=>use(item));
+      else if(item===fishing&&(item===hoverItem||willowbankDistance(item)<=3))add('Fish · 1 AP',...point(item.x+.96,item.y+.1,34),'npc',()=>use(item));
+    }
   }
   if(watchRooms.includes(currentRoom)){
     for(const item of roomFurniture()){
@@ -4371,7 +4391,7 @@ function draw(time){
         polygon([[x-9,y-19],[x-4,y-23],[x+7,y-21],[x+3,y-17]],'#d4af73');
         rect(x-9,y-19,12,8,'#9d744f');rect(x-7,y-19,2,8,'#d0a978');
       }
-      renderedActors.push({id:'waystation:'+item.id,enemy:true,name:item.name,detail:item.activity,x,y:y-42,action:()=>{
+      if(item.id!=='willowbankGuide'||willowbankDistance(item)<=3)renderedActors.push({id:'waystation:'+item.id,enemy:true,name:item.name,detail:item.activity,x,y:y-42,action:()=>{
         if(item.id==='watchGuard'){window.towerRobbery?.open();return;}
         if(Math.abs(item.x-player.cx)+Math.abs(item.y-player.cy)>3){note('Move closer to speak.',3500);return;}
         note(item.id==='willowbankGuide'?willowbankGuideReport(adventure.willowbankShortcut):item.id==='scout'?travelers.report:item.crate?'I’m bringing supplies from Beaconwatch.':item.activity==='Sheltering'?'I’ll wait here until the rain lets up.':'Supplies are at the counter. Bring timber to help restore the outpost.',7500);

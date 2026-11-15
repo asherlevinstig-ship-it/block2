@@ -315,7 +315,7 @@ export const moonwood=(()=>{
     if(Object.hasOwn(cellarHeights,type)){drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,pose});return;}
     if(Object.hasOwn(dungeonHeights,type)){drawDungeonProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,pose,combat});return;}
     if(Object.hasOwn(watchPropHeights,type)){drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,canopyOpacity});return;}
-    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(type==='willowNook'?{...item,revealed:progress?.willowbankNook}:item,time,{point,polygon,surface,block,rect,ctx,reduced,weather});return;}
+    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(type==='willowNook'?{...item,revealed:progress?.willowbankNook}:item,time,{point,polygon,surface,block,rect,ctx,reduced,weather,canopyOpacity});return;}
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
@@ -573,6 +573,11 @@ export const moonwood=(()=>{
       }
       part(.30,.34,.19,.19,0,16,['#c1a385','#65566a','#927984']);
       part(.19,.27,.54,.34,16,3,['#d9c2a1','#85778a','#a59c9e']);
+      if(item.room==='willowbank'){
+        rect(px-10,py-26,20,12,'#354851');rect(px-9,py-25,18,10,'#285e62');
+        polygon([[px-6,py-20],[px-1,py-23],[px+3,py-21],[px+7,py-23],[px+7,py-17],[px+3,py-19],[px-1,py-17]],'#bde5dc');
+        rect(px-4,py-21,1,1,'#24434d');return;
+      }
       rect(px-3,py-20,2,2,'#d2e6da');
       rect(px-1,py-21,4,1,'#a8c7c8');
       rect(px+3,py-22,2,3,'#aac8c8');

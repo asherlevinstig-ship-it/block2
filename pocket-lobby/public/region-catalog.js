@@ -26,8 +26,8 @@ export const willowmereAreas={
  willowbank:{
   number:'19',name:'Willowbank',description:'Take the pale inland trail or the timber riverside walk to Millbrook. Both start at the Reedwater fork.',badge:'WILLOWMERE VALLEY',floor:'River trails and fishing',region:'Willowmere',center:[5,11],palette:['#426d60','#608574','#c4b78d'],
   authored:[
-   ['riverWillow',1,2],['riverCypress',1,9],['riverWillow',2,11],['riverWillow',4,8],['riverWillow',9,9],['riverWillow',12,3],
-   ['riverWillow',10,14],['riverCypress',4,15],['riverCypress',5,3],['riverCypress',6,3],
+   ['riverWillow',1,2],['riverCypress',1,9],['riverWillow',2,11],['riverWillow',12,3],['riverCypress',4,15],
+   ['riverFlowers',4,8],['riverFlowers',9,9],['riverFlowers',10,14],
    ['fishingPost',6,2],['fishingPost',6,5],['fishingPost',6,8],['riverBench',8,11],
    ['riverLantern',2,12],['riverLantern',10,12],['riverLantern',4,1],['riverLantern',10,2],
    ['riverFlowers',4,3],['riverFlowers',2,10],['riverFlowers',13,0],['riverFlowers',12,11],

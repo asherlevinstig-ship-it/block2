@@ -63,7 +63,7 @@ export function drawRiverWater(id,time,{point,surface,block,ctx,reduced,progress
   const [px,py]=point(10.6,3.2,4);for(let i=0;i<5;i++){const t=(phase*1.7+i*.21)%1;ctx.fillStyle='#c8f6df99';ctx.fillRect(px-5+i*3,py-6-Math.sin(t*Math.PI)*8,2,2);}
  }
 }
-export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,weather}){
+export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,weather,canopyOpacity=1}){
  const {type,x,y}=item,[px,py]=point(x+.5,y+.5),part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
  if(type==='willowLatch'){
   part(.18,.2,.64,.6,0,14,stone);
@@ -80,7 +80,9 @@ export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,re
   return;
  }
  if(type==='riverWillow'||type==='riverCypress'){
-  const willow=type==='riverWillow';surface(x-.25,y-.12,1.5,1.1,.4,'#183f3f55');part(.38,.35,.24,.25,0,willow?31:35,['#a78d62','#5c6450','#7d7955']);
+  const willow=type==='riverWillow';
+  ctx.save();ctx.globalAlpha*=canopyOpacity;
+  surface(x-.25,y-.12,1.5,1.1,.4,'#183f3f55');part(.38,.35,.24,.25,0,willow?31:35,['#a78d62','#5c6450','#7d7955']);
   const crown=(cx,cy,rx,ry,c)=>{ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fill();};
   if(willow){
    crown(px,py-45,30,19,'#294f48');crown(px-13,py-48,20,15,'#417857');crown(px+14,py-51,22,17,'#669761');crown(px+1,py-58,23,14,'#85aa6f');
@@ -88,7 +90,7 @@ export function drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,re
    for(let i=0;i<22;i++)rect(px-24+i*11%48,py-61+i*7%22,2+(i%2),1,'#b5c88888');
    for(let i=0;i<13;i++){const dx=-29+i*4.6,sway=reduced?0:Math.sin(time/1500+i)*1.2,len=12+Math.sin(i*2.7)**2*21;ctx.strokeStyle=i%3===0?'#acc58a':i%2?'#69915d':'#477e59';ctx.lineWidth=i%3===0?2:3;ctx.beginPath();ctx.moveTo(px+dx,py-47);ctx.quadraticCurveTo(px+dx+4+sway,py-30,px+dx-1+sway,py-47+len);ctx.stroke();}
   }else for(let i=0;i<4;i++){const z=py-29-i*10,w=19-i*3;polygon([[px, z-20],[px+w,z+6],[px-w,z+6]],i%2?'#386957':'#4b8060');polygon([[px,z-20],[px+3,z-5],[px-w,z+6]],'#70966a');}
-  return;
+  ctx.restore();return;
  }
  if(type==='riverReeds'){
   for(let i=0;i<8;i++){const dx=(i*7%19)-9,dy=(i*3%7),sway=reduced?0:Math.sin(time/1000+i)*2+(weather?.wind??0)*(3+Math.sin(time/340+i)*4);ctx.strokeStyle=i%2?'#8bab69':'#b6c184';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px+dx,py+dy);ctx.quadraticCurveTo(px+dx-2,py-9,px+dx+sway,py-15-i%3*3);ctx.stroke();if(i%2)rect(px+dx+sway-1,py-17-i%3*3,2,6,'#ad8958');}return;
