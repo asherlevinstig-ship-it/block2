@@ -3802,16 +3802,17 @@ function openVenueLicence(){
   if(!dialog.open)dialog.showModal();
 }
 function positionWorldLabels(p){
-  const layoutKey=[camX,camY,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
+  const layoutKey=[camX,camY,zoom,p.scale,p.x,p.y,availableWidth,availableHeight].join('|');
   if(layoutKey===worldLabelLayoutKey)return;
   worldLabelLayoutKey=layoutKey;
   worldLabelBounds=[];
-  const separateLabels=woodlandRouteRooms.has(currentRoom)&&canvas.clientWidth<520;
-  for(const {label,text,x,y,kind,action,subtitle,mount} of worldLabelAnchors){
-    const centerX=view.width/2,centerY=view.height/2-4;
-    const screenX=p.x+((x-camX)*zoom+centerX)*p.scale,screenY=p.y+((y-camY)*zoom+centerY)*p.scale;
+  const separateLabels=woodlandRouteRooms.has(currentRoom)&&availableWidth<520;
+  const scale=p.scale*zoom;
+  for(const {label,kind,subtitle,mount} of worldLabelAnchors){
+    if(label.worldScale===scale)continue;
+    label.worldScale=scale;
     if(currentRoom==='home'&&kind!=='npc'){
-      const scale=p.scale*zoom;
       label.dataset.wall=kind==='sign'?'right':'left';
       const sign=kind==='sign';
       label.style.width=Math.round((sign?79:20)*scale)+'px';
@@ -3822,14 +3823,21 @@ function positionWorldLabels(p){
       if(subtitle){label.children[1].style.fontSize=Math.max(12,Math.round(8*scale))+'px';label.children[1].style.lineHeight='1.3';}
     }
     if(mount){
-      const scale=p.scale*zoom;label.dataset.wall=mount.side;
+      label.dataset.wall=mount.side;
       label.style.width=Math.round(mount.width*scale)+'px';label.style.maxWidth='none';
       label.style.padding='0';label.style.fontSize=Math.max(9,Math.round((mount.font??6)*scale))+'px';
       label.style.lineHeight='1.2';label.style.transform=mount.side==='right'?'skewY(26.565deg)':'skewY(-26.565deg)';
       if(subtitle){label.children[1].style.fontSize=Math.max(9,Math.round((mount.font??6)*scale))+'px';label.children[1].style.lineHeight='1.2';}
     }
-    const width=label.offsetWidth||text.length*7+16,height=label.offsetHeight||(subtitle?30:19);
-    const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
+  }
+  // Measure all signs before repositioning any of them as the camera follows the player.
+  const sizes=worldLabelAnchors.map(({label,text,subtitle})=>({
+    width:label.offsetWidth||text.length*7+16,height:label.offsetHeight||(subtitle?30:19)
+  }));
+  const centerX=view.width/2,centerY=view.height/2-4;
+  for(const [index,{label,x,y,action}] of worldLabelAnchors.entries()){
+    const {width,height}=sizes[index];
+    const screenX=p.x+((x-camX)*zoom+centerX)*p.scale,screenY=p.y+((y-camY)*zoom+centerY)*p.scale;
     const left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)));
     let top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)));
     if(separateLabels&&action){
@@ -5732,21 +5740,25 @@ function advanceAnimation(time){
     Object.assign(player,{x:reducedMotion.matches?position.x:position.rx,y:reducedMotion.matches?position.y:position.ry,cx:position.x,cy:position.y,direction:position.direction,back:position.back});
   }
   advanceAutoJourney();
-  if(!step&&route.length){
-    const to=route.shift(),from={x:player.cx,y:player.cy};
-    player.direction=(to.x-from.x)-(to.y-from.y)>0?'right':'left';
-    player.back=to.x+to.y<from.x+from.y;
-    step={from,to,started:time};
-  }
-  if(step){
-    const {from,to,started}=step,progress=Math.min(1,(time-started)/(step.duration??playerStepMs()));
+  let nextStepAt=time;
+  while(step||route.length){
+    if(!step){
+      const to=route.shift(),from={x:player.cx,y:player.cy};
+      player.direction=(to.x-from.x)-(to.y-from.y)>0?'right':'left';
+      player.back=to.x+to.y<from.x+from.y;
+      step={from,to,started:nextStepAt};
+    }
+    const {from,to,started}=step,duration=step.duration??playerStepMs(),progress=Math.min(1,(time-started)/duration);
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
       const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&doorAvailable(portal));
       if(door){if(autoJourney){const reverse=roomDoors[door.to]?.find(d=>d.to===currentRoom);autoJourneyTransition=true;enterRoom(door.to,door.arrival??reverse?.inside??reverse?.tile,{automatic:true});autoJourneyTransition=false;}else enterRoom(door.to,door.arrival);}
       else if(!route.length&&!player.inCombat)savePlayerState();
-    }
+      if(door)break;
+      // Carry a late frame into the next tile, without jumping ahead after a stall.
+      nextStepAt=Math.max(time-32,started+duration);
+    }else break;
   }
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
   if(player.waveStarted!==null&&time>=player.waveStarted+WAVE_MS)player.waveStarted=null;
