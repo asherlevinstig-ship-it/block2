@@ -577,10 +577,20 @@
 .teacher-ability-options button{text-align:left;min-height:36px}
 .teacher-abilities:not([open]) .teacher-ability-options{display:none}
 
-#abilityWheel{width:min(460px,94vw)}
-#abilityWheelSets{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;width:min(260px,100%);aspect-ratio:1;margin:12px auto;border-radius:50%;background:radial-gradient(circle,#3a3563 0 22%,#1c2540 23% 62%,transparent 63%);padding:12px}
-#abilityWheelSets button:nth-child(1){grid-area:1/2}#abilityWheelSets button:nth-child(2){grid-area:2/3}#abilityWheelSets button:nth-child(3){grid-area:3/2}#abilityWheelSets button:nth-child(4){grid-area:2/1}
-#abilityWheelSets button[aria-pressed=true]{border-color:#edc57a;background:#524060;color:#fff3cf}
+#abilityWheel{width:min(620px,94vw);max-height:90dvh;overflow:auto}
+.ability-switch-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:center}
+#abilityWheelSets{position:relative;width:min(240px,100%);aspect-ratio:1;margin:8px auto;border:1px solid #8172a7;border-radius:50%;background:radial-gradient(circle,#292342 0 25%,#141b34 26% 38%,#2a2948 39% 65%,#161c32 66%);box-shadow:inset 0 0 28px #080b18}
+#abilityWheelCenter{position:absolute;inset:39%;display:grid;place-items:center;color:#edc57a;font-size:clamp(20px,6vw,36px)}
+#abilityWheelSets button{position:absolute;min-height:42px;min-width:52px;transform:translate(-50%,-50%);padding:4px 8px;border-radius:14px;background:#27213e}
+#abilityWheelSets [data-direction=north]{left:50%;top:17%}#abilityWheelSets [data-direction=east]{left:82%;top:50%}#abilityWheelSets [data-direction=south]{left:50%;top:83%}#abilityWheelSets [data-direction=west]{left:18%;top:50%}
+#abilityWheelSets button[aria-current=true]{border-color:#edc57a;color:#fff3cf}
+#abilityWheelSets button.previewed{background:#584365;box-shadow:0 0 0 2px #ae8ebf}
+#abilityWheelPreview h3{margin:0 0 8px}#abilityWheelPreview ol{list-style:none;padding:0;margin:0;display:grid;gap:5px}
+#abilityWheelPreview li{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:6px;padding:6px 8px;border:1px solid #4e426d;border-radius:7px;background:#23203c;min-height:32px}
+#abilityWheelPreview small{color:#e1cbf2}
+.ability-wheel-actions{display:flex;gap:8px;margin-top:12px}
+.ability-wheel-hint{font-size:12px;color:#d3c4e4}
 #abilityWheelEditor label{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0}
 #abilityWheelEditor select{width:72%;min-width:0}
+@media(max-width:480px){.ability-switch-layout{grid-template-columns:1fr;gap:8px}#abilityWheelSets{width:min(180px,100%)}}
 .teacher-quick-abilities{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}

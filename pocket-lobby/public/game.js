@@ -6349,43 +6349,93 @@ function openAbilityWheel(){
   const state=window.playerCloud?.initial;
   if(!state)return;
   const learned=state.styleAbilities?.learned??[];
-  const dialog=$('abilityWheel');
-  const choices=$('abilityWheelSets'),editor=$('abilityWheelEditor');
-  const config=readAbilitySets(learned);
-  function render(){
-    choices.replaceChildren();editor.replaceChildren();
-    for(const [index,name] of abilitySetNames.entries()){
-      const button=document.createElement('button');button.type='button';button.textContent=name;
-      button.setAttribute('aria-pressed',String(index===config.active));
-      button.onclick=()=>{useAbilitySet(index);config.active=index;render();};
-      choices.append(button);
+  const dialog=$('abilityWheel'),choices=$('abilityWheelSets');
+  const editor=$('abilityWheelEditor'),preview=$('abilityWheelPreview');
+  const edit=$('abilityWheelEdit'),config=readAbilitySets(learned);
+  let selected=config.active;
+  let editing=false;
+  const equipped=index=>config.sets[index]??(index===0?learned.slice(0,window.abilitySlots):[]);
+  const nodes=[];
+  function showPreview(index){
+    selected=index;
+    nodes.forEach((button,i)=>button.classList.toggle('previewed',i===index));
+    preview.replaceChildren();
+    const title=document.createElement('h3');
+    title.textContent=abilitySetNames[index]+(index===config.active?' · Active':'');
+    const list=document.createElement('ol');
+    for(let slot=0;slot<window.abilitySlots;slot++){
+      const id=equipped(index)[slot],ability=window.styleAbilities[id];
+      const row=document.createElement('li'),icon=document.createElement('span'),name=document.createElement('span');
+      icon.textContent=ability?.icon??'◇';icon.setAttribute('aria-hidden','true');
+      name.textContent=ability?.name??'Empty shortcut';row.append(icon,name);
+      if(ability){
+        row.title=ability.description;
+        const seconds=Math.max(0,Math.ceil(((window.playerCloud.initial.styleAbilities?.readyAt?.[id]??0)-combatNow())/1000));
+        const status=document.createElement('small');
+        status.textContent=seconds?seconds+'s':ability.passive?'Passive':'Ready';
+        row.append(status);
+      }
+      list.append(row);
     }
-    const equipped=config.sets[config.active]??(config.active===0?learned.slice(0,window.abilitySlots):[]);
-    const title=document.createElement('p');title.textContent=abilitySetNames[config.active]+' · '+equipped.length+' / '+window.abilitySlots+' shortcuts';editor.append(title);
+    preview.append(title,list);
+  }
+  function renderEditor(){
+    editor.replaceChildren();editor.hidden=!editing;
+    edit.textContent=editing?'Done editing':'Edit shortcuts';edit.setAttribute('aria-expanded',String(editing));
+    if(!editing)return;
+    const entries=equipped(selected);
     for(let slot=0;slot<window.abilitySlots;slot++){
       const label=document.createElement('label');label.textContent='Slot '+(slot+1)+' ';
       const select=document.createElement('select');select.add(new Option('Empty',''));
       for(const id of learned){
-        if(id===equipped[slot]||!equipped.includes(id))select.add(new Option(window.styleAbilities[id].name,id));
+        if(id===entries[slot]||!entries.includes(id))select.add(new Option(window.styleAbilities[id].name,id));
       }
-      select.value=equipped[slot]??'';
+      select.value=entries[slot]??'';
       select.onchange=()=>{
-        const next=[...equipped];next[slot]=select.value;
-        config.sets[config.active]=next.filter(Boolean);
-        save(abilitySetKey(),config);refreshStyleAbilityBar();render();editor.querySelectorAll('select')[slot]?.focus();
+        const next=[...entries];next[slot]=select.value;
+        config.sets[selected]=next.filter(Boolean);
+        save(abilitySetKey(),config);refreshStyleAbilityBar();showPreview(selected);renderEditor();
+        editor.querySelectorAll('select')[slot]?.focus();
       };
       label.append(select);editor.append(label);
     }
   }
-  render();
+  choices.querySelectorAll('button').forEach(button=>button.remove());
+  for(const [index,name] of abilitySetNames.entries()){
+    const button=document.createElement('button');button.type='button';button.textContent=name;
+    button.dataset.direction=['north','east','south','west'][index];
+    if(index===config.active)button.setAttribute('aria-current','true');
+    button.onpointerenter=()=>{if(!editing)showPreview(index);};
+    button.onfocus=()=>{if(!editing)showPreview(index);};
+    button.onclick=()=>{
+      if(editing){showPreview(index);renderEditor();return;}
+      useAbilitySet(index);dialog.close();
+    };
+    nodes.push(button);choices.append(button);
+  }
+  edit.onclick=()=>{editing=!editing;renderEditor();};
+  $('abilityWheelLibrary').onclick=()=>{dialog.close();openStyleAbilities();};
+  dialog.onkeydown=event=>{
+    if(event.target.matches('select,input,textarea'))return;
+    const direction=['ArrowUp','ArrowRight','ArrowDown','ArrowLeft'].indexOf(event.key);
+    if(direction>=0){
+      event.preventDefault();nodes[direction].focus();
+      if(editing){showPreview(direction);renderEditor();}
+    }
+    if(event.code==='KeyR'&&!event.repeat){event.preventDefault();dialog.close();}
+  };
+  showPreview(selected);renderEditor();
   if(!dialog.open)dialog.showModal();
+  nodes[selected].focus();
 }
 document.addEventListener('keydown',event=>{
   if(event.repeat||!window.playerCloud?.initial||event.target.closest?.('input,textarea,select,button,[contenteditable]')||document.querySelector('dialog[open]'))return;
-  if(!['BracketLeft','BracketRight'].includes(event.code))return;
-  if(!(window.playerCloud.initial.styleAbilities?.learned?.length))return;
-  const {active}=readAbilitySets(window.playerCloud.initial.styleAbilities.learned);
+  if(!['KeyR','BracketLeft','BracketRight'].includes(event.code))return;
+  const learned=window.playerCloud.initial.styleAbilities?.learned;
+  if(!learned?.length)return;
   event.preventDefault();
+  if(event.code==='KeyR'){openAbilityWheel();return;}
+  const {active}=readAbilitySets(learned);
   useAbilitySet((active+abilitySetNames.length+(event.code==='BracketRight'?1:-1))%abilitySetNames.length);
 });
 function refreshStyleAbilityBar(){
