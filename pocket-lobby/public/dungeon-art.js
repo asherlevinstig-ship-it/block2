@@ -3,11 +3,82 @@ import {drawDungeonGuardian} from './dungeon-guardian-art.js';
 import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,arenaMarkCount,isDungeonMob} from './dungeon-arena.js';
 export const dungeonHeights={depthsSkitter:29,depthsWarden:77,depthsSeer:61,depthsSentinel:76,depthsColossus:93,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
 const stone=['#94aeb3','#35495c','#597484'];
+const sideRoomArt={
+ depthsRest:{stone:['#a7b6a4','#293e44','#56746f'],light:'#91e5ca',trim:'#a6cfb6'},
+ depthsTreasury:{stone:['#c2a587','#4c363c','#805b50'],light:'#ffbf72',trim:'#ceac78'},
+ depthsCache:{stone:['#9385a2','#2d243d','#554665'],light:'#c094fa',trim:'#9d81c6'}
+};
+function groundRing(point,polygon,x,y,rx,ry,color){
+ const vertices=Array.from({length:24},(_,i)=>{
+  const a=i*Math.PI/12;return point(x+Math.cos(a)*rx,y+Math.sin(a)*ry,.7);
+ });
+ polygon(vertices,undefined,color);
+}
+function drawSideRoomLandmark(room,{point,polygon,surface,block,rect}){
+ const {stone:colors,trim,light}=sideRoomArt[room];
+ if(room==='depthsRest'){
+  const x=6.5,y=4.5;
+  surface(5.2,3.28,2.6,2.48,.3,'#254e54',trim);
+  surface(5.40,3.45,2.2,2.14,.4,'#327571','#aadbc18e');
+  groundRing(point,polygon,x,y,1.04,1.02,'#9ee8cd88');
+  groundRing(point,polygon,x,y,.82,.79,'#8fe8d45e');
+  for(const [u,v] of [[5.32,3.38],[7.54,3.38],[5.32,5.5],[7.54,5.5]]){
+   surface(u-.13,v-.13,.29,.29,.48,'#c7ddba','#33535b');
+   surface(u-.035,v-.035,.1,.1,.52,'#f0ffce');
+  }
+  return;
+ }
+ if(room==='depthsTreasury'){
+  for(let x=2;x<10;x++)surface(x+.08,5.15,.84,.70,.43,'#75404a','#e5b96d80');
+  for(const x of [7.45,9.85]){
+   block(x,1.83,.25,.35,0,39,colors);
+   block(x-.07,1.81,.4,.40,36,4,['#edca8d','#704848','#aa775f']);
+  }
+  block(7.7,1.88,2.15,.24,0,35,['#80635c','#3b2937','#4f3941']);
+  block(7.65,1.85,2.36,.28,35,5,colors);
+  const [px,py]=point(8.78,2.13,17);
+  const outline=[[-15,-11],[6,-1],[6,10],[-15,0]].map(([x,y])=>[px+x,py+y]);
+  polygon(outline,'#322636','#d0aa70');rect(px-6,py-3,4,7,'#e6ba71');
+  for(const [x,y] of [[8,2.32],[9.55,2.4],[9.88,3.12]]){
+   surface(x,y,.35,.27,.4,'#53373b');
+   const [cx,cy]=point(x+.16,y+.13,1);
+   for(let i=0;i<7;i++)rect(cx-5+(i*7)%12,cy-(i*5)%7,3,2,i%3?light:'#9d683e');
+  }
+  return;
+ }
+ const x=6.5,y=5.5;
+ surface(4.86,3.82,3.28,3.36,.31,'#34274066');
+ for(const radius of [1.08,1.35,1.62])groundRing(point,polygon,x,y,radius,radius,trim+'ad');
+ for(let i=0;i<8;i++){
+  const a=i*Math.PI/4,u=x+Math.cos(a)*1.5,v=y+Math.sin(a)*1.5;
+  surface(u-.13,v-.13,.26,.26,.66,'#743f9d',light);
+  surface(u-.04,v-.04,.08,.08,.7,'#e8cdfa');
+ }
+ for(const [u,v] of [[5.2,2.25],[7.5,2.25],[9.8,2.25]]){
+  const [px,py]=point(u,v,19);
+  polygon([[px-7,py-9],[px+6,py-3],[px+5,py+10],[px-1,py+15],[px-7,py+7]],'#513562','#c5a5e5');
+  polygon([[px,py-4],[px+3,py+3],[px,py+8],[px-3,py+2]],light);
+ }
+}
+export function drawDungeonSideAtmosphere(room,time,{ctx,point,reduced}){
+ if(room!=='depthsRest'&&room!=='depthsCache')return;
+ const shrine=room==='depthsRest';
+ const [x,y]=shrine?point(6.5,4.5,.8):point(6.5,5.5,.8);
+ ctx.save();
+ for(let i=0;i<3;i++){
+  const phase=reduced?.42:(time/2600+i/3)%1;
+  ctx.strokeStyle=shrine?'#c4ffdf':'#dcb7ff';ctx.lineWidth=1;
+  ctx.globalAlpha=(1-phase)*(shrine?.46:.22);
+  ctx.beginPath();ctx.ellipse(x,y,4+phase*(shrine?20:38),2+phase*(shrine?10:18),0,0,Math.PI*2);ctx.stroke();
+ }
+ ctx.restore();
+}
 export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
  const gate=room==='depthsGate',gallery=room==='depthsGallery',vault=room==='depthsVault';
- const tint=gate?['#697f88','#354e60','#486472']:gallery?['#708c7d','#2e4e4b','#4d6f60']:vault?['#8f859d','#403c59','#635a78']:['#7b7b94','#353e59','#555774'];
+ const side=sideRoomArt[room];
+ const tint=side?.stone??(gate?['#697f88','#354e60','#486472']:gallery?['#708c7d','#2e4e4b','#4d6f60']:vault?['#8f859d','#403c59','#635a78']:['#7b7b94','#353e59','#555774']);
  // A glow from far below turns the slab into a platform over deep water rather than a tile floating in the dark.
- const mist=gate?'#58c8d4':gallery?'#6fd0a0':vault?'#a58cf0':'#8f95e8';
+ const mist=side?.light??(gate?'#58c8d4':gallery?'#6fd0a0':vault?'#a58cf0':'#8f95e8');
  for(let i=0;i<6;i++)surface(-.6+i*.75,-1+i*.7,13.2-i*1.5,12-i*1.4,-30,mist+'1a');
  for(let y=0;y<10;y++)for(let x=0;x<12;x++){
   if(!dungeonFloor(room,x,y))continue;
@@ -50,6 +121,7 @@ export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
  for(const [x,y] of [[4.5,3.5],[3.5,6.5]]){
   for(let i=0;i<4;i++)surface(x-.3-i*.08,y-.27-i*.06,.6+i*.16,.54+i*.12,.3+i*.02,'#99d0be0b');
  }
+ if(side)drawSideRoomLandmark(room,{point,polygon,surface,block,rect});
  if(gallery)for(let i=0;i<13;i++){const x=1.7+i*.65;surface(x,7.8,.12,.6,.6,'#4b947d');surface(x+.08,8,.5,.1,.6,'#4b947d');}
 }
 export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,reduced,pose={},combat}){

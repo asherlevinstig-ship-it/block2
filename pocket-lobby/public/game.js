@@ -3598,6 +3598,7 @@ function moonfinPoolOpen(){
 }
 function drawMoonwoodDetails(time){
   if(Object.hasOwn(ashenAreas,currentRoom))drawAshenDrift(currentRoom,time,{ctx,point,reduced:reducedMotion.matches});
+  moonwood.drawDungeonSideAtmosphere(currentRoom,time,{ctx,point,reduced:reducedMotion.matches});
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,drainAt:floodDrainAt,progress:adventure});
   if(currentRoom==='depthsVault'){
     const mechanism=currentVaultMechanism();

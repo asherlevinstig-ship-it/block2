@@ -15,7 +15,7 @@ import {watchAreas,watchRooms,watchWater,fishingSites,willowmereAreas,willowmere
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
 import {dungeonFloor,dungeonRooms,isDungeonMob} from './dungeon-arena.js';
-import {drawDungeonGround,drawDungeonProp,dungeonHeights} from './dungeon-art.js';
+import {drawDungeonGround,drawDungeonProp,drawDungeonSideAtmosphere,dungeonHeights} from './dungeon-art.js';
 import {cellarArea} from './mill-cellar.js';
 import {cellarHeights,drawCellarGround,drawCellarProp,drawCellarAtmosphere} from './mill-cellar-art.js';
 'use strict';
@@ -648,5 +648,5 @@ export const moonwood=(()=>{
       }
     }
   }
-  return {view,areas,doors,heights,drawMapProp,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
+  return {view,areas,doors,heights,drawMapProp,drawDungeonSideAtmosphere,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
 })();
