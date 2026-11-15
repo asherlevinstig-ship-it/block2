@@ -15,20 +15,20 @@ export function guardianCue(encounter, pose, time, reduced) {
   const now = pose.now ?? time;
   if (!encounter || pose.defeated) return {gesture:null, strength:0, release:false, staggered:false, exposed:false};
   const staggered = now < (encounter.staggerUntil ?? 0);
-  const exposed = now < Math.max(encounter.staggerWeakUntil ?? 0, encounter.exposedUntil ?? 0);
-  const recovery = now < (encounter.brainRecoveryUntil ?? 0);
+  const exposed = pose.guardBroken===true||now < Math.max(encounter.staggerWeakUntil ?? 0, encounter.exposedUntil ?? 0);
+  const recovery = pose.interrupted===true||now < (encounter.brainRecoveryUntil ?? 0);
   const remaining = encounter.nextBoarAt - now;
   const move = enemyAttack(encounter);
   const warning = !staggered && !recovery && remaining >= 0 && remaining <= move.tell;
   const lastAttack = pose.lastAttack;
   const age = time - lastAttack?.time;
-  const release = !staggered && !warning && age >= 0 && age < 320;
+  const release = !staggered && !pose.interrupted && !warning && age >= 0 && age < 320;
   const attack = warning ? move : release ? {name:lastAttack.move, shape:lastAttack.attackShape} : null;
   const fallback = {arc:'sweep', ring:'stomp', bolt:'throw', lane:'rush'};
   const gesture = attack ? gestures[attack.name] ?? fallback[attack.shape] : null;
   const strength = warning ? (reduced ? 1 : .55 + .45 * (1 - remaining / move.tell))
     : release ? (reduced ? 1 : 1 - age / 320) : 0;
-  return {gesture, strength, release, staggered, exposed, recovery};
+  return {gesture, strength, release, staggered, exposed, recovery,broken:pose.guardBroken===true,braced:pose.braced===true};
 }
 
 function drawing({ctx,px,py,polygon,rect}, lift, lean) {
@@ -58,13 +58,13 @@ function warden(draw, cue, hit) {
   const light=hit?'#efd6ae':'#aab79a';
   const stone=hit?'#aa9484':'#627d72';
   const dark='#344f51';
-  const rest=[25,-19];
+  const rest=cue.braced&&!gesture?[13,-34]:[25,-19];
   const targets={sweep:release?[37,-30]:[8,-32],stomp:release?[27,-8]:[25,-62],throw:release?[38,-38]:[25,-53],rush:[11,-31]};
   const hand=moveHand(rest,targets[gesture]??rest,strength);
   const raised=gesture==='stomp'&&!release ? strength*15 : 0;
   const footX=gesture==='stomp'&&release ? 20 : 15;
   const open=exposed?5:cue.recovery?2:0;
-  const bow=staggered?5:0;
+  const bow=staggered||cue.broken?5:0;
 
   poly([[-22,-14],[-12,-20],[-8,-10],[-10,0],[-28,0],[-29,-5]],dark,'#263c41');
   poly([[9,-18-raised],[footX+7,-13-raised],[footX+12,-3-raised],[footX+8,1-raised],[6,1-raised],[5,-5-raised]],stone,'#263c41');
@@ -163,8 +163,8 @@ function vaultGuardian(draw,cue,hit,phase) {
   const armor=hit?'#c9a197':phase===1?'#8a7870':'#6c697f';
   const light=hit?'#f4d4b4':phase===1?'#ceae79':'#9e9ab0';
   const core=phase===3?'#e4b6ff':phase===2?'#ffb17d':'#97d9cf';
-  const bow=staggered?7:0;
-  const rest=[31,-34];
+  const bow=staggered||cue.broken?7:0;
+  const rest=cue.braced&&!gesture?[16,-43]:[31,-34];
   const handTargets={
     sweep:release?[47,-24]:[16,-33],overhead:release?[36,-15]:[27,-70],
     harpoon:release?[42,-41]:[18,-44],cleave:release?[42,-28]:[14,-42],
@@ -227,8 +227,8 @@ function vaultGuardian(draw,cue,hit,phase) {
 export function drawDungeonGuardian(type,time,options) {
   const {pose,reduced,combat}=options;
   const cue=guardianCue(combat,pose,time,reduced);
-  const lean=cue.gesture==='rush'&&!reduced ? cue.strength*(cue.release?12:7) : 0;
-  const draw=drawing(options,cue.recovery&&!cue.gesture&&!cue.staggered ? 2 : 0,lean);
+  const lean=reduced?0:pose.guardBroken?-7:pose.braced?3:cue.gesture==='rush'?cue.strength*(cue.release?12:7):0;
+  const draw=drawing(options,pose.guardBroken?4:pose.braced?1:cue.recovery&&!cue.gesture&&!cue.staggered?2:0,lean);
   if(type==='depthsWarden'){
     if(pose.defeated){
       // The core goes dark and the shell breaks into a recognisable stone heap.
@@ -240,7 +240,7 @@ export function drawDungeonGuardian(type,time,options) {
         line([[x-5,y-6],[x-1,y-9],[x+4,y-7]],'#aab79a');
       }
       poly([[-4,-8],[0,-14],[4,-8],[0,-3]],'#477477');
-    }else warden(draw,cue,pose.hit);
+    }else warden(draw,cue,pose.hit&&!pose.braced);
   }
   else if(type==='depthsSentinel')sentinel(draw,cue,pose.hit);
   else if(type==='depthsColossus'){
@@ -252,6 +252,12 @@ export function drawDungeonGuardian(type,time,options) {
         line([[x-6,y-6],[x-1,y-10],[x+5,y-6]],'#b7a6bf');
       }
       poly([[-5,-9],[0,-16],[5,-9],[0,-3]],'#817085','#c6a3d7');
-    }else vaultGuardian(draw,cue,pose.hit,vaultPhase(combat)?.index??1);
+    }else vaultGuardian(draw,cue,pose.hit&&!pose.braced,vaultPhase(combat)?.index??1);
+  }
+  if(pose.guardBroken&&!pose.defeated){
+    for(const side of [-1,1])for(let i=0;i<3;i++){
+      const x=side*(18+i*5),y=-35+i*8;
+      draw.poly([[x-2,y],[x+3,y-3],[x+4,y+2],[x,y+4]],'#c9bba0','#ffe3a7');
+    }
   }
 }

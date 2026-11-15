@@ -50,6 +50,17 @@ test('co-op allies can flank the same committed plating instead of both attackin
  const {r,a,b}=party();act(r,a,'a','start',1000);b.position={x:7,y:5};r.members.b.pos={...b.position};r.targetTile={x:5,y:5};r.warningAt=1500;r.landsAt=4000;
  act(r,a,'a','strike',2000);act(r,b,'b','strike',2000);assert(r.members.b.damage>r.members.a.damage);assert.match(r.members.b.lastFeedback,/Flank/);assert.deepEqual(r.targetTile,{x:5,y:5});
 });
+test('co-op armour reactions are authoritative, sequenced and expire from snapshots',()=>{
+ const {r,a}=party();a.styleAbilities={learned:['faultbreaker']};
+ act(r,a,'a','start',1000);act(r,a,'a','strike',2000);
+ const brace=publicVaultParty(r,'a',2000).enemyReaction;
+ assert.equal(brace.guarded,true);assert(brace.damage>0);
+ act(r,a,'a','faultbreaker',2100);
+ const broken=publicVaultParty(r,'a',2100).enemyReaction;
+ assert.equal(broken.broken,true);assert(broken.id>brace.id);
+ assert.deepEqual(publicVaultParty(r,'a',2200).enemyReaction,broken);
+ assert.equal(publicVaultParty(r,'a',3100).enemyReaction,null);
+});
 test('Storm and three quick weapon hits interrupt a charged volley rather than a detonation',()=>{
  const {r,a}=party();a.combatGear.equippedWeapon='quickfang';r.members.a.weapon='quickfang';act(r,a,'a','start',1000);Object.assign(r,{hp:220,max:900,phase:3,move:'bossFan',warningAt:2000,landsAt:3500});act(r,a,'a','strike',2000);act(r,a,'a','strike',2550);act(r,a,'a','strike',3100);assert(r.landsAt>3500);assert(r.members.a.support>0);
  a.magic=normalizeMagic({...a.magic,slots:{q:'storm:sword',e:'fire:renewal'}});r.warningAt=4000;r.landsAt=5500;r.move='bossFan';act(r,a,'a','power',4100,{slot:'q'});assert(r.landsAt>5500);assert.match(r.members.a.lastFeedback,/interrupted/);

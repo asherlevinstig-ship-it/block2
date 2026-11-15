@@ -1,9 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {playerCombatPose,boarCombatPose,recordCharacterReaction} from '../public/combat-art.js';
+import {playerCombatPose,boarCombatPose,recordCharacterReaction,recordEnemyReaction} from '../public/combat-art.js';
 import {signatureCast} from '../public/signature-poses.js';
 
 const events={strikeAt:1000,hurtAt:2000,dodgeAt:3000,boarAttackAt:4000,boarHitAt:1000,victoryAt:5000};
+test('enemy bracing is distinct from recoil and breaks and interrupts expire',()=>{
+ const guarded={},open={};
+ recordEnemyReaction(guarded,{damage:2,guarded:true},1000);
+ recordEnemyReaction(open,{damage:20,broken:true,interrupted:true},1000);
+ const pose=events=>boarCombatPose({time:1100,now:1100,encounter:null,events});
+ assert(pose(guarded).braced);
+ assert(pose(guarded).recoil<pose(open).recoil);
+ assert(pose(open).guardBroken);assert(pose(open).interrupted);
+ const ended=boarCombatPose({time:1700,now:1700,encounter:null,events:open});
+ assert.equal(ended.guardBroken,false);assert.equal(ended.interrupted,false);
+ assert.equal(boarCombatPose({time:1100,now:1100,encounter:null,events:open,reduced:true}).recoil,0);
+});
 test('damage reactions distinguish heavy hits, shields, dodges and critical health',()=>{
  const small={},large={},blocked={},evaded={};
  recordCharacterReaction(small,{damage:6},1000);

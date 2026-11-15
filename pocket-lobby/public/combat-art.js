@@ -8,6 +8,11 @@ export function recordCharacterReaction(events,hit,time){
   if(hit.shielded>0)events.shieldAt=time;
   if(hit.perfectDodge)events.perfectDodgeAt=time;
 }
+export function recordEnemyReaction(events,hit,time){
+  if(hit.damage>0){events.boarHitAt=time;events.enemyGuarded=hit.guarded===true;}
+  if(hit.broken)events.enemyBreakAt=time;
+  if(hit.interrupted)events.enemyInterruptAt=time;
+}
 export function playerCombatPose({time,now,encounter,events,reduced=false,health=100,maxHealth=100}){
   const victoryAge=time-events.victoryAt;
   const victory=victoryAge>=0&&victoryAge<1000;
@@ -42,14 +47,18 @@ export function boarCombatPose({time,now,encounter,events,reduced=false,defeated
   const age=time-events.victoryAt;
   const death=defeated?clamp(age/430):0;
   const staggered=!!encounter&&now<encounter.staggerUntil;
+  const hitAge=time-events.boarHitAt;
+  const braced=events.enemyGuarded===true&&hitAge>=0&&hitAge<220;
+  const guardBroken=time-events.enemyBreakAt>=0&&time-events.enemyBreakAt<600;
+  const interrupted=time-events.enemyInterruptAt>=0&&time-events.enemyInterruptAt<550;
   const windup=encounter&&!staggered?clamp(1-(encounter.nextBoarAt-now)/(enemyAttack(encounter).shape==='bolt'?enemyAttack(encounter).tell:Math.min(850,enemyAttack(encounter).tell))):0;
   return {
-    windup,staggered,
+    windup:interrupted?0:windup,staggered,braced,guardBroken,interrupted,
     charge:staggered?0:reduced?0:pulse(time-events.boarAttackAt,340)*8,
-    recoil:reduced?0:staggered?Math.sin(time/90)*2:pulse(time-events.boarHitAt,260)*4,
+    recoil:reduced?0:staggered?Math.sin(time/90)*2:pulse(hitAge,braced?180:260)*(braced?.6:5),
     squash:staggered?.82:reduced?1:defeated?1-death*.6:1-windup*.1,
     fall:reduced?0:defeated?death*5:0,
     alpha:defeated?1-clamp((age-750)/550):1,
-    defeated,death,hit:time-events.boarHitAt>=0&&time-events.boarHitAt<200
+    defeated,death,hit:hitAge>=0&&hitAge<200
   };
 }

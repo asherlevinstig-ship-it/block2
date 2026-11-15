@@ -1642,7 +1642,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=depthsSideForRoom(currentRoom)?(currentRoom==='depthsTrial'?'Challenge won! Claim the Awakening Seal.':'Treasury secured. Your extra loot is unbanked.'):currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction(result.rareDrop?rareHunts[result.rareDrop].name+' found!':result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.rareDrop?[{icon:'◆',text:rareHunts[result.rareDrop].name+' · Added to Inventory · Equip when ready'}]:[]),...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?(essencesPaused?'Open the glowing cache to claim its gold':'Open the glowing cache to claim its gold and stone'):'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
+      showTransaction(result.rareDrop?rareHunts[result.rareDrop].name+' found!':result.clothingDrop?clothingCatalog[result.clothingDrop].name+' found!':currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[...(result.rareDrop?[{icon:'◆',text:rareHunts[result.rareDrop].name+' · Added to Inventory · Equip when ready'}]:[]),...(result.clothingDrop?[{icon:'◆',text:clothingCatalog[result.clothingDrop].name+' · '+(result.guaranteedClothing?'Guaranteed reward':'Rare drop')+' · Yours to keep · Add to an outfit in Inventory'}]:[]),{icon:'✦',text:currentRoom===depthsCacheRoom?(essencesPaused?'Open the glowing cache to claim its gold':'Open the glowing cache to claim its gold and stone'):depthsRun.rewardChests?.[currentRoom]?'Open the glowing reward chest, then bank your spoils at an exit.':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -6820,6 +6820,7 @@ async function castStyleAbility(id,body){
       refreshStyleAbilityBar();return;
     }
     if(id==='sanctuary'||id==='faultbreaker'){
+      if(id==='faultbreaker')combatArt.enemyBreakAt=performance.now();
       note(id==='sanctuary'?'Sanctuary · Your ward is active for eight seconds.':'Faultbreaker · Armour cracked for your next strikes.');
       refreshStyleAbilityBar();return;
     }
@@ -9484,6 +9485,7 @@ window.towerMillRaidHooks={
 function playerStepMs(){return STEP_MS*(vaultCoopState?(currentCombatBuild().move??1):1);}
 function faceVaultTarget(tile={x:6,y:5}){player.direction=(tile.x-player.cx)-(tile.y-player.cy)>=0?'right':'left';player.back=tile.x+tile.y<player.cx+player.cy;}
 window.towerVaultCoopHooks={
+ enemyReaction:hit=>recordEnemyReaction(combatArt,hit,performance.now()-Math.min(100,Math.max(0,combatNow()-hit.at))),
  reaction:cue=>{
   const events=cue.self?combatArt:remotePeers.get(cue.id)?.reactionFx;
   if(cue.self)recordCharacterReaction(events,cue.hit,performance.now()-Math.min(100,cue.age));

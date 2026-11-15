@@ -4,6 +4,7 @@ import {addEncounter,addKinds} from './dungeon-adds.js';
 export {createCombatSound} from './combat-sound.js';
 import {arenaEnemy,arenaPlayer} from './dungeon-arena.js';
 import {drawArenaTelegraph} from './dungeon-art.js';
+import {recordEnemyReaction} from './combat-art.js';
 import {huntEnemy,enemyAttack,boarRules,enemyStatusEffects,counterRules,staggerProfile,vaultPhase} from './hunting.js';
 
 const progress=(time,start,duration)=>Math.max(0,Math.min(1,(time-start)/duration));
@@ -50,7 +51,7 @@ export function recordCombatFx(events,result,time){
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
   if(action==='attack'&&damage)events.strikeAt=time;
-  if(damage&&!result.targetId)events.boarHitAt=time;
+  if(!result.targetId)recordEnemyReaction(events,{damage,guarded:result.shellGuarded,broken:result.faultbreaker||staggered,interrupted},time);
   if(perfectDodge)events.perfectDodgeAt=time;
   if(counter)events.counterAt=time;
   if(staggered)events.staggerAt=time;

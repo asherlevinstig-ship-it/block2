@@ -7,11 +7,12 @@ export function drawDungeonCreature(type,time,{ctx,px,py,polygon,rect,reduced,po
  const release=cue.release?cue.strength:0;
  const dead=!!pose.defeated,death=dead?(reduced?1:pose.death??1):0;
  const hit=pose.hit,ink='#142c39';
- const poly=(points,c,edge)=>polygon(points.map(([x,y])=>[Math.round(px+x),Math.round(py+y)]),c,edge);
- const pixel=(x,y,w,h,c)=>rect(Math.round(px+x),Math.round(py+y),w,h,c);
+ const screenY=y=>Math.round(py+(dead?y*(1-death*.45)+death*4:y));
+ const poly=(points,c,edge)=>polygon(points.map(([x,y])=>[Math.round(px+x),screenY(y)]),c,edge);
+ const pixel=(x,y,w,h,c)=>rect(Math.round(px+x),screenY(y),w,h,c);
  const line=(points,c,width=1)=>{
   ctx.strokeStyle=c;ctx.lineWidth=width;ctx.beginPath();
-  points.forEach(([x,y],i)=>i?ctx.lineTo(Math.round(px+x),Math.round(py+y)):ctx.moveTo(Math.round(px+x),Math.round(py+y)));ctx.stroke();
+  points.forEach(([x,y],i)=>i?ctx.lineTo(Math.round(px+x),screenY(y)):ctx.moveTo(Math.round(px+x),screenY(y)));ctx.stroke();
  };
  if(type==='depthsSkitter'){
   const shell=hit?'#f3ceae':'#468c83',light=hit?'#fff0ce':'#b1d5ad',dark='#244e57';
@@ -21,7 +22,7 @@ export function drawDungeonCreature(type,time,{ctx,px,py,polygon,rect,reduced,po
   // Wide hooked legs make a low silhouette; planted feet brace during the tell.
   for(const side of [-1,1])for(let i=0;i<3;i++){
    const stride=reduced||wind||dead?0:Math.sin(time/160+i*2)*1.4;
-   const spread=dead?death*7:wind*5,root=side*(6+i*2),k=-14+i*5;
+   const spread=dead?-death*5:wind*5,root=side*(6+i*2),k=-14+i*5;
    const knee=side*(19+i*2+spread),foot=side*(26+i*2+spread);
    poly([[root,k+lift],[knee,k-8+stride],[foot,k+5],[foot-2*side,k+8],[knee-3*side,k-3+stride],[root,k+4+lift]],dark,ink);
    line([[root,k+lift],[knee,k-6+stride],[foot,k+5]],shell,2);
@@ -50,7 +51,7 @@ export function drawDungeonCreature(type,time,{ctx,px,py,polygon,rect,reduced,po
  }
  // Rune Channeler: an empty hood, floating shoulder shards and suspended hands.
  const float=reduced?0:Math.sin(time/610)*2;
- const z=dead?death*14:float+(reduced?0:wind*5);
+ const z=dead?death*14:pose.interrupted?-4:float+(reduced?0:wind*5);
  const robe=hit?'#d9bfdc':'#71639f',light=hit?'#fff0df':'#b6a5df';
  const rune=dead?'#615f83':hit?'#fff4de':'#c6e6ff';
  const body=(points,c,edge)=>poly(points.map(([x,y])=>[x,y-z]),c,edge);
@@ -68,12 +69,12 @@ export function drawDungeonCreature(type,time,{ctx,px,py,polygon,rect,reduced,po
   for(const side of [-1,1]){
    body([[side*12,-45],[side*23,-41],[side*18,-31],[side*12,-34]],'#484369',ink);
    line([[side*14,-43-z],[side*20,-40-z],[side*17,-35-z]],'#ccb587');
-   const hx=side*(23-wind*8+release*6),hy=-26-z-wind*6;
+   const hx=side*(23-wind*8+release*6),hy=-26-z-wind*6+(pose.interrupted?8:0);
    poly([[hx-4,hy-3],[hx+3,hy-4],[hx+5,hy+2],[hx,hy+5],[hx-4,hy+2]],light,ink);
   }
  }
  // Runes close into a spell above the hands, then burst outward at release.
- const spread=dead?18+death*22:release?18+release*18:26-wind*13;
+ const spread=dead?18+death*22:pose.interrupted?39:release?18+release*18:26-wind*13;
  for(let i=0;i<5;i++){
   const a=i/5*Math.PI*2+(reduced?0:time/3000),x=Math.cos(a)*spread,y=-31-z+Math.sin(a)*spread*.5;
   const size=dead?2:wind?3:2;

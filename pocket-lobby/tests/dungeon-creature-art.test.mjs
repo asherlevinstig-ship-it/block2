@@ -42,3 +42,12 @@ test('reduced motion keeps creature artwork stable between animation frames',()=
   assert.deepEqual(render(type,dead,e,1000,true),render(type,dead,e,1800,true));
  }
 });
+test('break poses preserve committed warnings while interrupted casts lose their gesture',()=>{
+ const e={enemy:'depthsGuardian',bossVersion:1,brainVersion:2,brainMaxHealth:420,health:400,brainMove:'bossIronSmash',nextBoarAt:1100};
+ assert(guardianCue(e,{now:1000,guardBroken:true},1000,false).gesture);
+ assert.equal(guardianCue({...e,brainMove:'bossFan'},{now:1000,interrupted:true},1000,false).gesture,null);
+ const warden={enemy:'depthsBeetle',brainVersion:2,brainMove:'wardenStomp',nextBoarAt:1100};
+ assert.notDeepEqual(render('depthsWarden',{now:1000,braced:true},warden),render('depthsWarden',{now:1000,guardBroken:true},warden));
+ const seer={enemy:'cacheGuardian',brainVersion:2,brainMove:'seerBolt',nextBoarAt:1100};
+ assert.notDeepEqual(render('depthsSeer',{now:1000},seer),render('depthsSeer',{now:1000,interrupted:true},seer));
+});

@@ -18,6 +18,8 @@ export function initializeVaultCoop(api){
  }
  function accept(result){
   if(result.state)api.apply(result.state);if(result.raid){const old=raid;raid=result.raid;if(old?.hp>raid.hp)popups.push({at:performance.now(),text:'−'+(old.hp-raid.hp),x:raid.origin?.x??6,y:raid.origin?.y??5});
+   const reaction=raid.enemyReaction;
+   if(reaction&&reaction.id!==old?.enemyReaction?.id)api.enemyReaction?.(reaction);
    if(raid.lastAttack&&raid.lastAttack.at!==old?.lastAttack?.at)attackFx={...raid.lastAttack,time:performance.now(),attackShape:raid.lastAttack.shape,attackTile:raid.lastAttack.target};
    if(old?.phase!==raid.phase)attackFx=null;
    if(raid.status==='victory'&&old?.status!=='victory'){
