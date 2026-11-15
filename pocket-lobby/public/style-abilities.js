@@ -1,7 +1,43 @@
-import {normalizeNecromancy} from './necromancy.js';
+import {activeRaised,normalizeNecromancy,raisableBeasts} from './necromancy.js';
+import {arenaEnemy,arenaPlayer} from './dungeon-arena.js';
+import {huntEnemy,moonbackSite} from './hunting.js';
 import {keeperSites} from './lantern-keepers.js';
 import {skillLevel} from './skill-curve.js';
 
+const withinTwo=(position,tile)=>position&&Math.hypot(position.x-tile.x,position.y-tile.y)<=2;
+
+export function combatAbilityBlock(id,state,now,party){
+ const encounter=state.hunting?.encounter;
+ if(party){
+  if(id==='bindBeast'||id==='bloodPrice')return id==='bindBeast'?'Use Bind Beast against a living wild beast.':'Use Blood Price during a hunt or solo dungeon fight.';
+  if(party.status!=='battle'||party.self?.hp<=0)return 'This co-op battle is not active.';
+  if(id==='faultbreaker'){
+   if(party.phase!==1)return 'Faultbreaker needs the Guardian’s armour in its opening phase.';
+   if(!withinTwo(state.position,party.origin))return 'Move within two tiles of the Guardian.';
+   if(party.faultbreaker?.until>now&&party.faultbreaker.hits>0)return 'The Guardian’s armour is already fractured.';
+  }
+  if(id==='sanctuary'&&party.sanctuary?.until>now&&party.sanctuary.remaining>0)return 'Your party already has an active Sanctuary.';
+  return '';
+ }
+ if(id==='bindBeast'){
+  if(activeRaised(state,now))return 'You already have a temporary beast ally.';
+  const enemy=encounter&&huntEnemy(encounter);
+  if(!enemy||state.depthsRun||!Object.hasOwn(raisableBeasts,enemy.id))return 'Use Bind Beast against a living wild beast.';
+  if(encounter.health<=0||encounter.health>=enemy.health/2)return 'Weaken the beast below half health first.';
+  const tile=encounter.arenaEnemy??(enemy.id==='moonbackStag'?moonbackSite(state.location):null)??{x:6,y:5};
+  if(!withinTwo(state.position,tile))return 'Move within two tiles of the beast.';
+ }else if(id==='bloodPrice'){
+  if(!encounter)return 'Use Blood Price during a hunt or solo dungeon fight.';
+  if(state.health<=bloodPriceRules.health)return 'You need more than '+bloodPriceRules.health+' HP to use Blood Price.';
+ }else{
+  if(!encounter)return 'Use this ability during a creature fight.';
+  if(id==='faultbreaker'){
+   if(!huntEnemy(encounter).shellArmor)return 'Faultbreaker needs an armoured creature.';
+   if(encounter.arenaVersion===1&&!withinTwo(arenaPlayer(encounter),arenaEnemy(encounter)))return 'Move within two tiles of the armoured creature.';
+  }else if(encounter.magicWardUntil>now&&encounter.magicWard>0)return 'Wait for your current ward to fade.';
+ }
+ return '';
+}
 export const abilitySlots=4;
 export function abilityStatLevel(state,stat){
  return stat==='evil'?(state.stats?.evil??0):skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[(stat==='fishing'?'patience':stat)+'Xp']);

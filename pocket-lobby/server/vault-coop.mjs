@@ -1,4 +1,4 @@
-import {normalizeStyleAbilities,sanctuaryRules,styleAbilities} from '../public/style-abilities.js';
+import {combatAbilityBlock,normalizeStyleAbilities,sanctuaryRules,styleAbilities} from '../public/style-abilities.js';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {recordDungeonChest} from '../public/dungeon-chests.js';
@@ -127,9 +127,8 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   const abilities=normalizeStyleAbilities(s.styleAbilities);
   if(!abilities.learned.includes('faultbreaker'))throw invalid('Learn Faultbreaker before using it.');
   if((abilities.readyAt.faultbreaker??0)>now)throw invalid('Faultbreaker is still recharging.');
-  if(r.phase!==1)throw invalid('Faultbreaker needs the Guardian’s armour in its opening phase.');
-  if(Math.hypot(m.pos.x-r.origin.x,m.pos.y-r.origin.y)>2)throw invalid('Move within two tiles of the Guardian.');
-  if(r.faultbreaker?.until>now&&r.faultbreaker.hits>0)throw invalid('The Guardian’s armour is already fractured.');
+  const block=combatAbilityBlock(kind,s,now,r);
+  if(block)throw invalid(block);
   requireActionPoint(s);
   const hits=2+abilityMastery(s,'faultbreaker').stage;
   r.faultbreaker={until:now+8000,hits};
@@ -146,7 +145,8 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   const abilities=normalizeStyleAbilities(s.styleAbilities);
   if(!abilities.learned.includes('sanctuary'))throw invalid('Learn Sanctuary before placing a ward.');
   if((abilities.readyAt.sanctuary??0)>now)throw invalid('Sanctuary is still recharging.');
-  if(r.sanctuary?.until>now&&r.sanctuary.remaining>0)throw invalid('Your party already has an active Sanctuary.');
+  const block=combatAbilityBlock(kind,s,now,r);
+  if(block)throw invalid(block);
   requireActionPoint(s);
   const remaining=sanctuaryRules.capacity+(abilityMastery(s,'sanctuary').stage-1)*10;
   r.sanctuary={x:m.pos.x,y:m.pos.y,until:now+sanctuaryRules.duration,remaining};

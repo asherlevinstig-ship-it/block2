@@ -161,3 +161,25 @@ test('Faultbreaker shares limited weapon openings without spending them on adds'
  assert.equal(r.faultbreaker.hits,2);
  assert.equal(publicVaultParty(r,'a',9400).faultbreaker,null);
 });
+
+test('one player fractures the Guardian while a teammate wards and strikes',()=>{
+ const {r,a,b}=party();
+ a.styleAbilities={learned:['faultbreaker']};
+ b.styleAbilities={learned:['sanctuary']};
+ a.actionPoints.value=b.actionPoints.value=8;
+ act(r,a,'a','start',1300);
+ const near={x:r.origin.x-1,y:r.origin.y};
+ a.position=b.position=near;
+ act(r,b,'b','sanctuary',1400);
+ act(r,a,'a','faultbreaker',1450);
+ const unfractured=structuredClone(r);delete unfractured.faultbreaker;
+ assert(act(r,b,'b','strike',1500).hit>act(unfractured,structuredClone(b),'b','strike',1500).hit);
+ const view=publicVaultParty(r,'a',1500);
+ assert.equal(view.faultbreaker.hits,2);
+ assert.equal(view.sanctuary.remaining,30);
+ r.adds=[{id:'test',hp:10,kind:'wisp',target:near,landsAt:1600}];
+ const health=r.members.a.hp+r.members.b.hp;
+ advanceVaultParty(r,1600);
+ assert(r.sanctuary.remaining<30);
+ assert.equal(r.members.a.hp+r.members.b.hp,health);
+});

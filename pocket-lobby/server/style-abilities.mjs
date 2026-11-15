@@ -1,8 +1,6 @@
-import {arenaPlayer,arenaEnemy} from '../public/dungeon-arena.js';
-import {moonbackSite} from '../public/moonback.js';
 import {huntEnemy} from '../public/hunting.js';
-import {activeRaised,raisedProfile,raisableBeasts} from '../public/necromancy.js';
-import {sanctuaryRules,bloodPriceRules,styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
+import {activeRaised,raisedProfile} from '../public/necromancy.js';
+import {combatAbilityBlock,sanctuaryRules,bloodPriceRules,styleAbilities,styleAbilityOffers,normalizeStyleAbilities,waypoints,preyTrail,activePreyTrail,scoutAheadSite} from '../public/style-abilities.js';
 import {abilityMastery} from '../public/ability-mastery.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
@@ -34,13 +32,12 @@ export function styleAbilityAction(state,action,body,now){
   return true;
  }
  if((abilities.readyAt[id]??0)>now)throw invalid('This ability is still recharging.');
+ if(['bindBeast','bloodPrice','faultbreaker','sanctuary'].includes(id)){
+  const block=combatAbilityBlock(id,state,now);
+  if(block)throw invalid(block);
+ }
  if(id==='bindBeast'){
-  if(activeRaised(state,now))throw invalid('You already have a temporary beast ally.');
-  const enemy=encounter&&huntEnemy(encounter);
-  if(!enemy||state.depthsRun||!Object.hasOwn(raisableBeasts,enemy.id))throw invalid('Use Bind Beast against a living wild beast.');
-  if(encounter.health<=0||encounter.health>=enemy.health/2)throw invalid('Weaken the beast below half health first.');
-  const tile=encounter.arenaEnemy??(enemy.id==='moonbackStag'?moonbackSite(state.location):null)??{x:6,y:5};
-  if(!state.position||Math.hypot(state.position.x-tile.x,state.position.y-tile.y)>2)throw invalid('Move within two tiles of the beast.');
+  const enemy=huntEnemy(encounter);
   requireActionPoint(state);
   const profile=raisedProfile(state.stats,abilityMastery(state,id).stage);
   abilities.raised={id:state.combatId??crypto.randomUUID(),enemy:enemy.id,living:true,summonedAt:now,until:now+profile.duration,nextAt:now+1500,damage:profile.damage};
@@ -87,8 +84,6 @@ export function styleAbilityAction(state,action,body,now){
   state.styleAbilities=abilities;return true;
  }
  if(id==='bloodPrice'){
-  if(!encounter)throw invalid('Use Blood Price during a hunt or solo dungeon fight.');
-  if(state.health<=bloodPriceRules.health)throw invalid('You need more than 15 HP to use Blood Price.');
   requireActionPoint(state);
   state.health-=bloodPriceRules.health;
   encounter.bloodShield=bloodPriceRules.shield+(abilityMastery(state,id).stage-1)*5;
@@ -108,19 +103,12 @@ export function styleAbilityAction(state,action,body,now){
   return true;
  }
  if(id==='faultbreaker'||id==='sanctuary'){
-  if(!encounter)throw invalid('Use this ability during a creature fight.');
   const stage=abilityMastery(state,id).stage;
-  if(id==='faultbreaker'){
-   const enemy=huntEnemy(encounter);
-   if(!enemy.shellArmor)throw invalid('Faultbreaker needs an armoured creature.');
-   if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>2)throw invalid('Move within two tiles of the armoured creature.');
-  }
   requireActionPoint(state);
   if(id==='faultbreaker'){
    encounter.faultHits=2+stage;encounter.faultUntil=now+8000;
    awardAbilityUse(state,id);
   }else{
-   if(encounter.magicWardUntil>now&&encounter.magicWard>0)throw invalid('Wait for your current ward to fade.');
    encounter.magicWard=sanctuaryRules.capacity+(stage-1)*10;
    encounter.magicWardUntil=now+sanctuaryRules.duration;
    encounter.sanctuaryWard=true;

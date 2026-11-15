@@ -6461,6 +6461,12 @@ document.addEventListener('keydown',event=>{
   const {active}=readAbilitySets(learned);
   useAbilitySet((active+abilitySetNames.length+(event.code==='BracketRight'?1:-1))%abilitySetNames.length);
 });
+const contextualCombatAbilities=new Set(['faultbreaker','bloodPrice','bindBeast','sanctuary']);
+function hotbarAbilityBlock(id,state){
+  if(!contextualCombatAbilities.has(id))return '';
+  const party=vaultCoopState&&(window.towerVaultCoop?.view()??{status:'waiting'});
+  return combatAbilityBlock(id,{...state,health,hunting,depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy}},combatNow(),party);
+}
 function refreshStyleAbilityBar(){
   const bar=$('styleAbilityBar'),state=window.playerCloud?.initial;
   if(!bar||!state||!window.styleAbilities)return;
@@ -6470,7 +6476,8 @@ function refreshStyleAbilityBar(){
   const shortcuts=abilitySetShortcuts(config,learned);
   const visible=teacher?learned:shortcuts.filter(Boolean);
   const seconds=visible.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt?.[id]??0)-combatNow())/1000)));
-  const nextKey=JSON.stringify([teacher,learned,config.active,shortcuts,visible,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
+  const blocks=visible.map(id=>hotbarAbilityBlock(id,state)),outOfPoints=needsLearningPoints();
+  const nextKey=JSON.stringify([teacher,learned,config.active,shortcuts,visible,offers,seconds,blocks,outOfPoints,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
   if(nextKey===styleAbilityKey)return;
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
@@ -6492,14 +6499,25 @@ function refreshStyleAbilityBar(){
   const existing=new Map(Array.from(choices?.children??[],element=>[element.dataset.ability,element]));
   const actions=new Map();
   for(const [index,id] of visible.entries()){
-    const ability=window.styleAbilities[id],button=existing.get(id)??document.createElement('button');button.title=ability.description;
+    const ability=window.styleAbilities[id],button=existing.get(id)??document.createElement('button');
+    const contextual=contextualCombatAbilities.has(id);
+    const cost=id==='bloodPrice'?bloodPriceRules.health+' HP + 1 AP':'1 AP';
+    const reason=blocks[index]||(outOfPoints?'Answer a question to earn 1 AP.':'');
+    button.title=contextual?(reason||'Ready · Costs '+cost)+' '+ability.description:ability.description;
     existing.delete(id);
     button.type='button';button.dataset.ability=id;
     const label=(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
     if(button.textContent!==label)button.replaceChildren(window.abilityIconElement(document,id,24),document.createTextNode(label));
     button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
+    button.dataset.readiness=contextual&&!button.disabled?(reason?'blocked':'ready'):'';
+    button.dataset.reason=contextual?reason:'';
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
     button.onclick=()=>{
+      if(contextual){
+        const block=hotbarAbilityBlock(id,window.playerCloud.initial);
+        if(block){note(block);return;}
+        if(needsLearningPoints()){window.towerLearning?.open();return;}
+      }
       if(controls){controls.open=false;controls.querySelector('summary').focus();}
       if(id==='waypoint')openStyleAbilities('waypoint');
       else if(id==='shadowstep')aimShadowstep();
@@ -6527,9 +6545,13 @@ function refreshStyleAbilityBar(){
       const key=String(index+1);
       button.type='button';button.dataset.shortcut=key;
       button.setAttribute('aria-keyshortcuts',key);
-      button.setAttribute('aria-label',key+' · '+(original?.textContent??'Assign ability'));
+      const readiness=original?.dataset.readiness;
+      const cue=readiness==='ready'?(shortcuts[index]==='bloodPrice'?bloodPriceRules.health+' HP':'Ready'):readiness==='blocked'?'Unavailable':'';
+      const detail=original?.dataset.reason||cue;
+      button.setAttribute('aria-label',key+' · '+(original?.textContent??'Assign ability')+(detail?' · '+detail:''));
       button.title=key+' · '+(original?original.textContent+' — '+original.title:'Assign an ability');
       button.disabled=original?.disabled??false;
+      button.dataset.readiness=readiness??'';
       button.classList.toggle('empty-slot',!original);
       if(original?.hasAttribute('aria-pressed'))button.setAttribute('aria-pressed',original.getAttribute('aria-pressed'));
       else button.removeAttribute('aria-pressed');
@@ -6546,6 +6568,9 @@ function refreshStyleAbilityBar(){
       if(original?.disabled&&original.dataset.cooldown){
         const cooldown=document.createElement('span');cooldown.className='ability-slot-cooldown';
         cooldown.textContent=original.dataset.cooldown+'s';face.append(cooldown);
+      }else if(cue){
+        const badge=document.createElement('span');badge.className='ability-slot-readiness';
+        badge.textContent=cue;face.append(badge);
       }
       if(!button.parentNode)quick.append(button);
     }
