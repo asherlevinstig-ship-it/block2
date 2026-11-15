@@ -28,6 +28,14 @@ test('walking frames follow travelled stride and spell casting uses its own gest
  assert.equal(towerCharacterPose(meta,{weapon:true,pose:{casting:.5,attack:.5}}).state,'cast');
  assert.equal(towerCharacterPose(meta,{time:900}).column,towerCharacterPose(meta,{time:1700}).column);
 });
+test('signature abilities select distinct body poses and hold the Faultbreaker impact',()=>{
+ const pose=(id,casting,reduced=false)=>towerCharacterPose(meta,{pose:{castKind:id,casting},reduced});
+ assert.equal(pose('faultbreaker',.2).state,'chop');
+ assert.equal(pose('sanctuary',.5).state,'wave');
+ assert.equal(pose('bloodPrice',.5).state,'hurt');
+ assert.equal(pose('faultbreaker',.6).column,pose('faultbreaker',.68).column);
+ for(const id of ['faultbreaker','sanctuary','bloodPrice'])assert.equal(pose(id,.1,true).state,pose(id,.8,true).state);
+});
 test('skin tones recolour skin pixels while leaving garment materials intact',()=>{
  const pixels=new Uint8ClampedArray(80*100*4),skin=(24*80+40)*4,cloth=(55*80+40)*4;
  pixels.set([254,223,177,255],skin);pixels.set([90,80,120,255],cloth);

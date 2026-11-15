@@ -665,6 +665,13 @@ function receivePeers(peers){
     keep.add(peer.id);const old=remotePeers.get(peer.id);
     if(old)Object.assign(old,peer,{walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName});
     else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now()});
+    const actor=remotePeers.get(peer.id),cast=peer.abilityCast;
+    if(cast&&cast.at!==actor.lastSignatureCast){
+      actor.lastSignatureCast=cast.at;
+      actor.raidCastAt=performance.now()-Math.max(0,combatNow()-cast.at);
+      actor.raidCastKind=cast.id;
+      actor.raidStrikeAt=performance.now();
+    }
   }
   for(const id of remotePeers.keys())if(!keep.has(id))remotePeers.delete(id);
   const state=window.playerCloud?.initial;
@@ -690,7 +697,7 @@ function drawRemote(peer,time){
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
   const cycle=characterWalkCycle(peer,peer.rx,peer.ry,moving);
-  const raidPose=time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
+  const raidPose=time-(peer.raidStrikeAt??-10000)<950?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,castKind:peer.raidCastKind,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
@@ -6768,7 +6775,7 @@ async function castStyleAbility(id,body){
       await serverGameplay('abilityCast',{id,...body});
     if(!result?.state||id==='shadowstep'&&result.state.location!==room)return;
     const {state}=result;
-    if(id!=='shadowstep'&&id!=='waypoint')combatArt.castAt=performance.now();
+    if(id!=='shadowstep'&&id!=='waypoint'){combatArt.castAt=performance.now();combatArt.castKind=id;}
     if(dialog.open)dialog.close();
     if(id==='bindBeast'){
       setPlayerCombat(false);resetCombatArt();updateCombatPanel();worldLabelKey='';
@@ -9341,7 +9348,7 @@ function correctRoomPosition(position){
 }
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
-    getLocal:()=>({meditating:playerMeditating(),room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped]])}),
+    getLocal:()=>({meditating:playerMeditating(),room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped],...['faultbreaker','sanctuary','bloodPrice'].map(id=>window.playerCloud?.initial?.styleAbilities?.readyAt?.[id]??0)])}),
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
@@ -9436,7 +9443,7 @@ window.towerApplyTimberOrder=(state,receipt)=>{
 window.towerMillRaidHooks={
  now:()=>combatNow(),room:()=>currentRoom,position:()=>({x:player.cx,y:player.cy}),timber:()=>woodcutting.timber,discovered:()=>adventure.discovered.includes('millbrook'),
  read:()=>window.playerCloud.readMillRaid(),change:body=>window.playerCloud.millRaid(body),apply:state=>{applyServerGameplay(state);updateInventory();},
- cue:cue=>{const peer=remotePeers.get(cue.player);if(peer){if(cue.hit)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}},
+ cue:cue=>{const peer=remotePeers.get(cue.player);if(peer){if(cue.hit)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}},
  approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),
  float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
 };
@@ -9450,7 +9457,7 @@ window.towerVaultCoopHooks={
  },
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
- strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:tile=>{faceVaultTarget(tile);combatArt.castAt=performance.now();},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}}
+ strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:(tile,kind)=>{faceVaultTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}}
 };
 
 async function visitMillCellar(action){

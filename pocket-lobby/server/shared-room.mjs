@@ -1,4 +1,5 @@
 import {activeRaised,raisedRoom} from '../public/necromancy.js';
+import {signatureCast} from '../public/signature-poses.js';
 import {readingAt,sharedReadingPose} from '../public/library.js';
 import {besideHearth} from './hearth.mjs';
 import {pvpRooms,pvpGuards,witnessRange} from '../public/pvp.js';
@@ -33,7 +34,7 @@ const canMeditate=meta=>!meta.serverAuto&&!meta.auto&&!meta.seat&&!meta.activity
 export function publicPeer(meta,now=Date.now()){
   const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
   const reading=!meta.auto&&readingAt(meta.reading,meta.room,x,y,now)?meta.reading:null;
-  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,gender:meta.gender??"male",hairStyle:meta.hairStyle,faceStyle:meta.faceStyle,skinTone:meta.skinTone??0,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,undead:raisedRoom(meta.room)&&meta.health>0&&meta.undead?.until>now?meta.undead:null,activity:reading?'reading':meta.activity==='reading'?null:meta.activity??null,reading,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+  return {id:meta.id,name:meta.name,wanted:!!meta.wantedAt,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,abilityCast:meta.abilityCast??null,gender:meta.gender??"male",hairStyle:meta.hairStyle,faceStyle:meta.faceStyle,skinTone:meta.skinTone??0,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,undead:raisedRoom(meta.room)&&meta.health>0&&meta.undead?.until>now?meta.undead:null,activity:reading?'reading':meta.activity==='reading'?null:meta.activity??null,reading,...(meta.stoneguardUntil>now?{stoneguardUntil:meta.stoneguardUntil}:{}),meditating:meta.meditationRequested===true&&canMeditate(meta),mining:meta.mining??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
 }
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
@@ -53,7 +54,7 @@ export async function handleWorldConnect(request,env){
   if(!validRoomTile(room,position.x,position.y,boxes,state.adventure))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
-    name:state.avatar?.name??'Guest',wantedAt:state.pvp?.wantedAt??0,outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,gender:state.avatar?.gender??'male',hairStyle:state.avatar?.hairStyle,faceStyle:state.avatar?.faceStyle,skinTone:state.avatar?.skinTone??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),mining:miningPose(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
+    abilityCast:signatureCast(state,Date.now()),name:state.avatar?.name??'Guest',wantedAt:state.pvp?.wantedAt??0,outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,gender:state.avatar?.gender??'male',hairStyle:state.avatar?.hairStyle,faceStyle:state.avatar?.faceStyle,skinTone:state.avatar?.skinTone??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),mining:miningPose(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
   const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:publicRoomNamespace(room);
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
@@ -354,7 +355,7 @@ export class SharedRoom{
     if(message?.type==='profile'){
       const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();if(!row)return;
       const state=JSON.parse(row.state_json);if(state.location!==meta.room)return;
-      meta.name=state.avatar.name;meta.outfit=state.avatar.outfit;meta.trousers=state.avatar.trousers??0;meta.boots=state.avatar.boots??0;meta.hair=state.avatar.hair;meta.gender=state.avatar.gender??"male";meta.hairStyle=state.avatar.hairStyle;meta.faceStyle=state.avatar.faceStyle;meta.skinTone=state.avatar.skinTone??0;meta.weapon=state.combatGear?.equippedWeapon??null;meta.armour=armourSelection(state.combatGear);Object.assign(meta,familiarProfile(state));
+      meta.abilityCast=signatureCast(state,now);meta.name=state.avatar.name;meta.outfit=state.avatar.outfit;meta.trousers=state.avatar.trousers??0;meta.boots=state.avatar.boots??0;meta.hair=state.avatar.hair;meta.gender=state.avatar.gender??"male";meta.hairStyle=state.avatar.hairStyle;meta.faceStyle=state.avatar.faceStyle;meta.skinTone=state.avatar.skinTone??0;meta.weapon=state.combatGear?.equippedWeapon??null;meta.armour=armourSelection(state.combatGear);Object.assign(meta,familiarProfile(state));
       if(meta.room==='home'){meta.boxes=roomBoxes('home',state.homeFurniture);meta.seats=roomSeats('home',state.homeFurniture);}
       ws.serializeAttachment(meta);this.snapshot();return;
     }

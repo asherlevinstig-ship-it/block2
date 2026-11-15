@@ -35,7 +35,7 @@ export function initializeVaultCoop(api){
     if(delta)popup((delta>0?'+':'−')+Math.abs(delta)+' HP',member.position,delta>0?'#94f4b4':'#ff8c9e');
     if(blocked>0)popup('Shield absorbed '+blocked,member.position,'#8ef4e2',1);
    }
-   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500});}
+   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,castKind:m.castKind,castAge:Math.max(0,raid.observedAt-m.castAt)});}
   }
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
   if(result.state&&result.receipt&&raid?.status==='victory'&&!result.state.vaultCoop&&result.state.depthsRun?.cleared===3)api.reward?.(result.state);
@@ -44,7 +44,7 @@ export function initializeVaultCoop(api){
  async function send(kind,slot,feedback){
   if(['strike','dodge','power','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind)&&raid?.status!=='battle'){feedback?.('The Vault fight is no longer active.');return;}
   if(busy){feedback?.('Wait for the current Vault action to finish.');return;}busy=true;
-  try{const result=await api.change({kind,id:raid?.id??api.state().party,slot:kind==='shadowstep'?undefined:slot,tile:kind==='shadowstep'?slot:undefined,mechanism:kind==="mechanism"?slot:undefined,target:selected,ally:$('coopAlly').value});accept(result);if(dialog.open)dialog.close();const tile=raid?.adds.find(a=>a.id===selected)??raid?.origin;if(kind==='strike')api.strike(tile);if(['power','sanctuary','faultbreaker'].includes(kind))api.cast(tile);if(kind==='dodge')api.dodge();return result;}
+  try{const result=await api.change({kind,id:raid?.id??api.state().party,slot:kind==='shadowstep'?undefined:slot,tile:kind==='shadowstep'?slot:undefined,mechanism:kind==="mechanism"?slot:undefined,target:selected,ally:$('coopAlly').value});accept(result);if(dialog.open)dialog.close();const tile=raid?.adds.find(a=>a.id===selected)??raid?.origin;if(kind==='strike')api.strike(tile);if(['power','sanctuary','faultbreaker'].includes(kind))api.cast(tile,kind==='power'?null:kind);if(kind==='dodge')api.dodge();return result;}
   catch(error){feedback?.(error.message);$('coopFeedback').textContent=error.message;$('coopJoinError').textContent=error.message;if((error.status===402||/closer|mana|Action Point/i.test(error.message))&&kind==='strike')autoAttack=false;}
   finally{busy=false;render();}
  }

@@ -1,8 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {playerCombatPose,boarCombatPose} from '../public/combat-art.js';
+import {signatureCast} from '../public/signature-poses.js';
 
 const events={strikeAt:1000,hurtAt:2000,dodgeAt:3000,boarAttackAt:4000,boarHitAt:1000,victoryAt:5000};
+test('signature ability poses last for their own duration and settle without repeating',()=>{
+ for(const [id,duration] of [['faultbreaker',900],['sanctuary',800],['bloodPrice',850]]){
+  const cue={...events,strikeAt:-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000,castAt:1000,castKind:id};
+  const pose=playerCombatPose({time:1500,now:1500,encounter:null,events:cue});
+  assert.equal(pose.castKind,id);assert(pose.casting>0);
+  const ended=playerCombatPose({time:1000+duration,now:1000+duration,encounter:null,events:cue});
+  assert.equal(ended.casting,null);assert.equal(ended.castKind,null);
+  assert.equal(signatureCast({styleAbilities:{readyAt:{[id]:46000}}},1500).id,id);
+  assert.equal(signatureCast({styleAbilities:{readyAt:{[id]:46000}}},1000+duration),null);
+ }
+});
 test('combat poses anticipate, strike, recover and settle after their events',()=>{
   const encounter={nextPlayerAt:1200,nextBoarAt:1500};
   const before=playerCombatPose({time:900,now:900,encounter,events});

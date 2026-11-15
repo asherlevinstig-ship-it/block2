@@ -90,7 +90,15 @@ export function towerCharacterPose(meta,options={}){
   else if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
   else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
   else if(pose.recoil>1){state='hurt';frame=reduced?0:pose.hurtProgress>.5?1:0;}
-  else if(pose.casting!==null&&pose.casting!==undefined){state='cast';frame=reduced?3:Math.floor(clamp(pose.casting,0,.999)*6);}
+  else if(pose.casting!==null&&pose.casting!==undefined){
+    const phase=clamp(pose.casting,0,.999);
+    if(pose.castKind==='faultbreaker'){
+      state='chop';
+      frame=reduced?5:phase<.4?Math.floor(phase/.1):phase<.58?3:phase<.7?5:phase<.85?6:7;
+    }else if(pose.castKind==='sanctuary'){state='wave';frame=reduced?1:phase<.2?0:phase<.8?1:3;}
+    else if(pose.castKind==='bloodPrice'){state=reduced?'hurt':phase<.2?'ready':'hurt';frame=reduced?0:phase<.6?0:1;}
+    else{state='cast';frame=reduced?3:Math.floor(phase*6);}
+  }
   else if(weapon&&['basicAxe','basicPick','copperPick','ironPick','runicPick'].includes(weaponTier)){state='chop';frame=reduced?5:Math.floor(clamp(pose.chop??((time%700)/700),0,.999)*8);}
   else if(weapon&&pose.attack!==null&&pose.attack!==undefined){
     state='attack';
@@ -109,7 +117,25 @@ export function towerCharacterPose(meta,options={}){
   const animation=meta.states[state];frame=clamp(Math.floor(frame),0,animation.frames-1);
   const column=animation.start+frame,detail=meta.poses[meta.directions[row]][column];
   if(options.reading){const age=Math.max(0,options.readingAge??time),phase=age%2800;return {state:'reading',frame:reduced||phase<2300?0:1+Math.min(2,Math.floor((phase-2300)/167)),row,column,detail};}
-  return {state:options.meditating?'meditate':state,frame:options.meditating?(reduced?0:Number(Math.sin(time/1600)>.25)):frame,row,column,detail};
+  return {state:options.meditating?'meditate':state,signature:pose.casting!==null&&pose.casting!==undefined?pose.castKind:null,frame:options.meditating?(reduced?0:Number(Math.sin(time/1600)>.25)):frame,row,column,detail};
+}
+
+function bloodPriceHands(pixels,source,width,height,appearance,selection,armour){
+ const body=[];
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const i=(y*width+x)*4;
+  if(source[i]===250&&source[i+1]===1&&source[i+3])body.push({x,y});
+ }
+ if(!body.length)return;
+ const top=Math.min(...body.map(p=>p.y)),cx=Math.floor(width/2),back=selection.row>=2;
+ const sleeve=armour==='towerPlate'?['#40536f','#91a9bc','#d7e2e6']:JACKETS[appearance.outfit??0]??JACKETS[0];
+ const put=(x,y,color)=>{if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],(y*width+x)*4);};
+ for(const {x,y} of body)if(y>top+8&&Math.abs(x-cx)>12)pixels.fill(0,(y*width+x)*4,(y*width+x)*4+4);
+ for(const side of [-1,1])for(let step=0;step<11;step++){
+  const x=cx+side*(13-step),y=top+14-Math.floor(step/3);
+  for(let dy=0;dy<4;dy++)put(x,y+dy,dy===0?sleeve[2]:sleeve[0]);
+ }
+ if(!back)for(const side of [-1,1])for(let dx=0;dx<4;dx++)for(let dy=0;dy<3;dy++)put(cx+side*(3+dx),top+10+dy,dy?'#edbd8e':'#ffe0ae');
 }
 
 // Keep the authored face, hair and tailored torso. Fold the lower body into a
@@ -451,7 +477,7 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
   const meta=metadata,cache=new Map(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
-    const key=[selection.state,selection.frame,selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",appearance.hairStyle??'',appearance.faceStyle??'',appearance.skinTone??0,vest??false].join(':');
+    const key=[selection.state,selection.frame,selection.row,selection.column,selection.signature??'',appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",appearance.hairStyle??'',appearance.faceStyle??'',appearance.skinTone??0,vest??false].join(':');
     if(cache.has(key)){const image=cache.get(key);cache.delete(key);cache.set(key,image);return image;}
     const atlas=vest&&vest!=='prospectorsGloves'?atlases.armour:atlases.normal,pixels=new Uint8ClampedArray(width*height*4),sourcePixels=new Uint8ClampedArray(width*height*4);
     const indices=[0,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0];
@@ -469,6 +495,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
     if(selection.state==='reading')readingTowerFrame(pixels,width,height,appearance,selection);
     if(selection.state==='meditate')meditateTowerFrame(pixels,sourcePixels,width,height,appearance,selection);
+    if(selection.signature==='bloodPrice')bloodPriceHands(pixels,sourcePixels,width,height,appearance,selection,vest);
     finishCharacterFace(pixels,width,height,appearance,selection);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');
     const data=typeof ImageData==='function'?new ImageData(pixels,width,height):{data:pixels,width,height};ctx.putImageData(data,0,0);
@@ -480,6 +507,10 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     if(options.meditating)options={...options,weapon:false,sheathed:false};
     const selection=towerCharacterPose(meta,options),image=frameImage(appearance,selection,options.vest);
     const [gx,gy]=grip(x,y,options);ctx.save();ctx.imageSmoothingEnabled=false;
+    const phase=options.pose?.casting??0,signature=selection.signature;
+    const handCast=signature==='sanctuary'||signature==='bloodPrice';
+    const toolAngle=signature==='faultbreaker'&&selection.frame===5?
+      (selection.row===0||selection.row===3?-2.6:2.6):selection.detail.toolAngle;
     if(options.meditating){
       const phase=options.reduced?0:(options.time??0)/1600;
       ctx.save();ctx.globalAlpha*=.35+.08*Math.sin(phase);ctx.strokeStyle='#c2b4fa';ctx.lineWidth=.65;
@@ -490,10 +521,27 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     }
     const carried=options.sheathed&&!options.weapon?carriedTowerEquipment(meta,x,y,options):null;
     if(carried&&!options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
-    if(options.weapon&&options.back&&selection.state!=='cast')drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
+    if(options.weapon&&options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
     ctx.drawImage(image,Math.round(x-meta.pivot[0]*meta.scale),Math.round(y-meta.pivot[1]*meta.scale),width*meta.scale,height*meta.scale);
     if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
-    if(options.weapon&&!options.back&&selection.state!=='cast')drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
+    if(options.weapon&&!options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
+    if(signature){
+      const fade=Math.sin(phase*Math.PI),reduced=options.reduced;
+      ctx.save();ctx.globalAlpha*=reduced?.7:Math.max(.2,fade);
+      ctx.lineWidth=1;ctx.strokeStyle=signature==='bloodPrice'?'#f18aa5':signature==='sanctuary'?'#a1ffe2':'#ffd18b';
+      if(signature==='faultbreaker'&&phase>=.58){
+        const radius=reduced?15:8+(phase-.58)*45;
+        ctx.beginPath();ctx.ellipse(x,y+1,radius,radius*.4,0,0,Math.PI*2);ctx.stroke();
+        for(const side of [-1,1]){ctx.beginPath();ctx.moveTo(x+side*4,y);ctx.lineTo(x+side*8,y+2);ctx.lineTo(x+side*15,y-1);ctx.stroke();}
+      }else if(signature==='sanctuary'){
+        ctx.beginPath();ctx.ellipse(x,y+1,17,6,0,0,Math.PI*2);ctx.stroke();
+        ctx.strokeRect(gx-3,gy-3,6,6);
+      }else if(signature==='bloodPrice'){
+        ctx.beginPath();ctx.ellipse(x,y-16,12+phase*3,18,0,0,Math.PI*2);ctx.stroke();
+        ctx.fillStyle='#ffc2d2';ctx.fillRect(x-1,y-24,2,4);
+      }
+      ctx.restore();
+    }
     ctx.restore();return selection;
   }
   function head(ctx,appearance={},back=false,blink=false){

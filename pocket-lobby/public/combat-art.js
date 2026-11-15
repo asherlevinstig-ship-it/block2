@@ -1,4 +1,5 @@
 import {enemyAttack} from './hunting.js';
+import {signaturePoses} from './signature-poses.js';
 
 const clamp=value=>Math.max(0,Math.min(1,value));
 const pulse=(age,duration)=>age>=0&&age<duration?Math.sin(age/duration*Math.PI):0;
@@ -9,12 +10,13 @@ export function playerCombatPose({time,now,encounter,events,reduced=false}){
   const windup=ready?clamp(1-(encounter.nextPlayerAt-now)/240):0;
   const strikeAge=time-events.strikeAt;
   const castAge=time-events.castAt;
-  const casting=castAge>=0&&castAge<380;
+  const signature=signaturePoses[events.castKind],duration=signature?.duration??380;
+  const casting=castAge>=0&&castAge<duration;
   const swing=!casting&&strikeAge>=0&&strikeAge<360;
   const strike=swing?clamp(strikeAge/140):0;
   const recover=swing?clamp((strikeAge-140)/220):0;
   return {
-    armed:ready||victory,ready,victory,casting:casting?clamp(castAge/380):null,attack:swing?clamp(strikeAge/360):null,
+    armed:ready||victory||casting,ready,victory,castKind:casting&&signature?events.castKind:null,casting:casting?clamp(castAge/duration):null,attack:swing?clamp(strikeAge/360):null,
     angle:reduced?-.45:victory?-1.05:casting?-.55-pulse(castAge,380)*1.15:swing?-.95+strike*2.55-recover*1.95:-.45-windup*.7,
     lunge:reduced||!swing?0:pulse(strikeAge,340)*5,
     recoil:reduced?0:pulse(time-events.hurtAt,280)*4,

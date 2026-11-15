@@ -57,7 +57,7 @@ export function recordCombatFx(events,result,time){
   if(action==='enemy'&&!result.targetId)events.boarAttackAt=time;
   if(taken)events.hurtAt=time;
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
-  if(power)events.castAt=time;
+  if(power){events.castAt=time;events.castKind=null;}
   if(result.outcome==='victory')events.victoryAt=time;
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
