@@ -1,4 +1,6 @@
 import {drawWildBoar,boarArtHeight} from './wild-boar-art.js';
+import {drawStonebackBeetle,stonebackArtHeight} from './stoneback-beetle-art.js';
+import {drawMoonbackStag,moonbackArtHeight} from './moonback-stag-art.js';
 import {drawMapProp} from './map-prop-art.js';
 import {ashenAreas,ashenPropHeights,ashbackArtHeight,drawAshenGround,drawAshenProp,drawCinderback,drawAshback} from './ashen-march.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
@@ -47,7 +49,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#303645','#443f56','#a38a77'],authored:[['wildtree',1,2],['wildtree',6,2],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from one of three fishing posts and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',2,0],['wildtree',0,8],['wildrock',2,7],['wildbloom',2,9],['wildbloom',3,3]]}
   };
-  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
+  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:stonebackArtHeight,moonbackStag:moonbackArtHeight,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -324,27 +326,8 @@ export const moonwood=(()=>{
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
+    if(type==='moonbackStag'){drawMoonbackStag(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
-    if(type==='moonbackStag'){
-      // Draw the silhouette in screen space so the antlers stay distinct at game scale.
-      const idle=reduced?0:Math.round(Math.sin(time/470)*1.2),ink='#243144',fur='#82958e',light='#b5c3aa',horn='#e6e0b6';
-      const poly=(points,color)=>polygon(points.map(([u,v])=>[px+u,py+v+idle]),color);
-      for(const [leg,ground] of [[-11,-1],[-5,-3],[7,0],[12,-2]]){
-        poly([[leg-2,-17],[leg+2,-17],[leg+1,ground-3],[leg+3,ground],[leg-1,ground],[leg-2,ground-5]],ink);
-        rect(px+leg-1,py+ground-2+idle,3,2,'#51696d');
-      }
-      poly([[-18,-20],[-13,-26],[0,-25],[9,-22],[15,-26],[18,-17],[10,-11],[-10,-12],[-16,-15]],ink);
-      poly([[-16,-20],[-12,-24],[2,-23],[12,-19],[9,-14],[-9,-14],[-14,-17]],fur);
-      poly([[-14,-22],[-10,-24],[2,-23],[9,-20],[-3,-18]],light);
-      poly([[7,-21],[11,-33],[17,-37],[22,-32],[26,-31],[24,-27],[17,-28],[14,-17],[10,-15]],ink);
-      poly([[10,-22],[13,-32],[17,-35],[21,-31],[25,-30],[23,-28],[17,-29],[14,-20]],fur);
-      poly([[13,-32],[10,-37],[15,-36],[17,-34]],light);
-      poly([[16,-34],[14,-42],[9,-47],[7,-45],[10,-43],[8,-41],[10,-40],[12,-41],[14,-34]],horn);
-      poly([[19,-34],[20,-42],[24,-47],[26,-46],[23,-43],[26,-43],[26,-41],[22,-40],[21,-34]],horn);
-      rect(px+20,py-32+idle,2,2,'#e5f9b7');
-      rect(px-5,py-22+idle,2,2,'#d2efc4');rect(px-1,py-21+idle,1,1,'#e2f1d0');
-      return;
-    }
     if(type==='restAltar'){
       part(.12,.12,.76,.76,0,7,stone);part(.22,.22,.56,.56,7,12,['#a3cfc0','#486b70','#71968c']);
       surface(x+.25,y+.25,.5,.5,19,'#86e5cd');rect(px-2,py-28,4,17,'#b9ffe0');rect(px-7,py-23,14,4,'#b9ffe0');
@@ -510,33 +493,7 @@ export const moonwood=(()=>{
         }
         ctx.restore();return;
       }
-      const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
-      const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
-      const gilded=item.cacheGuardian===true||item.archetype==='armoured';
-      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
-      for(const [u,v] of [[.13,.22],[.13,.48],[.13,.73],[.69,.22],[.69,.48],[.69,.73]]){
-        part(u,v,.19,.10,flipped?6:0,flipped?5:4,['#687b77','#263948','#41545b']);
-      }
-      if(flipped){
-        part(.15,.16,.72,.70,1,5,shell);
-        part(.24,.25,.52,.49,6,5,['#a7cb80','#527865','#718f66']);
-        rect(px-4,py-12,7,2,'#eddf9c');
-        rect(px-2,py-14,3,6,'#d7d88e');
-      }else{
-        part(.18,.14,.65,.68,4,9,shell);
-        part(.25,.21,.50,.52,13,5,shell);
-        part(.35,.34,.29,.26,18,2,['#abbab0','#55666d','#708486']);
-        part(.65,.54,.25,.29,4+rise,7,['#748886','#3b4a56','#4d6266']);
-        rect(px+4,py-10-rise,2,2,pose.windup>.4?'#ffb576':'#b7d69d');
-        rect(px+10,py-7-rise,2,2,pose.windup>.4?'#ffb576':'#b7d69d');
-        if(gilded){
-          part(.28,.28,.44,.39,19,3,['#e5c77e','#785c69','#b29469']);
-          polygon([[px,py-31],[px+4,py-25],[px,py-20],[px-4,py-25]],'#a9edec');
-          rect(px-10,py-24,2,7,'#e5c77e');rect(px+8,py-24,2,7,'#e5c77e');
-        }
-        rect(px-3,py-17,2,5,'#455a60');
-        rect(px-8,py-12,5,1,'#91a5a0');
-      }
+      drawStonebackBeetle(item,time,{point,polygon,rect,surface,reduced,pose,exposed:!pose.defeated&&(combat?.exposedUntil??0)>Date.now()});
     }else if(type==='wildboar'){
       drawWildBoar(item,time,{point,polygon,rect,surface,reduced,pose});
     }else if(type==='wildtree'||type==='timberTree'){

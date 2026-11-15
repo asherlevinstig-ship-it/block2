@@ -1,4 +1,5 @@
-export const cellarHeights={cellarCrack:28,cellarStairs:18,cellarShelf:35,cellarPillar:48,cellarSacks:15,cellarLantern:29,cellarChest:20,cellarJournal:14,cellarCustodian:47};
+import {drawClockworkCustodian,custodianArtHeight} from './clockwork-custodian-art.js';
+export const cellarHeights={cellarCrack:28,cellarStairs:18,cellarShelf:35,cellarPillar:48,cellarSacks:15,cellarLantern:29,cellarChest:20,cellarJournal:14,cellarCustodian:custodianArtHeight};
 export function drawCellarGround({point,polygon,surface,block}){
  polygon([point(.6,.6,-12),point(11.2,.6,-12),point(11.2,9.2,-12),point(.6,9.2,-12)],'#050f1b88');
  block(1,1,10,8,-10,10,['#494652','#292a38','#343443']);
@@ -67,14 +68,8 @@ export function drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,r
   return;
  }
  if(type==='cellarCustodian'){
-  const bob=reduced?0:Math.sin(time/240),hit=pose.hit,wind=pose.windup??0;
   ctx.save();ctx.globalAlpha=pose.alpha??1;ctx.translate(Math.round(px),Math.round(py+(pose.fall??0)));ctx.scale(1,pose.squash??1);
-  const r=(a,b,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(a,b,w,h);};
-  r(-14,-3,28,4,'#13232b66');r(-10,-8,7,8,'#333d4a');r(3,-8,7,8,'#333d4a');
-  r(-13,-31+bob,26,24,hit?'#fff0bf':'#5b5c5e');r(-10,-29+bob,20,18,'#b28c5b');r(-7,-26+bob,14,12,'#354b52');r(-4,-24+bob,8,8,hit?'#fff4d0':'#8dd6ce');r(-2,-23+bob,3,4,'#e3fff0');
-  r(-17,-30+bob,7,10,'#747774');r(-19,-21+bob,7,12,'#4c555e');r(-18,-14+bob,6,4,'#bd9f69');
-  r(11,-30+bob,8,11,'#888b7f');r(15,-23-wind*6+bob,7,15,'#4a525c');r(13,-13-wind*6+bob,13,7,'#b7ac86');r(16,-16-wind*6+bob,6,13,'#b7ac86');r(17,-11-wind*6+bob,4,4,'#4f5b61');
-  r(-8,-43+bob,16,13,'#535f67');r(-10,-43+bob,20,3,'#c3ab77');r(-6,-39+bob,12,3,'#222f40');r(-4,-39+bob,3,2,'#9ee8db');r(2,-39+bob,3,2,'#9ee8db');r(-4,-33+bob,8,2,'#bda674');r(-2,-47+bob,4,4,'#8f9d92');
+  drawClockworkCustodian(ctx,time,{pose,reduced});
   ctx.restore();
  }
 }
