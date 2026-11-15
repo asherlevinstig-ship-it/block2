@@ -1,4 +1,5 @@
 import {millRaidClock,raidThreat,bridgeBarricade,besideBarricade} from './mill-raid.js';
+import {drawReedSkitter} from './reed-skitter-art.js';
 import {drawMillbreaker} from './millbreaker-art.js';
 export function initializeMillRaid(api){
  let raid=null,room=null,busy=false,selected=null,fighting=false,repairQueued=false,notice='',strikeAt=-10000,castAt=-10000,lastRead=0;
@@ -136,9 +137,9 @@ export function initializeMillRaid(api){
   const impactAge=bridge?.lastHitAt?clock-bridge.lastHitAt:Infinity;
   const impact=breaker&&impactAge>=0&&impactAge<420;
   const hurt=clock-item.hitAt<200,hop=reduced||breaker?0:Math.sin(time/(skitter?160:320)+item.x)*1.3;
-  const age=(now()-(raid?.opens??now()))%4000,lunge=item.kind==='merchant'||breaker||reduced||age>350?0:Math.sin(age/350*Math.PI)*7;
+  const age=(clock-(raid?.opens??clock))%4000,lunge=item.kind==='merchant'||breaker||reduced||age>350?0:Math.sin(age/350*Math.PI)*7;
   const [px,py]=point(api.position().x+.5,api.position().y+.5);
-  ctx.save();ctx.translate(Math.round(x+Math.sign(px-x)*lunge),Math.round(y+Math.sign(py-y)*lunge*.6));ctx.scale(scale,scale);ctx.fillStyle='#101a2766';ctx.beginPath();ctx.ellipse(0,0,15,6,0,0,Math.PI*2);ctx.fill();ctx.translate(0,hop);
+  ctx.save();ctx.translate(Math.round(x+Math.sign(px-x)*lunge),Math.round(y+Math.sign(py-y)*lunge*.6));ctx.scale(scale,scale);ctx.fillStyle='#101a2766';ctx.beginPath();ctx.ellipse(0,0,15,6,0,0,Math.PI*2);ctx.fill();ctx.translate(0,skitter?0:hop);
   const rect=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(x,y,w,h);};
   if(item.kind==='merchant'){
    rect(-8,-6,6,6,'#30374c');rect(2,-6,6,6,'#30374c');rect(-11,-29,22,23,'#bc9a57');rect(-4,-28,8,22,'#e4cf9c');rect(-8,-40,16,13,'#e8ba8b');rect(-10,-44,20,6,'#557c65');rect(-14,-40,28,3,'#557c65');rect(-5,-35,2,2,'#27333a');rect(3,-35,2,2,'#27333a');rect(11,-19,12,13,'#826143');rect(13,-22,8,4,'#f2d99a');
@@ -146,15 +147,15 @@ export function initializeMillRaid(api){
    const [bx,by]=point(bridgeBarricade.x+.5,bridgeBarricade.y+.5);
    drawMillbreaker(ctx,{left:bx<x||bx===x&&by<y,hurt,reduced,wind:attacking?1-remaining/bridgeBarricade.tell:0,impact:impact?1-impactAge/420:0});
   }else if(skitter){
-   for(let i=0;i<3;i++){const move=reduced?0:Math.sin(time/120+i)*2;rect(-17+i*2,-5-i*3+move,8,3,'#172f3d');rect(9-i*2,-5-i*3-move,8,3,'#172f3d');}
-   rect(-12,-20,24,15,hurt?'#fff1bf':'#163640');rect(-10,-22,20,15,'#4a8e87');rect(-8,-22,7,12,'#70b6a1');rect(1,-20,7,8,'#397573');rect(-9,-8,18,7,'#293344');rect(-7,-7,4,2,'#ffd783');rect(3,-7,4,2,'#ffd783');rect(-6,-2,2,4,'#eed7af');rect(4,-2,2,4,'#eed7af');
+   const threat=raidThreat(raid.opens,clock,raid.wave-1);
+   drawReedSkitter(ctx,{hurt,reduced,wind:threat.warning?1-(threat.lands-clock)/1600:0,pounce:clock>raid.opens&&age<330?1-age/330:0,time});
   }else{
    rect(-10,-7,7,7,'#17283b');rect(3,-7,7,7,'#17283b');rect(-14,-31,28,26,hurt?'#fff0c4':boss?'#64394b':'#394c4f');rect(-10,-28,20,17,boss?'#aa6950':'#7a8671');rect(-3,-26,6,13,'#d5b66c');rect(-17,-29,8,8,'#565d5b');rect(9,-29,8,8,'#565d5b');rect(-9,-43,18,14,'#26353d');rect(-7,-41,14,11,'#868e79');rect(-5,-37,3,2,'#ffcd79');rect(2,-37,3,2,'#ffcd79');rect(-2,-33,4,2,'#283a40');
    rect(17,-30,3,25,'#62513c');rect(12,-35,13,8,'#adb39d');
    if(boss){rect(-12,-48,4,10,'#d6ba80');rect(8,-48,4,10,'#d6ba80');rect(-16,-52,7,4,'#d6ba80');rect(9,-52,7,4,'#d6ba80');rect(-7,-46,14,4,'#c39a62');}
   }
-  const height=skitter?30:boss?62:attacking?79:62;if(item.kind!=='merchant'){rect(-15,-height,30,4,'#172232');rect(-14,-height+1,28*item.hp/item.max,2,boss?'#f0aa75':'#b5d58d');}ctx.restore();
-  actors.push({id:'mill-'+item.id,enemy:true,name:item.name,detail:item.kind==='merchant'?'Relief supplies':attacking?'Bridge wind-up':item.id===selected?'Target':'Raider',x,y:y-(skitter?38:boss?85:height+10),action:()=>api.approach(item)});
+  const height=skitter?37:boss?62:attacking?79:62;if(item.kind!=='merchant'){rect(-15,-height,30,4,'#172232');rect(-14,-height+1,28*item.hp/item.max,2,boss?'#f0aa75':'#b5d58d');}ctx.restore();
+  actors.push({id:'mill-'+item.id,enemy:true,name:item.name,detail:item.kind==='merchant'?'Relief supplies':attacking?'Bridge wind-up':item.id===selected?'Target':'Raider',x,y:y-(skitter?46:boss?85:height+10),raidBounds:{left:x-(skitter?31:38),right:x+(skitter?31:38),top:y-height*scale,bottom:y+7},action:()=>api.approach(item)});
   if(now()-item.hitAt<700){ctx.save();ctx.fillStyle='#ffe5a5';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('HIT',x,y-32-(now()-item.hitAt)/40);ctx.restore();}
  }
  function items(){

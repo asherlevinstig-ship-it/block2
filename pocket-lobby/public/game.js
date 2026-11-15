@@ -3890,6 +3890,23 @@ function positionWorldLabels(p){
 }
 const willowbankDistance=item=>Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y);
 let lastWorldLabelCheck=-Infinity;
+let lastRaidLabelCheck=-Infinity;
+function updateRaidLabelVisibility(time){
+  if(currentRoom!=='millbrook'||time-lastRaidLabelCheck<100)return;
+  lastRaidLabelCheck=time;
+  const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
+  const xAt=x=>p.x+((x-camX)*zoom+cx)*p.scale;
+  const yAt=y=>p.y+((y-camY)*zoom+cy)*p.scale;
+  const enemies=renderedActors.filter(actor=>actor.raidBounds&&actor.id!=='mill-merchant').map(({raidBounds:box})=>({
+    left:xAt(box.left),right:xAt(box.right),top:yAt(box.top),bottom:yAt(box.bottom)
+  }));
+  const labels=worldLabelAnchors.filter(({kind})=>kind==='door'||kind==='npc').map(({label})=>({
+    label,left:parseFloat(label.style.left),top:parseFloat(label.style.top),width:label.offsetWidth,height:label.offsetHeight
+  }));
+  for(const {label,left,top,width,height} of labels){
+    label.classList.toggle('raid-obscures-enemy',enemies.some(box=>left<box.right&&left+width>box.left&&top<box.bottom&&top+height>box.top));
+  }
+}
 function updateWorldLabels(time){
   if(Number.isFinite(time)){
     if(worldLabelKey&&time-lastWorldLabelCheck<100){positionWorldLabels(canvasBounds());return;}
@@ -4450,6 +4467,7 @@ function draw(time){
   drawWoodEffects(time);
   if(enemy)drawCombatOverlayFx({ctx,width,height,renderScale:worldRenderScale,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels(time);
+  updateRaidLabelVisibility(time);
   drawHudMiniMap();
   updateActorNameplates();
   if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
