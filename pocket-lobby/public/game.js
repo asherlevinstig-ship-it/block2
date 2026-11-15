@@ -6378,6 +6378,7 @@ function openAbilityWheel(){
       list.append(row);
     }
     preview.append(title,list);
+    choices.dataset.preview=String(index);
   }
   function renderEditor(){
     editor.replaceChildren();editor.hidden=!editing;
@@ -6402,7 +6403,12 @@ function openAbilityWheel(){
   }
   choices.querySelectorAll('button').forEach(button=>button.remove());
   for(const [index,name] of abilitySetNames.entries()){
-    const button=document.createElement('button');button.type='button';button.textContent=name;
+    const button=document.createElement('button');button.type='button';
+    const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    icon.setAttribute('class','hud-icon');icon.setAttribute('aria-hidden','true');
+    const use=document.createElementNS('http://www.w3.org/2000/svg','use');
+    use.setAttribute('href','#hud-i-'+['combat','stone','map','bag'][index]);
+    icon.append(use);button.append(icon,document.createTextNode(name));
     button.dataset.direction=['north','east','south','west'][index];
     if(index===config.active)button.setAttribute('aria-current','true');
     button.onpointerenter=()=>{if(!editing)showPreview(index);};

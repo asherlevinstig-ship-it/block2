@@ -12,9 +12,13 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
  create('p',teacher?'Teacher access · All abilities available.':permanent.length+' of '+Object.keys(catalog).length+' abilities learned.',contents,'offer-commitment');
  const collection=create('details',undefined,contents);
  create('summary','Learned abilities and mastery',collection);
+ collection.className='ability-collection';
  for(const id of learned){
   const progress=mastery(state,id),card=create('section',undefined,collection,'ability-mastery-card');
-  create('strong',catalog[id].name+' · Mastery '+progress.stage+' / 3',card);
+  const heading=create('header',undefined,card,'ability-card-heading');
+  create('span',catalog[id].icon,heading,'ability-card-icon').setAttribute('aria-hidden','true');
+  create('strong',catalog[id].name,heading);
+  create('small','Mastery '+progress.stage+' / 3',heading);
   create('p',progress.benefit,card);
   create('small',practice[id],card);
   if(progress.next){
