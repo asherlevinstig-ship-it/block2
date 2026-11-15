@@ -10,6 +10,17 @@ export const coopPhase=raid=>raid.hp>raid.max*2/3?1:raid.hp>raid.max/3?2:3;
 export const coopMove=raid=>smartAttacks[raid.move]??smartAttacks.bossIronSmash;
 export function coopEncounter(raid){return {enemy:'depthsGuardian',bossVersion:1,brainVersion:2,brainMaxHealth:raid.max,health:raid.hp,nextPlayerAt:raid.self?.nextStrikeAt??0,brainMove:raid.move,arenaVersion:1,arenaRoom:'depthsVault',vaultMechanism:raid.vaultMechanism,arenaEnemy:raid.origin??{x:6,y:5},brainOrigin:raid.origin??{x:6,y:5},arenaTarget:raid.targetTile??{x:5,y:5},arenaMarks:raid.marks,arenaLockedFor:raid.landsAt,nextBoarAt:raid.landsAt,staggerWeakUntil:raid.exposedUntil??0,exposedUntil:raid.exposedUntil??0};}
 export function coopDanger(raid,position){const e={...coopEncounter(raid),arenaPlayer:position};return arenaInDanger(e,coopMove(raid))&&!arenaBehindCover(e,coopMove(raid));}
+export function vaultWarningPrompt(move,ms,{danger,covered,canDodge}){
+ if(covered)return 'In cover · Hold position';
+ if(!danger)return 'Clear of this attack';
+ if(canDodge&&ms>0&&ms<=350)return 'DODGE NOW · Space';
+ if(move.shape==='safeLane')return 'Reach the green lane';
+ if(move.shape==='marks')return 'Leave the marked rings';
+ if(move.blockable)return 'Get behind a pillar or step out of the bolt lanes';
+ if(move.opensShell)return 'Leave the ring or wait for the dodge cue';
+ if(move.shape==='arc')return 'Step sideways out of the sweep';
+ return 'Step out of the marked tiles';
+}
 export function vaultDefeatTip(move){
  const name=typeof move==='string'?move:move?.name??'The Guardian';
  if(/Hunter’s Sweep/i.test(name))return 'Reach the green lane on foot or with Shadowstep. Time a dodge just before impact if you can’t reach it.';

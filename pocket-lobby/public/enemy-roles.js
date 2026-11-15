@@ -8,7 +8,8 @@ export const dungeonEnemyRoles={
 export function platedDefence(e,now){
  if(e?.addActor||e?.brainVersion!==2||!['depthsBeetle','treasuryGuardian','depthsGuardian'].includes(e.enemy))return null;
  if(e.enemy==='depthsGuardian'&&e.health<=(e.brainMaxHealth??420)*2/3)return null;
- if(now<(e.exposedUntil??0)||now<(e.staggerWeakUntil??0)||now<(e.brainRecoveryUntil??0))return 'open';
+ const guardCounter=e.enemy==='depthsGuardian'&&now<(e.counterUntil??0);
+ if(guardCounter||now<(e.exposedUntil??0)||now<(e.staggerWeakUntil??0)||now<(e.brainRecoveryUntil??0))return 'open';
  // Facing is the committed warning, never a direction changed after player input.
  if(e.arenaLockedFor!==e.nextBoarAt||!e.brainOrigin||!e.arenaTarget||!e.arenaPlayer)return 'front';
  const o=e.brainOrigin,t=e.arenaTarget,p=e.arenaPlayer,dx=t.x-o.x,dy=t.y-o.y,px=p.x-o.x,py=p.y-o.y;

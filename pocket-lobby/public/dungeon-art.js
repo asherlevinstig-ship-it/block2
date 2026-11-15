@@ -87,7 +87,8 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
 }
 export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced}){
  if(encounter?.arenaVersion!==1||encounter.nextBoarAt-now>move.tell||encounter.nextBoarAt<now)return false;
- const danger=move.shape==='bolt'?'#bc8df7':'#f19a6e',alpha=reduced?.35:.3+Math.sin(now/85)*.07;
+ const imminent=encounter.enemy==='depthsGuardian'&&encounter.nextBoarAt-now<=350;
+ const danger=imminent?'#ffceac':move.shape==='bolt'?'#bc8df7':'#f19a6e',alpha=reduced?.35:.3+Math.sin(now/85)*.07;
  ctx.save();
  for(let y=1;y<9;y++)for(let x=1;x<12;x++){
   if(!dungeonFloor(encounter.arenaRoom,x,y,encounter.vaultMechanism))continue;
@@ -99,7 +100,7 @@ export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced
    surface(x+.05,y+.05,.9,.9,.9,'#d05affaa','#f3baff');
    continue;
   }
-  const covered=arenaBehindCover(encounter,move,{x,y});surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+'55',covered?'#93e6c4':danger);
+  const covered=arenaBehindCover(encounter,move,{x,y});surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+(imminent?'99':'55'),covered?'#93e6c4':danger);
   if(!covered){const [px,py]=point(x+.5,y+.5,1);ctx.globalAlpha=alpha+.35;ctx.fillStyle=danger;ctx.fillRect(px-1,py-3,2,4);ctx.fillRect(px-1,py+3,2,1);ctx.globalAlpha=1;}
  }
  const target=encounter.arenaTarget??encounter.arenaEnemy??{x:6,y:5};

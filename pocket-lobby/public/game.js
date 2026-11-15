@@ -1605,7 +1605,10 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     const tile=result.enemyTile??(encounter?.arenaVersion===1?combatTargetTile(encounter):null);
     faceCombatTarget(tile);
   }
-  if(playEffects)recordCombatFx(combatArt,result,performance.now());
+  if(playEffects){
+    recordCombatFx(combatArt,result,performance.now());
+    if(result.counter)combatAudio.play('counter');
+  }
   hunting.encounter=result.encounter;health=result.health;
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
   if(action==='burn')combatMessage='Burn deals '+result.damage+' damage.';
@@ -1627,7 +1630,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.packTactics&&playEffects)familiarReaction={id:result.packTactics.familiar,pose:'cast',at:performance.now()};
-  if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for '+(1.8+(currentCombatBuild().counterWindow??0)/1000).toFixed(1)+' seconds.';
+  if(result.perfectDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for '+(1.8+(currentCombatBuild().counterWindow??0)/1000).toFixed(1)+' seconds.'+(result.staminaRestored?' · +'+Math.floor(result.staminaRestored)+' stamina':'');
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
   if(result.flanked)combatMessage+=' Flank hit · Plating bypassed or reduced.';
@@ -1823,7 +1826,7 @@ function updateCombatPanel(){
   const stamina=encounter?combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped):100;
   const dodgeCost=combatDodgeCost(armourSelection(combatGear));
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
-  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(armourSelection(combatGear)?' with '+armourProfile(armourSelection(combatGear)).name:'')+'. Dodge just before impact to empower your next strike by '+Math.round((weaponProfile(combatGear.equippedWeapon)?.counterMultiplier??.5)*100)+'%.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
+  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(armourSelection(combatGear)?' with '+armourProfile(armourSelection(combatGear)).name:'')+'. Dodge just before impact to empower your next strike by '+Math.round(counterMultiplier(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,currentCombatBuild(),encounter?.enemy==='depthsGuardian'&&encounter.brainVersion===2)*100)+'%.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>=0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
@@ -2181,17 +2184,23 @@ function updateDungeonArenaHud(){
   if(e.brainVersion===2){
    const left=Math.max(0,(e.nextBoarAt-combatNow())/1000);
    if(combatNow()<e.brainRecoveryUntil)cue='Enemy recovering · Close in and punish the opening';
-   else if(warn)cue=move.name+' · '+left.toFixed(1)+'s · '+(arenaBehindCover(e,move)?'Cover blocks this spell':arenaInDanger(e,move)?move.shape==='safeLane'?'Get to the green lane!':'Move or dodge!':'Clear of this attack');
+   else if(warn){
+    const danger=arenaInDanger(e,move),covered=danger&&arenaBehindCover(e,move);
+    const prompt=e.enemy==='depthsGuardian'
+      ?vaultWarningPrompt(move,e.nextBoarAt-combatNow(),{danger,covered,canDodge:!$('dungeonDodge').disabled})
+      :covered?'Cover blocks this spell':danger?'Move or dodge!':'Clear of this attack';
+    cue=move.name+' · '+left.toFixed(1)+'s · '+prompt;
+   }
    else cue=(e.brainCombo?'Follow-up coming · ':'')+'Step '+ARENA_STEP_COST+' stamina · Space: dodge';
   }
  }
  const summoning=e?.adds?.some(a=>a.spawnAt>combatNow()),incoming=e&&addThreats(e,combatNow()).sort((a,b)=>a.actor.attackAt-b.actor.attackAt)[0];
- if(summoning)cue='Reinforcements! · Click an enemy to change target';
+ if(summoning&&!(e.enemy==='depthsGuardian'&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell))cue='Reinforcements! · Click an enemy to change target';
  else if(incoming&&incoming.actor.attackAt<e.nextBoarAt)cue=incoming.move.name+' · '+Math.max(0,(incoming.actor.attackAt-combatNow())/1000).toFixed(1)+'s · '+(arenaBehindCover(incoming.encounter,incoming.move)?'Cover blocks this spell':arenaInDanger(incoming.encounter,incoming.move)?'Move or dodge!':'Stay clear of the marked tiles');
  else if(e&&e.nextBoarAt-combatNow()>enemyAttack(e).tell){
   const now=combatNow();
-  if(now<(e.staggerWeakUntil??0))cue=(now<(e.staggerUntil??0)?'Staggered':'Weak spot')+' · Weapon hits +25%';
-  else if(now<(e.counterUntil??0))cue='Counter ready · Next strike +'+(e.counterPercent??50)+'%';
+  if(now<(e.counterUntil??0))cue='Counter ready · Next strike +'+(e.counterPercent??50)+'% · '+((e.counterUntil-now)/1000).toFixed(1)+'s';
+  else if(now<(e.staggerWeakUntil??0))cue=(now<(e.staggerUntil??0)?'Staggered':'Weak spot')+' · Weapon hits +25%';
   else if(now<(e.exposedUntil??0))cue='Shell exposed · Strike now';
  }
  const targetHint=combatTargetHint();
@@ -9561,6 +9570,7 @@ window.towerVaultCoopHooks={
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
  face:faceCombatTarget,targetHint:combatTargetHint,
+ enableSound:()=>combatAudio.enable(combatSoundEnabled),counterSound:()=>combatAudio.play('counter'),
  strike:tile=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();},
  cast:(tile,kind)=>{faceCombatTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},
  dodge:()=>{combatArt.dodgeAt=performance.now();},

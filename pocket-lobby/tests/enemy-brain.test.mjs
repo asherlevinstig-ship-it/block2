@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {smartAttacks,chooseBrainAttack,brainThinkEvent,smartProfile} from '../public/enemy-brain.js';
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,lockArenaAttack} from '../public/dungeon-arena.js';
 import {normalizeState} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';import {advanceServerCombat} from '../server/activities.mjs';
-import {huntEnemies,huntEnemy,enemyAttack,normalizeHunting,playerMeleeReach,vaultPhase} from '../public/hunting.js';import {prepareDungeonBuild} from './helpers/combat-fixtures.mjs';
+import {huntEnemies,huntEnemy,enemyAttack,normalizeHunting,huntingTurn,playerMeleeReach,vaultPhase} from '../public/hunting.js';import {prepareDungeonBuild} from './helpers/combat-fixtures.mjs';
 import {boot} from './helpers/game-client.mjs';
 function fighter(room='depthsCache',magic=false){const cleared=room==='depthsGate'?0:room==='depthsGallery'?1:2;const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:{cleared,routeChoice:'dangerous'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword'],equippedWeapon:'ironSword'},characterRules:{combat:{enabled:true,dodge:true,q:false,e:false,fleeBelow:0}}});if(magic)prepareDungeonBuild(s);applyGameplayAction(s,'fight',{},1000,()=>.5);return s;}
 const sample=(room,magic=false)=>{const s=fighter(room,magic),events=advanceServerCombat(s,91000,()=>.5);return {s,events};};
@@ -83,6 +83,34 @@ test('Auto melee takes real Elite damage and cannot trivialize the Vault; a prep
  const starterEvents=advanceServerCombat(starter,91000,()=>.5);
  assert.equal(starterEvents.at(-1).outcome,'defeat');
  assert(starterEvents.some(event=>event.taken>0));
+});
+test('Guardian counters require a threatening hit and a late dodge',()=>{
+ const s=fighter('depthsVault'),at=5000;
+ const e={...s.hunting.encounter,brainMove:'bossIronSmash',brainOrigin:{x:6,y:5},arenaTarget:{x:5,y:5},
+  arenaLockedFor:at,nextBoarAt:at,nextPlayerAt:at+100,brainRecoveryUntil:0};
+ const turn=(encounter,action,now)=>huntingTurn(encounter,100,{},action,now,()=>0,'trainingSword');
+ const early=turn(e,'dodge',at-450);
+ assert(turn(early.encounter,'enemy',at).taken>0);
+ const late=turn(e,'dodge',at-160);
+ const opening=turn(late.encounter,'enemy',at);
+ assert.equal(opening.taken,0);
+ assert.equal(opening.perfectDodge,true);
+ assert.equal(opening.counterPercent,75);
+ assert(opening.staminaRestored>0);
+ const saved=normalizeHunting({encounter:opening.encounter}).encounter;
+ const counter=turn(saved,'attack',at+100);
+ assert.equal(counter.counter,true);
+ assert.equal(counter.shellGuarded,false);
+ assert.equal(counter.encounter.counterUntil,undefined);
+ const clear=turn({...late.encounter,arenaPlayer:{x:2,y:5}},'enemy',at);
+ assert.equal(clear.spatialAvoided,true);
+ assert.equal(clear.perfectDodge,undefined);
+ const sweep=smartAttacks.bossIronSweep;
+ assert.equal(arenaInDanger(e,sweep,{x:5,y:5}),true);
+ assert.equal(arenaInDanger(e,sweep,{x:5,y:6}),false);
+ const bolt={...e,arenaTarget:{x:3,y:2},arenaPlayer:{x:3,y:2},brainMove:'bossFan'};
+ assert.equal(arenaInDanger(bolt,smartAttacks.bossFan),true);
+ assert.equal(turn(bolt,'enemy',at).covered,true);
 });
 test('online polling and offline catch-up replay the same AI choices, damage, positions and rewards',()=>{
  for(const room of ['depthsCache','depthsVault']){const online=fighter(room,true),offline=structuredClone(online),events=[];

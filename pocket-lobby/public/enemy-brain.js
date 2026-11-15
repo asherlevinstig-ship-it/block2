@@ -19,7 +19,7 @@ export const smartAttacks={
  sentinelLunge:{name:'Pursuing Lunge',tell:1050,recovery:700,shape:'lane',reach:5,width:.62,damage:3,cooldown:4000},
  sentinelDelayed:{name:'Held Thornstrike',tell:1750,recovery:1000,shape:'ring',center:'target',radius:1.4,damage:6,cooldown:5000},
  sentinelSweep:{name:'Returning Sweep',tell:950,recovery:750,shape:'arc',reach:2.35,angle:1.95,damage:2},
- bossIronSweep:{name:'Anchor Sweep',tell:1100,recovery:800,shape:'arc',reach:2.6,angle:1.9,damage:1},
+ bossIronSweep:{name:'Anchor Sweep',tell:1100,recovery:800,shape:'arc',reach:2.6,angle:.72,damage:1},
  bossIronSmash:{name:'Sundering Smash',tell:1550,recovery:1350,shape:'ring',radius:2.7,damage:7,opensShell:true,cooldown:6500},
  bossHarpoon:{name:'Chain Harpoon',tell:1300,recovery:950,shape:'lane',reach:7,width:.8,damage:3,cooldown:4500},
  bossCleave:{name:'Twinblade Cleave',tell:850,recovery:500,shape:'arc',reach:2.2,angle:1.55,damage:0},
@@ -51,8 +51,11 @@ export function chooseBrainAttack(e,enemy,now){
  const repeated=history.length>=2&&history.at(-1).dx===history.at(-2).dx&&history.at(-1).dy===history.at(-2).dy;
  const available=brainAttackIds(enemy).filter(id=>now>=(e.brainCooldowns?.[id]??0));
  const ids=available.length?available:brainAttackIds(enemy);
- const signature=enemy.index===2?'bossHuntSweep':enemy.index===3?'bossHeartMarks':null;
- if(enemy.id==='depthsGuardian'&&signature&&available.includes(signature))return signature;
+ if(enemy.id==='depthsGuardian'){
+  if(enemy.index===3&&recent.at(-1)==='bossHeartMarks'&&available.includes('bossFan'))return 'bossFan';
+  const signature=enemy.index===2?'bossHuntSweep':enemy.index===3?'bossHeartMarks':null;
+  if(available.includes(signature))return signature;
+ }
  if(enemy.id==='sealGuardian'){
   if(distance<=2.4&&(e.brainAttackCount??0)===0&&ids.includes('sentinelSlash'))return 'sentinelSlash';
   if(distance<=2.5&&recent.at(-1)==='sentinelSlash'&&ids.includes('sentinelSweep'))return 'sentinelSweep';
