@@ -17,6 +17,7 @@ function advanceBarricade(event,now){
  while(bridge.hp>0&&now>=bridge.nextHitAt){
   bridge.hp=Math.max(0,bridge.hp-rules.hit);
   const landed=bridge.nextHitAt;
+  bridge.lastHitAt=landed;
   bridge.nextHitAt+=rules.interval;
   if(!bridge.hp){
    event.mobs.push({id:rules.flanker,kind:'skitter',name:'Bridge Skitter',x:rules.x,y:rules.y,hp:48,max:48,hitAt:0,at:landed});
@@ -34,7 +35,7 @@ export function publicMillRaid(raid,playerId){
  const {clock,state}=raid,member=state.members[playerId];
  const bridge=state.bridge;
  return {...clock,revision:raid.version,observedAt:raid.now,phase:state.victoryAt?'victory':clock.phase,wave:state.wave+1,mobs:state.mobs.length?state.mobs:clock.phase==='battle'?raidWave(0,1,clock.opens):[],defenders:Object.values(state.members).filter(m=>!m.defeated&&m.lastAt>raid.now-15000).length,
-  bridge:{hp:bridge?.hp??bridgeBarricade.max,max:bridgeBarricade.max,nextHitAt:bridge?.hp&&millbreaker(state)?bridge.nextHitAt:0,repairedAt:bridge?.repairedAt??0},
+  bridge:{hp:bridge?.hp??bridgeBarricade.max,max:bridgeBarricade.max,nextHitAt:bridge?.hp&&millbreaker(state)?bridge.nextHitAt:0,repairedAt:bridge?.repairedAt??0,lastHitAt:bridge?.lastHitAt??0},
   self:member?{damage:member.damage,support:member.support,repaired:member.repaired??0,qualified:eligible(member),claimed:!!member.claimed,defeated:!!member.defeated}:null,
   victoryAt:state.victoryAt,contributors:state.victoryAt?Object.values(state.members).filter(eligible).map(m=>({name:m.name,damage:m.damage,support:m.support,repaired:m.repaired??0})):[]};
 }

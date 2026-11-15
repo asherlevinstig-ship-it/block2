@@ -1,4 +1,5 @@
 import {millRaidClock,raidThreat,bridgeBarricade,besideBarricade} from './mill-raid.js';
+import {drawMillbreaker} from './millbreaker-art.js';
 export function initializeMillRaid(api){
  let raid=null,room=null,busy=false,selected=null,fighting=false,repairQueued=false,notice='',strikeAt=-10000,castAt=-10000,lastRead=0;
  const css=document.createElement('link');css.rel='stylesheet';css.href='mill-raid.css';document.head.append(css);
@@ -9,7 +10,14 @@ export function initializeMillRaid(api){
  objective.append(bridgeName,bridgeMeter,bridgeNote);
  const button=(text,kind)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=()=>send(kind);actions.append(b);return b;};
  const strike=button('Strike nearest','strike'),heal=button('Healing pulse · 15 MP','heal'),repair=button('Repair · 1 timber','repair'),stop=button('Stop striking','stop'),claim=button('Collect 75 gold + XP','claim'),buy=button('Relief merchant · 3 bread / 6g','buy');
- panel.append(eyebrow,title,detail,objective,actions,status);document.getElementById('game').parentElement.append(panel);
+ const expand=document.createElement('button');
+ expand.type='button';expand.className='mill-raid-expand';expand.textContent='Raid controls';expand.setAttribute('aria-expanded','false');
+ expand.onclick=()=>{
+  const open=expand.getAttribute('aria-expanded')!=='true';
+  expand.setAttribute('aria-expanded',String(open));panel.classList.toggle('mill-raid-expanded',open);
+  expand.textContent=open?'Hide raid controls':'Raid controls';
+ };
+ panel.append(eyebrow,title,detail,objective,actions,status,expand);document.getElementById('game').parentElement.append(panel);
  const badge=document.createElement('button');badge.className='mill-raid-badge';badge.hidden=true;badge.type='button';badge.onclick=()=>api.route('millbrook');document.getElementById('game').parentElement.append(badge);
  const now=()=>api.now();
  const phaseNow=()=>{const clock=millRaidClock(now());return raid?.id===clock.id?raid.phase:clock.phase;};
@@ -122,13 +130,21 @@ export function initializeMillRaid(api){
    return;
   }
   const [x,y]=point(item.x+.5,item.y+.5),boss=item.kind==='chief',skitter=item.kind==='skitter',scale=boss?1.25:1;
-  const hurt=now()-item.hitAt<200,hop=reduced?0:Math.sin(time/(skitter?160:320)+item.x)*1.3;
-  const age=(now()-(raid?.opens??now()))%4000,lunge=item.kind==='merchant'||reduced||age>350?0:Math.sin(age/350*Math.PI)*7;
+  const clock=now(),breaker=item.kind==='warden',bridge=raid?.bridge;
+  const remaining=(bridge?.nextHitAt||Infinity)-clock;
+  const attacking=breaker&&remaining>=0&&remaining<=bridgeBarricade.tell;
+  const impactAge=bridge?.lastHitAt?clock-bridge.lastHitAt:Infinity;
+  const impact=breaker&&impactAge>=0&&impactAge<420;
+  const hurt=clock-item.hitAt<200,hop=reduced||breaker?0:Math.sin(time/(skitter?160:320)+item.x)*1.3;
+  const age=(now()-(raid?.opens??now()))%4000,lunge=item.kind==='merchant'||breaker||reduced||age>350?0:Math.sin(age/350*Math.PI)*7;
   const [px,py]=point(api.position().x+.5,api.position().y+.5);
   ctx.save();ctx.translate(Math.round(x+Math.sign(px-x)*lunge),Math.round(y+Math.sign(py-y)*lunge*.6));ctx.scale(scale,scale);ctx.fillStyle='#101a2766';ctx.beginPath();ctx.ellipse(0,0,15,6,0,0,Math.PI*2);ctx.fill();ctx.translate(0,hop);
   const rect=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(x,y,w,h);};
   if(item.kind==='merchant'){
    rect(-8,-6,6,6,'#30374c');rect(2,-6,6,6,'#30374c');rect(-11,-29,22,23,'#bc9a57');rect(-4,-28,8,22,'#e4cf9c');rect(-8,-40,16,13,'#e8ba8b');rect(-10,-44,20,6,'#557c65');rect(-14,-40,28,3,'#557c65');rect(-5,-35,2,2,'#27333a');rect(3,-35,2,2,'#27333a');rect(11,-19,12,13,'#826143');rect(13,-22,8,4,'#f2d99a');
+  }else if(breaker){
+   const [bx,by]=point(bridgeBarricade.x+.5,bridgeBarricade.y+.5);
+   drawMillbreaker(ctx,{left:bx<x||bx===x&&by<y,hurt,reduced,wind:attacking?1-remaining/bridgeBarricade.tell:0,impact:impact?1-impactAge/420:0});
   }else if(skitter){
    for(let i=0;i<3;i++){const move=reduced?0:Math.sin(time/120+i)*2;rect(-17+i*2,-5-i*3+move,8,3,'#172f3d');rect(9-i*2,-5-i*3-move,8,3,'#172f3d');}
    rect(-12,-20,24,15,hurt?'#fff1bf':'#163640');rect(-10,-22,20,15,'#4a8e87');rect(-8,-22,7,12,'#70b6a1');rect(1,-20,7,8,'#397573');rect(-9,-8,18,7,'#293344');rect(-7,-7,4,2,'#ffd783');rect(3,-7,4,2,'#ffd783');rect(-6,-2,2,4,'#eed7af');rect(4,-2,2,4,'#eed7af');
@@ -137,9 +153,8 @@ export function initializeMillRaid(api){
    rect(17,-30,3,25,'#62513c');rect(12,-35,13,8,'#adb39d');
    if(boss){rect(-12,-48,4,10,'#d6ba80');rect(8,-48,4,10,'#d6ba80');rect(-16,-52,7,4,'#d6ba80');rect(9,-52,7,4,'#d6ba80');rect(-7,-46,14,4,'#c39a62');}
   }
-  const height=skitter?30:boss?62:52;if(item.kind!=='merchant'){rect(-15,-height,30,4,'#172232');rect(-14,-height+1,28*item.hp/item.max,2,boss?'#f0aa75':'#b5d58d');}ctx.restore();
-  const attacking=item.kind==='warden'&&raid?.bridge?.nextHitAt>0&&raid.bridge.nextHitAt-now()<=bridgeBarricade.tell;
-  actors.push({id:'mill-'+item.id,enemy:true,name:item.name,detail:item.kind==='merchant'?'Relief supplies':attacking?'Bridge wind-up':item.id===selected?'Target':'Raider',x,y:y-(skitter?38:boss?85:64),action:()=>api.approach(item)});
+  const height=skitter?30:boss?62:attacking?79:62;if(item.kind!=='merchant'){rect(-15,-height,30,4,'#172232');rect(-14,-height+1,28*item.hp/item.max,2,boss?'#f0aa75':'#b5d58d');}ctx.restore();
+  actors.push({id:'mill-'+item.id,enemy:true,name:item.name,detail:item.kind==='merchant'?'Relief supplies':attacking?'Bridge wind-up':item.id===selected?'Target':'Raider',x,y:y-(skitter?38:boss?85:height+10),action:()=>api.approach(item)});
   if(now()-item.hitAt<700){ctx.save();ctx.fillStyle='#ffe5a5';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('HIT',x,y-32-(now()-item.hitAt)/40);ctx.restore();}
  }
  function items(){
