@@ -9443,7 +9443,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   $('bubble').hidden=true;
   updateRoomLabel();
   if(next===waystationRoom)refreshWaystation();
-  document.title='Tower of Beginnings • '+name;
+  document.title='The Perfect Grind • '+name;
   // Older saves can be standing beyond the new flooded channel.
   if(next==='depthsGate'&&arrival?.x>=8&&!floodgateOpen(depthsRun))arrival={x:7,y:4};
   if(next==='depthsGate'&&arrival?.x===8&&!floodCrossingOpen(depthsRun,arrival.x,arrival.y))arrival={x:7,y:floodCrossingRow(depthsRun)};
