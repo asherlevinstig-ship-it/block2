@@ -28,6 +28,19 @@ test('walking frames follow travelled stride and spell casting uses its own gest
  assert.equal(towerCharacterPose(meta,{weapon:true,pose:{casting:.5,attack:.5}}).state,'cast');
  assert.equal(towerCharacterPose(meta,{time:900}).column,towerCharacterPose(meta,{time:1700}).column);
 });
+test('attack and dodge stances follow the facing and keep reduced motion still',()=>{
+ const sword={weapon:true,weaponTier:'ironSword'};
+ for(const back of [false,true]){
+  for(const direction of ['left','right']){
+   const pose=options=>towerCharacterPose(meta,{...sword,back,direction,...options});
+   const windup=pose({pose:{attack:.2}}),impact=pose({pose:{attack:.45}});
+   assert(Math.sign(windup.stance.lean)===-Math.sign(impact.stance.lean));
+   assert(impact.stance.spread>windup.stance.spread);
+   assert.deepEqual([0,.3,.6,.9].map(dodging=>pose({pose:{dodging}}).frame),[0,1,2,3]);
+   assert.equal(pose({reduced:true,pose:{dodging:.05}}).frame,pose({reduced:true,pose:{dodging:.9}}).frame);
+  }
+ }
+});
 test('signature abilities select distinct body poses and hold the Faultbreaker impact',()=>{
  const pose=(id,casting,reduced=false)=>towerCharacterPose(meta,{pose:{castKind:id,casting},reduced});
  assert.equal(pose('faultbreaker',.2).state,'chop');

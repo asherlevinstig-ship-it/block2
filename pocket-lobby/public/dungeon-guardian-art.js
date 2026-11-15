@@ -5,7 +5,7 @@ const gestures = {
   'Quick Slash':'slash', 'Pursuing Lunge':'lunge', 'Delayed Overhead':'overhead', 'Returning Sweep':'return',
   'Anchor Sweep':'sweep', 'Sundering Smash':'overhead', 'Chain Harpoon':'harpoon',
   'Twinblade Cleave':'cleave', 'Held Overhead':'overhead', 'Chained Lunge':'lunge',
-  'Heartbolt Volley':'volley', 'Runic Detonation':'detonate', 'Heart Pulse':'pulse',
+  'Heartbolt Volley':'volley', 'Heart Marks':'detonate', 'Runic Detonation':'detonate', 'Heart Pulse':'pulse',
   'Heart Bolt':'volley', 'Runic Blast':'detonate', 'Ironclad Smash':'overhead',
   'Vault Cleave':'cleave', 'Vault Lunge':'lunge', 'Sentinel Lunge':'lunge',
   'Sentinel Strike':'slash', 'Warden Slam':'stomp', 'Crushing Slam':'stomp'
@@ -163,7 +163,11 @@ function vaultGuardian(draw,cue,hit,phase) {
   const armor=hit?'#c9a197':phase===1?'#8a7870':'#6c697f';
   const light=hit?'#f4d4b4':phase===1?'#ceae79':'#9e9ab0';
   const core=phase===3?'#e4b6ff':phase===2?'#ffb17d':'#97d9cf';
-  const bow=staggered||cue.broken?7:0;
+  const slam=gesture==='overhead';
+  const sweep=gesture==='sweep'||gesture==='cleave';
+  const bow=staggered||cue.broken?7:slam?strength*(release?8:-5):0;
+  const shoulderShift=sweep?strength*(release?7:-5):0;
+  const facet=hit?'#ddb6a0':phase===1?'#aa917a':'#858195';
   const rest=cue.braced&&!gesture?[16,-43]:[31,-34];
   const handTargets={
     sweep:release?[47,-24]:[16,-33],overhead:release?[36,-15]:[27,-70],
@@ -175,16 +179,22 @@ function vaultGuardian(draw,cue,hit,phase) {
   const split=phase===3?10:phase===2?4:exposed?5:0;
 
   for(const side of [-1,1]){
-    poly([[side*7,-27],[side*25,-21],[side*30,-4],[side*25,1],[side*6,0],[side*3,-6]],'#3b4154','#242c3e');
+    poly([[side*7,-27],[side*25,-21],[side*30+(sweep&&side>0?shoulderShift:0),-4],[side*25,1],[side*6,0],[side*3,-6]],'#3b4154','#242c3e');
     poly([[side*9,-22],[side*21,-19],[side*26,-7],[side*22,-5],[side*8,-8]],armor);
+    poly([[side*9,-22],[side*20,-19],[side*18,-14],[side*8,-15]],facet);
     line([[side*7,-5],[side*25,-4]],light,2);
   }
-  limb([-20,-46+bow],[-35,-25+bow],9,'#47475a');
+  limb([-20,-46+bow],[-35-shoulderShift,-25+bow],9,'#47475a');
   poly([[-39,-60+bow],[-31,-66+bow],[-20,-64+bow],[-13,-51+bow],[-23,-40+bow],[-38,-45+bow]],armor,'#2b3245');
+  poly([[-38,-58+bow],[-31,-64+bow],[-21,-62+bow],[-17,-54+bow],[-31,-52+bow]],facet);
   line([[-38,-58+bow],[-30,-63+bow],[-22,-61+bow]],light,2);
   poly([[-24,-53+bow],[-13,-61+bow],[14,-61+bow],[25,-48],[19,-29],[8,-18],[-14,-22],[-24,-34]],'#2b2b45','#222c40');
   poly([[-23,-53+bow],[-12,-58+bow],[-2-split,-45],[-8-split,-38],[-3-split,-27],[-15,-24],[-23,-36]],armor,'#39384c');
   poly([[2+split,-45],[12,-57+bow],[24,-49],[22,-37],[14,-23],[3+split,-28],[8+split,-39]],armor,'#39384c');
+  poly([[-22,-52+bow],[-12,-57+bow],[-2-split,-45],[-11-split,-45],[-18,-48]],facet);
+  poly([[2+split,-45],[12,-56+bow],[23,-49],[16,-46],[9+split,-42]],facet);
+  line([[-20,-39],[-14,-35],[-16,-29]],'#55495a',1.5);
+  line([[19,-39],[13,-35],[15,-29]],'#55495a',1.5);
   line([[-21,-51+bow],[-13,-55+bow],[-4-split,-45]],light,2);
   line([[5+split,-44],[13,-54+bow],[22,-47]],light,2);
   poly([[0,-49],[7+split*.3,-39],[3,-29],[-2,-26],[-8-split*.3,-38]],phase===3?'#8f57bd':'#405765');
@@ -194,12 +204,15 @@ function vaultGuardian(draw,cue,hit,phase) {
 
   poly([[-15,-64+bow],[-9,-73+bow],[8,-73+bow],[17,-65+bow],[12,-53+bow],[2,-49+bow],[-12,-54+bow]],armor,'#252a3c');
   poly([[-13,-65+bow],[-12,-79+bow],[-5,-74+bow],[0,-82+bow],[6,-74+bow],[13,-78+bow],[14,-64+bow]],light,'#464355');
+  poly([[-14,-63+bow],[-6,-69+bow],[8,-69+bow],[15,-64+bow],[5,-64+bow]],facet);
   line([[-8,-61+bow],[10,-61+bow]],'#31344a',4);
   pixel(-5,-62+bow,4,2,core);pixel(4,-62+bow,4,2,core);
-  limb([19,-46+bow],hand,8,armor);
+  const shoulder=[19+shoulderShift,-46+bow-(slam&&!release?strength*7:0)];
+  limb(shoulder,hand,8,armor);
+  line([[shoulder[0]+1,shoulder[1]-4],[hand[0],hand[1]-4]],facet,2);
   const [x,y]=hand;
   if(phase===1){
-    const tip=gesture==='overhead'&&!release?[x-2,y-15]:gesture==='harpoon'?[x+19,y-1]:[x+12,y+29];
+    const tip=slam?[x+(release?16:-2),y+(release?15:-19)]:sweep?[x+(release?26:-15),y+(release?11:14)]:gesture==='harpoon'?[x+19,y-1]:[x+12,y+29];
     limb([x-4,y-12],tip,2.5,'#c5ad7d','#494255');
     const [tx,ty]=tip;
     poly([[tx-14,ty-10],[tx-9,ty-5],[tx,ty-2],[tx+9,ty-5],[tx+15,ty-12],[tx+13,ty-1],[tx+4,ty+5],[tx-4,ty+5],[tx-12,ty]],'#8c9ba4','#353d51');

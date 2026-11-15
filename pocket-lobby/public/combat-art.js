@@ -44,7 +44,7 @@ export function playerCombatPose({time,now,encounter,events,reduced=false,health
   const recover=swing?clamp((strikeAge-140)/220):0;
   const hitDuration=events.hurtHeavy?460:230,hitAge=time-events.hurtAt;
   const hurt=hitAge>=0&&hitAge<hitDuration;
-  const shieldAge=time-events.shieldAt,evadeAge=time-events.perfectDodgeAt;
+  const shieldAge=time-events.shieldAt,evadeAge=time-events.perfectDodgeAt,dodgeAge=time-events.dodgeAt;
   return {
     hurt,heavyHit:hurt&&events.hurtHeavy===true,
     strained:ready&&health>0&&health<=maxHealth*.2,
@@ -55,7 +55,8 @@ export function playerCombatPose({time,now,encounter,events,reduced=false,health
     lunge:reduced||!swing?0:pulse(strikeAge,340)*5,
     recoil:reduced?0:pulse(hitAge,hitDuration)*(events.hurtHeavy?6:2),
     hurtProgress:clamp(hitAge/hitDuration),
-    dodge:reduced?0:pulse(time-events.dodgeAt,430)*6,
+    dodging:dodgeAge>=0&&dodgeAge<430?dodgeAge/430:null,
+    dodge:reduced?0:pulse(dodgeAge,430)*6,
     crouch:reduced?0:ready?1+windup:0,
     lift:reduced?0:victory?pulse(victoryAge,700)*3:casting?pulse(castAge,380)*2:0
   };

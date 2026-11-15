@@ -4180,6 +4180,7 @@ function draw(time){
     if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
   }
   if(ghost)items.push(ghost);
+  let playerBody=null,guardianOverlap=false,playerHearts=null;
   const drawPlayer = ()=>{
     if(homeBedRest&&atHome())return;
     const seat=player.seat;
@@ -4211,7 +4212,11 @@ function draw(time){
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
+    const bodyX=x+Math.sign(enemyX-x)*thrust+(player.direction==='left'?1:-1)*pose.dodge;
+    const bodyY=y+Math.sign(enemyY-y)*thrust+pose.dodge*.25;
+    const spriteOptions={shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time};
+    sprite(ctx,bodyX,bodyY,avatar,spriteOptions);
+    if(!veiled&&!spriteOptions.shadowstep)playerBody={x:bodyX,y:bodyY,options:spriteOptions};
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
     if(undead){const [ux,uy]=point(player.x+1.25,player.y+1.25);drawUndeadAlly(ctx,ux,uy,undead,time,reducedMotion.matches,{attackAge:combatNow()-(undead.lastStrikeAt??0),flipped:player.direction==='left'});}
     if(hunting.encounter?.sanctuaryWard&&hunting.encounter.magicWardUntil>combatNow()){
@@ -4224,7 +4229,7 @@ function draw(time){
       ctx.fillStyle='#ff748f';ctx.fillRect(x-12,y+5,24*hunting.encounter.bloodShield/40,2);ctx.restore();
     }
     const familiar=scoutAnimationActive(time)?null:drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
-    renderedActors.push({id:'self',name:avatar.name,activity:reading?'Reading':'',wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
+    renderedActors.push({id:'self',name:avatar.name,activity:reading?'Reading':'',wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:bodyX,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
     if(veiled){
       ctx.save();ctx.strokeStyle='#a3e6eb';ctx.globalAlpha=reducedMotion.matches?.45:.38+.16*Math.sin(time/180);
@@ -4232,7 +4237,7 @@ function draw(time){
     }
     if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
-    if(player.inCombat||vaultCoopState||window.millRaidClient?.active){
+    if(player.inCombat||vaultCoopState||window.millRaidClient?.active)playerHearts=()=>{
       const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
       for(let heart=0;heart<5;heart++){
         const filled=Math.max(0,Math.min(1,(health-heart*20)/20));
@@ -4240,7 +4245,7 @@ function draw(time){
           if(heartPixels[row][col]==='1')rect(x-22+heart*9+col,y-44+row,1,1,col<7*filled?'#f07891':'#49364d');
         }
       }
-    }
+    };
     if(!$('bubble').hidden){
       if(time>bubbleUntil)$('bubble').hidden=true;
       else{
@@ -4286,7 +4291,17 @@ function draw(time){
 
     const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
     if(['millRaidMob','millRaidMerchant','millRaidBarricade'].includes(item.type))window.millRaidClient?.drawMob(item,{ctx,point,time,reduced:reducedMotion.matches,actors:renderedActors});
-    else{groundShadow(item);object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time,weather);}
+    else{
+      groundShadow(item);
+      object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time,weather);
+      // Preserve the normal depth order. Show the local adventurer through a
+      // large enemy only when that enemy was drawn in front of their body.
+      if(playerBody&&!item.defeated&&(player.inCombat||vaultCoopState)&&['depthsColossus','depthsWarden','depthsSentinel'].includes(item.type)){
+        const [gx,gy]=point(item.x+.5,item.y+.5);
+        const width=item.type==='depthsColossus'?48:32;
+        guardianOverlap||=Math.abs(playerBody.x-gx)<=width&&playerBody.y>=gy-73&&playerBody.y<=gy+10;
+      }
+    }
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
@@ -4295,6 +4310,12 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  if(guardianOverlap&&playerBody){
+    ctx.save();ctx.globalAlpha=.93;
+    sprite(ctx,playerBody.x,playerBody.y,avatar,{...playerBody.options,visibilityOutline:true});
+    ctx.restore();
+  }
+  playerHearts?.();
   drawFamiliarScout(time);
   const stoneProtection=window.playerCloud?.initial?.styleAbilities?.stoneguard;
   if(stoneProtection?.until>combatNow()){

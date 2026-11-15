@@ -81,6 +81,54 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
     if(face==='angular'&&p.y>=bottom-2&&Math.abs(p.x-center)>3)pixels.set([...rgb(tone?.[0]??'#b77b59'),255],p.i);
   }
 }
+// Each pose moves the shoulders and hips relative to the planted foot line.
+// Values are in atlas pixels, before the sprite is scaled for the map.
+const swordStances=[
+  {lean:-5,crouch:2,spread:1},{lean:-7,crouch:4,spread:2},
+  {lean:3,crouch:5,spread:3},{lean:9,crouch:5,spread:4},
+  {lean:6,crouch:4,spread:3},{lean:2,crouch:2,spread:1}
+];
+const dodgeStances=[
+  {lean:-3,crouch:5,spread:2},{lean:-10,crouch:9,spread:3},
+  {lean:-8,crouch:6,spread:4},{lean:-3,crouch:2,spread:2}
+];
+const swordTools=new Set(['trainingSword','ironSword','duelistBlade','vampiricSword','wardenSword']);
+
+function stanceOffset(stance,y,pivotY){
+  return {
+    lean:Math.round(stance.lean*clamp((pivotY-y-8)/26,0,1)),
+    drop:Math.round(stance.crouch*clamp((pivotY-y)/30,0,1)),
+    spread:Math.round(stance.spread*clamp((y-pivotY+17)/14,0,1))
+  };
+}
+function spreadFoot(x,center,spread){
+  return Math.round(spread*clamp((x-center)/3,-1,1));
+}
+function posePixel(x,y,stance,pivot){
+  const offset=stanceOffset(stance,y,pivot[1]);
+  return [x+offset.lean+spreadFoot(x,pivot[0],offset.spread),y+offset.drop];
+}
+function articulateFrame(pixels,width,height,stance,pivot){
+  const bent=new Uint8ClampedArray(pixels.length);
+  for(let y=0;y<height;y++){
+    const offset=stanceOffset(stance,y,pivot[1]),py=y+offset.drop;
+    if(py>=height)continue;
+    let previous=-2;
+    for(let x=0;x<width;x++){
+      const i=(y*width+x)*4;
+      if(!pixels[i+3]){previous=-2;continue;}
+      const px=x+offset.lean+spreadFoot(x,pivot[0],offset.spread);
+      if(px<0||px>=width){previous=-2;continue;}
+      const color=pixels.subarray(i,i+4);
+      // Fill the space between consecutive opaque pixels when a stance widens.
+      const start=previous<0?px:previous+1;
+      for(let target=start;target<=px;target++)bent.set(color,(py*width+target)*4);
+      previous=px;
+    }
+  }
+  return bent;
+}
+
 export function towerCharacterPose(meta,options={}){
   const {direction='right',back=false,time=0,cycle=0,seated=false,wave=null,fishing=false,fishingAge=0,weapon=false,weaponTier=null,pose={},reduced=false}=options;
   const row=back?(direction==='right'?2:3):(direction==='right'?1:0);
@@ -88,7 +136,7 @@ export function towerCharacterPose(meta,options={}){
   if(options.reading){state=seated?'sit':'idle';frame=0;}
   else if(options.meditating){state='blink';frame=0;}
   else if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
-  else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
+  else if(pose.dodging!=null||pose.dodge>0){state='dodge';frame=reduced?1:Math.min(3,Math.floor((pose.dodging??.3)*4));}
   else if(pose.perfectEvade!==null&&pose.perfectEvade!==undefined){state='dodge';frame=reduced?3:pose.perfectEvade<.5?2:3;}
   else if(pose.hurt||pose.recoil>1){state='hurt';frame=reduced?0:pose.hurtProgress>.5?1:0;}
   else if(pose.casting!==null&&pose.casting!==undefined){
@@ -117,9 +165,12 @@ export function towerCharacterPose(meta,options={}){
   else if(!reduced&&time%3700>3550){state='blink';frame=0;}
   if(!options.reading&&!options.meditating&&options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
   const animation=meta.states[state];frame=clamp(Math.floor(frame),0,animation.frames-1);
-  const column=animation.start+frame,detail=meta.poses[meta.directions[row]][column];
+  const column=animation.start+frame,base=meta.poses[meta.directions[row]][column];
+  const stanceData=state==='dodge'?dodgeStances[frame]:state==='attack'&&swordTools.has(weaponTier)?swordStances[frame]:null;
+  const stance=stanceData?{...stanceData,lean:stanceData.lean*(direction==='left'?-1:1)}:null;
+  const detail=stance?{...base,grip:posePixel(...base.grip,stance,meta.pivot)}:base;
   if(options.reading){const age=Math.max(0,options.readingAge??time),phase=age%2800;return {state:'reading',frame:reduced||phase<2300?0:1+Math.min(2,Math.floor((phase-2300)/167)),row,column,detail};}
-  return {state:options.meditating?'meditate':state,signature:pose.casting!==null&&pose.casting!==undefined?pose.castKind:null,frame:options.meditating?(reduced?0:Number(Math.sin(time/1600)>.25)):frame,row,column,detail};
+  return {state:options.meditating?'meditate':state,signature:pose.casting!==null&&pose.casting!==undefined?pose.castKind:null,stance,frame:options.meditating?(reduced?0:Number(Math.sin(time/1600)>.25)):frame,row,column,detail};
 }
 
 function bloodPriceHands(pixels,source,width,height,appearance,selection,armour){
@@ -477,9 +528,9 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
   }
 }
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
-  const meta=metadata,cache=new Map(),[width,height]=meta.cell;
+  const meta=metadata,cache=new Map(),outlines=new WeakMap(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
-    const key=[selection.state,selection.frame,selection.row,selection.column,selection.signature??'',appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",appearance.hairStyle??'',appearance.faceStyle??'',appearance.skinTone??0,vest??false].join(':');
+    const key=[selection.state,selection.frame,selection.row,selection.column,selection.signature??'',!!selection.stance,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",appearance.hairStyle??'',appearance.faceStyle??'',appearance.skinTone??0,vest??false].join(':');
     if(cache.has(key)){const image=cache.get(key);cache.delete(key);cache.set(key,image);return image;}
     const atlas=vest&&vest!=='prospectorsGloves'?atlases.armour:atlases.normal,pixels=new Uint8ClampedArray(width*height*4),sourcePixels=new Uint8ClampedArray(width*height*4);
     const indices=[0,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0];
@@ -500,7 +551,8 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     if(selection.signature==='bloodPrice')bloodPriceHands(pixels,sourcePixels,width,height,appearance,selection,vest);
     finishCharacterFace(pixels,width,height,appearance,selection);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');
-    const data=typeof ImageData==='function'?new ImageData(pixels,width,height):{data:pixels,width,height};ctx.putImageData(data,0,0);
+    const frame=selection.stance?articulateFrame(pixels,width,height,selection.stance,meta.pivot):pixels;
+    const data=typeof ImageData==='function'?new ImageData(frame,width,height):{data:frame,width,height};ctx.putImageData(data,0,0);
     cache.set(key,canvas);if(cache.size>384)cache.delete(cache.keys().next().value);return canvas;
   }
   function grip(x,y,options={}){
@@ -557,7 +609,20 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     const carried=options.sheathed&&!options.weapon?carriedTowerEquipment(meta,x,y,options):null;
     if(carried&&!options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
-    ctx.drawImage(image,Math.round(x-meta.pivot[0]*meta.scale),Math.round(y-meta.pivot[1]*meta.scale),width*meta.scale,height*meta.scale);
+    const left=Math.round(x-meta.pivot[0]*meta.scale),top=Math.round(y-meta.pivot[1]*meta.scale);
+    const w=width*meta.scale,h=height*meta.scale;
+    if(options.visibilityOutline){
+      if(!outlines.has(image)){
+        const mask=createCanvas(width,height),maskCtx=mask.getContext('2d');
+        maskCtx.drawImage(image,0,0);
+        maskCtx.globalCompositeOperation='source-in';maskCtx.fillStyle='#17233a';
+        maskCtx.fillRect(0,0,width,height);
+        outlines.set(image,mask);
+      }
+      const mask=outlines.get(image);
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])ctx.drawImage(mask,left+dx,top+dy,w,h);
+    }
+    ctx.drawImage(image,left,top,w,h);
     if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&!options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
     if(reaction.shieldPulse!==null&&reaction.shieldPulse!==undefined){
