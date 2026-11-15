@@ -166,7 +166,7 @@
         if(error.status===402){await recoverActionPoints();throw error;}
         // Retry only server settlement revisions; another window still triggers conflict handling.
         if((['presence','control'].includes(path)||path.startsWith('learning/'))&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
-        if(path.startsWith('learning/')||path.startsWith('gameplay/')||path==='control'||path==='mill-raid'||path==='timber-orders'||path==='market-stalls'){
+        if(path.startsWith('learning/')||path.startsWith('gameplay/')||path==='teacher/teleport'||path==='control'||path==='mill-raid'||path==='timber-orders'||path==='market-stalls'){
           if((error.status===undefined||path==='timber-orders'&&error.status===503)&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
@@ -606,6 +606,15 @@
         if(packet!==starting||acting||gameplayBusy||sending||pending||retryJob||result.revision<packet.revision)return null;
         packet=result;
         return result;
+      };
+      Object.defineProperty(window.playerCloud,'isTeacher',{get:()=>verifiedTeacher});
+      window.playerCloud.teacherTeleport=async room=>{
+        if(gameplayBusy)throw new Error('Wait for your current action.');
+        await flush();
+        if(gameplayBusy||acting)throw new Error('Wait for your current action.');
+        gameplayBusy=true;
+        try{return (await action('teacher/teleport',{room})).state;}
+        finally{gameplayBusy=false;}
       };
       window.playerCloud.readShopLicences=()=>request('shop-licences');
       window.playerCloud.refreshPvp=refreshPvp;

@@ -5142,11 +5142,50 @@ function previewMapRoute(){
   $('mapJourney').textContent=path.length?[currentRoom,...path.map(door=>door.to)].map(mapPlaceName).join(' → '):'Select a place to preview the full route.';
   renderWorldMap(path);
 }
+function showTeacherTravel(shops){
+  const panel=$('teacherTravel');
+  panel.hidden=shops||window.playerCloud?.isTeacher!==true;
+  if(panel.hidden)return;
+  const select=$('teacherTravelDestination'),previous=select.value;
+  select.replaceChildren();
+  const prompt=document.createElement('option');
+  prompt.value='';prompt.textContent='Choose any location';select.append(prompt);
+  for(const [id,room] of Object.entries(roomDetails).sort((a,b)=>a[1].name.localeCompare(b[1].name))){
+    const option=document.createElement('option');option.value=id;option.textContent=room.name;
+    option.disabled=id===currentRoom;select.append(option);
+  }
+  select.value=previous===currentRoom?'':previous;
+  $('teacherTravelStatus').textContent=depthsRun?'Leaving the dungeon by teleport ends the current run.':'';
+  const button=$('teacherTravelGo');button.disabled=!select.value;
+  select.onchange=()=>{button.disabled=!select.value;};
+  button.onclick=async()=>{
+    const room=select.value;if(!room||room===currentRoom)return;
+    button.disabled=true;select.disabled=true;
+    $('teacherTravelStatus').textContent='Travelling…';
+    try{
+      const state=await serverGameplayTeacherTeleport(room);
+      $('hudMapDialog').close();
+      window.towerApplyRoutineState(state,{handoff:true});
+      note('Arrived at '+roomDetails[state.location].name+'.');
+      canvas.focus({preventScroll:true});
+    }catch(error){$('teacherTravelStatus').textContent=error.message;}
+    finally{select.disabled=false;button.disabled=!select.value||select.value===currentRoom;}
+  };
+}
+async function serverGameplayTeacherTeleport(room){
+  if(serverActionBusy)throw new Error('Wait for the current action.');
+  serverActionBusy=true;
+  route=[];step=null;interaction=null;target=null;
+  player.x=player.cx;player.y=player.cy;
+  try{return await window.playerCloud.teacherTeleport(room);}
+  finally{serverActionBusy=false;}
+}
 function showHudMap(destination=null){
   const dialog=$('hudMapDialog'),routes=$('hudMapRoutes'),shops=destination==='shops';
   if(destination&&destination!=='shops'&&!mapRouteVisible(destination))destination=null;
   const next=destination&&!shops?hudNextDoor(destination):null;
   $('hudMapTitle').textContent=shops?'Tower shops':'World map';
+  showTeacherTravel(shops);
   $('mapTrailStatus').textContent='';
   const moonButton=$('mapMoonSight');moonButton.hidden=shops||familiarState.equipped!=='owl'||!canScoutHere();moonButton.disabled=!!familiarSeconds()||unavailable();moonButton.textContent=familiarSeconds()?'Moon Sight · '+familiarSeconds()+'s':'Moon Sight';
   $('hudMapIntro').textContent=shops

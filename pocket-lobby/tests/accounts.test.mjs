@@ -4,6 +4,8 @@ import {testDatabase} from './db-helper.mjs';
 import {handleAccountApi} from '../server/accounts.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {resolveIdentity} from '../server/identity.mjs';
+import {locations} from '../server/player-state.mjs';
+import {depthsSpoils} from '../public/depths.js';
 const origin='https://tower.test';
 function client(env){
   const cookies=new Map();let key;
@@ -153,4 +155,28 @@ test('teacher ability access is verified per session and preserves permanent slo
  const forged=await player.call('player/save',{state:packet.state,revision:ordinary.revision,operation:crypto.randomUUID()});
  assert.equal(forged.status,200);
  assert.deepEqual(forged.data.state.styleAbilities.learned,['waypoint']);
+});
+
+test('teacher teleport is role-gated and covers every location without spending AP',async t=>{
+ const {db,sql}=testDatabase(),env={TOWER_DB:db};t.after(()=>sql.close());
+ const player=client(env);
+ await player.call('player/session',{legacy:{actionPoints:{value:0,active:true}}});
+ assert.equal((await player.call('account/register',{username:'TeleportFixture',password:'a sufficiently long passphrase'})).status,200);
+ const account=sql.prepare('SELECT account_id FROM tower_accounts WHERE username=?').get('TeleportFixture');
+ const read=async()=>(await player.call('player/state')).data;
+ const teleport=async room=>player.call('player/teacher/teleport',{room,revision:(await read()).revision,operation:crypto.randomUUID()});
+ assert.equal((await teleport('cinderwatch')).status,403);
+ sql.prepare('INSERT INTO tower_external_accounts VALUES (?,?,?,?,?)').run('liveweave','teacher:80',80,account.account_id,Date.now());
+ assert.equal((await teleport('missing-room')).status,400);
+ const initial=await read();
+ for(const room of locations){
+  const result=await teleport(room);
+  assert.equal(result.status,200,room+' '+result.data.error);
+  const state=(await read()).state;
+  assert.equal(state.location,room);
+  assert.equal(state.actionPoints.value,initial.state.actionPoints.value);
+  assert.equal(state.actionPoints.spent??0,initial.state.actionPoints.spent??0);
+  assert.equal(state.stats.explorationXp,initial.state.stats.explorationXp);
+  assert.equal(depthsSpoils(state.depthsRun).gold,0);
+ }
 });

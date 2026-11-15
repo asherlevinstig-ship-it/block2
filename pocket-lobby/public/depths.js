@@ -171,7 +171,7 @@ export function normalizeDepthsRun(input,room,encounter){
   if(finds.includes('sideSeal')&&!input.sideWins?.includes('trial')||finds.includes('sideTreasure')&&!input.sideWins?.includes('treasure'))throw new Error('Invalid optional room reward.');
   if(input.vaultMechanism!==undefined&&(input.cleared<2||!validVaultMechanism(input.vaultMechanism)))throw new Error("Invalid Vault mechanism.");
   const galleryLight=normalizeGalleryLight(input.galleryLight,input.cleared);
-  return {...(input.rewardChests!==undefined?{rewardChests:normalizeRewardChests(input.rewardChests)}:{}),cleared:input.cleared,...(input.vaultMechanism?{vaultMechanism:input.vaultMechanism}:{}),...(galleryLight?{galleryLight}:{}),...(input.floodCrossing?{floodCrossing:input.floodCrossing}:{}),...(input.floodCacheChoice?{floodCacheChoice:input.floodCacheChoice}:{}),...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
+  return {...(input.rewardChests!==undefined?{rewardChests:normalizeRewardChests(input.rewardChests)}:{}),cleared:input.cleared,...(Number.isInteger(input.rewardStart)&&input.rewardStart>0&&input.rewardStart<=Math.min(input.cleared,2)?{rewardStart:input.rewardStart}:{}),...(input.vaultMechanism?{vaultMechanism:input.vaultMechanism}:{}),...(galleryLight?{galleryLight}:{}),...(input.floodCrossing?{floodCrossing:input.floodCrossing}:{}),...(input.floodCacheChoice?{floodCacheChoice:input.floodCacheChoice}:{}),...(input.encounter?{encounter:normalizeDungeonEncounter(input.encounter,input.cleared)}:{}),...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
     ...(finds.includes('essenceCache')&&Object.hasOwn(stoneForms,input.cacheStone)?{cacheStone:input.cacheStone}:{})};
 }
@@ -201,7 +201,7 @@ export function depthsSpoils(run){
   if(run?.finds?.includes('submergedCache'))gold+=floodedCacheChoices[run.floodCacheChoice]?.gold??0;
   if(run?.galleryLight?.claimed==='lightAlcove')gold+=galleryLightReward.gold;
   gold+=run?.encounter?.gold??0;
-  for(const stage of depthsStages.slice(0,run?.cleared??0)){
+  for(const stage of depthsStages.slice(run?.rewardStart??0,run?.cleared??0)){
     const reward=depthsStageSpoils(stage,run.shardEarned===true);
     gold+=reward.gold;
     for(const [id,count] of Object.entries(reward.loot))loot[id]=(loot[id]??0)+count;

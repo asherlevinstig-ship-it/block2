@@ -1,3 +1,4 @@
+import {teleportTeacher} from './teacher-teleport.mjs';
 import {normalizeStyleAbilities} from '../public/style-abilities.js';
 import {setAutoAbilityMotion} from './auto-abilities.mjs';
 import {readHearth,changeHearth} from './hearth.mjs';
@@ -333,6 +334,7 @@ export async function handlePlayerApi(request,env){
       return json(await readRankings(env.TOWER_DB,id,identity.account));
     }
     if(request.method!=="POST")return json({error:"Not found."},404);
+    if(path==='/api/player/teacher/teleport'&&!verifiedTeacher)return json({error:'Teleport is available to verified LiveWeave teachers.'},403);
     const body=await bodyOf(request);
     if(env.ESSENCES_PAUSED===true&&(
       ['/api/player/gameplay/bondEssences','/api/player/gameplay/awakenPower','/api/player/gameplay/equipPower'].includes(path)||
@@ -533,6 +535,9 @@ export async function handlePlayerApi(request,env){
         if(typeof body.avatar?.name!=="string"||!body.avatar.name.trim()||body.avatar.name.trim().length>20)return json({error:"Choose a name using 1 to 20 characters."},400);
         {const wardrobe=normalizeWardrobe(body.wardrobe,body.avatar);if(wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing.');wardrobe.owned=wardrobe.owned.filter(isFreeClothing);state=normalizeState({...state,avatar:body.avatar,wardrobe,characterCreated:true,meals:{...state.meals,[towerBread.id]:1}});}
         break;
+      case '/api/player/teacher/teleport':
+        teleportTeacher(state,body.room);
+        break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);
         state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair,gender:state.avatar.gender},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}});
@@ -549,7 +554,7 @@ export async function handlePlayerApi(request,env){
         if((state.location==='trail'&&body.state?.location==='pond'||state.location==='pond'&&body.state?.location==='trail')&&!(await readPublicRequests(env.TOWER_DB)).open)throw new Error('Choose the Glass Creek route until Silverfin Bridge is complete.');
         if(body.state?.location==='millCellar'&&(state.location!=='millCellar'||!state.adventure.millCellarFound))throw new Error('Choose the loose bricks at the watermill to enter the cellar.');
         if(state.location==='millCellar'&&body.state?.location&&body.state.location!=='millCellar')throw new Error('Choose the cellar stairs to return to Millbrook.');
-        if(body.state?.location===factionHall&&(state.location!==factionHall||!await factionHallAccess(env.TOWER_DB,id)))return json({error:"Enter the hall through your faction board."},403);
+        if(body.state?.location===factionHall&&(state.location!==factionHall||!verifiedTeacher&&!await factionHallAccess(env.TOWER_DB,id)))return json({error:"Enter the hall through your faction board."},403);
         if(state.plan)return json({error:"Stop the work plan before playing.",...playerPacket(row)},409);
         if(body.state?.location==='lounge'&&state.location!=='lounge'&&!isSmartlyDressed(normalizeWardrobe(body.state.wardrobe??state.wardrobe)))throw new Error('Choose smart clothing in Wardrobe before entering the Sunset Lounge: Tailored Suit or Moonlit Dress.');
         state={...protectFishingState(state,normalizeState(protectFishingState(state,{...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}))),rankingJoined:state.rankingJoined===true,goldEarned:state.goldEarned??0,welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),controlMode:state.controlMode??'play',routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
@@ -647,7 +652,7 @@ export async function handlePlayerApi(request,env){
       const arrived=state.location!==oldRoom&&state.adventure.discovered.includes(state.location);
       state.adventure.discovered=[...new Set([...prior,...(arrived?[state.location]:[])])];
       if(arrived)awardExplorationXp(state,prior,state.location);
-    }else awardExplorationXp(state,beforeSave.adventure?.discovered);
+    }else if(path!=='/api/player/teacher/teleport')awardExplorationXp(state,beforeSave.adventure?.discovered);
     if(['/api/player/save','/api/player/gameplay/factionHall','/api/player/plan/start'].includes(path)&&state.location!==oldRoom){
       spendActionPoint(state,Date.now());
       if(state.plan&&!availableActionPoints(state.actionPoints)){stopForActionPoints(state,Date.now());finishRoutineReport(state,Date.now());}
