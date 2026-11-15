@@ -6366,7 +6366,8 @@ function openAbilityWheel(){
     for(let slot=0;slot<window.abilitySlots;slot++){
       const id=equipped(index)[slot],ability=window.styleAbilities[id];
       const row=document.createElement('li'),icon=document.createElement('span'),name=document.createElement('span');
-      icon.textContent=ability?.icon??'◇';icon.setAttribute('aria-hidden','true');
+      if(ability)icon.append(window.abilityIconElement(document,id,28));else icon.textContent='◇';
+      icon.setAttribute('aria-hidden','true');
       name.textContent=ability?.name??'Empty shortcut';row.append(icon,name);
       if(ability){
         row.title=ability.description;
@@ -6477,8 +6478,8 @@ function refreshStyleAbilityBar(){
     const ability=window.styleAbilities[id],button=existing.get(id)??document.createElement('button');button.title=ability.description;
     existing.delete(id);
     button.type='button';button.dataset.ability=id;
-    const label=ability.icon+' '+(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
-    if(button.textContent!==label)button.textContent=label;
+    const label=(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
+    if(button.textContent!==label)button.replaceChildren(window.abilityIconElement(document,id,24),document.createTextNode(label));
     button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
     button.onclick=()=>{

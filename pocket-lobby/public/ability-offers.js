@@ -1,4 +1,11 @@
 import {drawUndeadAlly} from './necromancy.js';
+export function abilityIconElement(doc,id,size){
+ const filename=id==='shareHearth'?'share_a_hearth':id.replace(/[A-Z]/g,letter=>'_'+letter.toLowerCase());
+ const img=doc.createElement('img');
+ img.src='assets/abilities/'+filename+'.png';
+ img.alt='';img.width=size;img.height=size;img.className='ability-art';
+ return img;
+}
 export function renderAbilityOffers({contents,status,state,catalog,offers,slots,mastery,practice,drawCharacter,decide,done,reduced,doc=document}){
  const dialog=contents.closest('dialog');
  let frame=0,holding=null,submitting=false,selected=offers[0],closed=false;
@@ -16,7 +23,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
  for(const id of learned){
   const progress=mastery(state,id),card=create('section',undefined,collection,'ability-mastery-card');
   const heading=create('header',undefined,card,'ability-card-heading');
-  create('span',catalog[id].icon,heading,'ability-card-icon').setAttribute('aria-hidden','true');
+  create('span',undefined,heading,'ability-card-icon').append(abilityIconElement(doc,id,28));
   create('strong',catalog[id].name,heading);
   create('small','Mastery '+progress.stage+' / 3',heading);
   create('p',progress.benefit,card);
@@ -34,7 +41,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
  const stage=create('div',undefined,contents,'offer-stage');
  const canvas=create('canvas',undefined,stage);canvas.width=320;canvas.height=160;canvas.setAttribute('aria-label','Animated ability preview with your character');canvas.setAttribute('role','img');
  const copy=create('section',undefined,contents,'offer-description');
- const title=create('h3','',copy),description=create('p','',copy),requirements=create('p','',copy,'offer-requirements'),cost=create('p','',copy,'offer-cost');
+ const title=create('h3','',copy, 'ability-offer-title'),description=create('p','',copy),requirements=create('p','',copy,'offer-requirements'),cost=create('p','',copy,'offer-cost');
  const actions=create('div',undefined,contents,'offer-actions');
  const accept=create('button','',actions,'offer-accept');
  accept.type='button';accept.setAttribute('aria-describedby','abilityPermanentNotice');
@@ -45,13 +52,13 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
  function select(id){
   if(submitting)return;
   cancel();selected=id;
-  const ability=catalog[id];title.textContent=ability.name;description.textContent=ability.description;
+  const ability=catalog[id];title.replaceChildren(abilityIconElement(doc,id,48),doc.createTextNode(ability.name));description.textContent=ability.description;
   requirements.textContent=Object.entries(ability.requirements).map(([key,level])=>(key==='magicKnowledge'?'Magic Knowledge':key==='familiarConnection'?'Familiar Connection':key[0].toUpperCase()+key.slice(1))+' '+level).join(' · ');
   cost.textContent=ability.passive?'Passive · '+Math.round(ability.cooldown/1000)+'s cooldown':(ability.cost===0?'0 AP':(ability.cost??1)+' AP')+' · '+Math.round(ability.cooldown/1000)+'s cooldown';
   accept.textContent='Hold to accept '+ability.name;
   for(const button of choices.children)button.setAttribute('aria-pressed',String(button.dataset.ability===id));
  }
- for(const id of offers){const choice=create('button',catalog[id].icon+' '+catalog[id].name,choices);choice.type='button';choice.dataset.ability=id;choice.onclick=()=>select(id);}
+ for(const id of offers){const choice=create('button',undefined,choices);choice.append(abilityIconElement(doc,id,24),doc.createTextNode(catalog[id].name));choice.type='button';choice.dataset.ability=id;choice.onclick=()=>select(id);}
  async function submit(decision){
   if(submitting)return;
   const id=selected;submitting=true;cancel();

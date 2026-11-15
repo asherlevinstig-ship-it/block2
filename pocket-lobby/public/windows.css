@@ -612,3 +612,8 @@
 #styleAbilityDialog .offer-stage{border-color:#ad936b;box-shadow:0 5px 16px #050b17}
 @media(max-width:520px){.ability-switch-layout{grid-template-columns:1fr;gap:10px;padding:10px;background-position:left center}#abilityWheelSets{width:min(220px,100%)}#abilityWheelSets button{min-width:48px;min-height:44px;font-size:11px}#abilityWheelSets button svg{width:17px;height:17px}#abilityWheelPreview li{min-height:34px;padding:3px 7px}}
 .teacher-quick-abilities{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
+
+.ability-art{display:block;flex:none;object-fit:contain;image-rendering:pixelated}
+.style-ability-bar button:has(.ability-art),.offer-choices button:has(.ability-art),#styleAbilityContents .ability-offer-title{display:flex;align-items:center;gap:6px}
+#abilityWheelPreview li>span:first-child,.ability-card-icon{overflow:hidden}
+#styleAbilityContents .ability-offer-title{gap:10px}
