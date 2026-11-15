@@ -79,7 +79,9 @@ test('Evil uses its kill count for optional permanent offers and mastery',()=>{
  const state=normalizeState({stats:{evil:2,stealthXp:skillXpForLevel(2),strengthXp:skillXpForLevel(3),explorationXp:skillXpForLevel(3),vitalityXp:skillXpForLevel(3)}});
  for(const id of ['deathmark','bloodlust','shadowPursuit','siphon'])assert(styleAbilityOffers(state).includes(id),id);
  for(const id of ['deathmark','bloodlust','siphon'])styleAbilityAction(state,'abilityDecision',{id,decision:'accept'},20000);
- assert.equal(state.styleAbilities.learned.length,3);assert.deepEqual(styleAbilityOffers(state),[]);
+ assert.equal(state.styleAbilities.learned.length,3);assert(styleAbilityOffers(state).includes('shadowPursuit'));
+ styleAbilityAction(state,'abilityDecision',{id:'shadowPursuit',decision:'accept'},20000);
+ assert.equal(normalizeState(state).styleAbilities.learned.length,4);
  assert.throws(()=>styleAbilityAction(state,'abilityCast',{id:'siphon'},20000),/Nearby/);
  state.stats.evil=5;state.stats.vitalityXp=skillXpForLevel(6);state.styleAbilities.mastery={siphon:{uses:20,seen:[]}};
  assert.equal(abilityMastery(state,'siphon').stage,3);

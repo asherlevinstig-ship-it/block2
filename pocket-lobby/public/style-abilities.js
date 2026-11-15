@@ -2,7 +2,7 @@ import {normalizeNecromancy} from './necromancy.js';
 import {keeperSites} from './lantern-keepers.js';
 import {skillLevel} from './skill-curve.js';
 
-export const abilitySlots=3;
+export const abilitySlots=4;
 export function abilityStatLevel(state,stat){
  return stat==='evil'?(state.stats?.evil??0):skillLevel(stat==='mining'?state.mining?.xp:state.stats?.[(stat==='fishing'?'patience':stat)+'Xp']);
 }
@@ -67,7 +67,7 @@ export function normalizeStyleAbilities(input){
  const list=key=>[...new Set((Array.isArray(input?.[key])?input[key]:[]).filter(id=>Object.hasOwn(styleAbilities,id)))];
  const teacherAccess=input?.teacherAccess===true;
  const permanent=list('permanentLearned');
- const earned=(teacherAccess?permanent:list('learned')).slice(0,abilitySlots);
+ const earned=(teacherAccess?permanent:list('learned'));
  const learned=teacherAccess?Object.keys(styleAbilities):earned;
  const declined=list('declined').filter(id=>!earned.includes(id));
  const readyAt=Object.fromEntries(learned.filter(id=>Number.isSafeInteger(input?.readyAt?.[id])&&input.readyAt[id]>0).map(id=>[id,input.readyAt[id]]));
@@ -93,7 +93,7 @@ export function normalizeStyleAbilities(input){
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);
- if(learned.length>=abilitySlots||state.characterCreated===false)return [];
+ if(state.characterCreated===false)return [];
  return Object.entries(styleAbilities).filter(([id,ability])=>!learned.includes(id)&&!declined.includes(id)&&(!['scoutAhead','shareHearth'].includes(id)||Object.values(state.familiars?.careReadyAt??{}).some(at=>at>0))&&
    (['shareHearth','appraise','stoneguard','deathmark','bloodlust','shadowPursuit','siphon','raiseFallen','lightFingers','cutpurse','lockbreaker','packTactics','sanctuary','bindBeast','bloodPrice','faultbreaker'].includes(id)||(state.adventure?.discovered?.length??0)>0)&&Object.entries(ability.requirements).every(([stat,level])=>abilityStatLevel(state,stat)>=level)).map(([id])=>id);
 }

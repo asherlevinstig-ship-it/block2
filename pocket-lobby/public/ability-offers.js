@@ -9,16 +9,11 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
  const teacher=state.styleAbilities?.teacherAccess===true;
  const learned=state.styleAbilities?.learned??[];
  const permanent=teacher?state.styleAbilities.permanentLearned??[]:learned;
- create('p','Choose the powers that shape your character.',contents,'offer-intro');
- const slotRow=create('ol',undefined,contents,'permanent-slots');
- for(let i=0;i<slots;i++){
-  const ability=catalog[permanent[i]],slot=create('li',undefined,slotRow,ability?'filled':'empty');
-  create('span',ability?.icon??'◇',slot);
-  create('strong',ability?.name??'Open slot',slot);
- }
- create('p',teacher?'Teacher access · All learnable abilities available. '+permanent.length+' of '+slots+' permanent slots filled.':learned.length+' of '+slots+' slots filled · Accepted abilities are permanent.',contents,'offer-commitment');
+ create('p',teacher?'Teacher access · All abilities available.':permanent.length+' of '+Object.keys(catalog).length+' abilities learned.',contents,'offer-commitment');
+ const collection=create('details',undefined,contents);
+ create('summary','Learned abilities and mastery',collection);
  for(const id of learned){
-  const progress=mastery(state,id),card=create('section',undefined,contents,'ability-mastery-card');
+  const progress=mastery(state,id),card=create('section',undefined,collection,'ability-mastery-card');
   create('strong',catalog[id].name+' · Mastery '+progress.stage+' / 3',card);
   create('p',progress.benefit,card);
   create('small',practice[id],card);
@@ -39,7 +34,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
  const actions=create('div',undefined,contents,'offer-actions');
  const accept=create('button','',actions,'offer-accept');
  accept.type='button';accept.setAttribute('aria-describedby','abilityPermanentNotice');
- const notice=create('p','Hold for 1.2 seconds to fill one permanent slot.',contents,'offer-notice');notice.id='abilityPermanentNotice';
+ const notice=create('p','Hold for 1.2 seconds to learn this ability.',contents,'offer-notice');notice.id='abilityPermanentNotice';
  const later=create('button','Decide later',actions);later.type='button';later.onclick=()=>dialog.close();
  const decline=create('button','Decline this offer',actions,'offer-decline');decline.type='button';
  function cancel(){holding=null;accept.style.setProperty('--hold','0%');}
@@ -60,7 +55,7 @@ export function renderAbilityOffers({contents,status,state,catalog,offers,slots,
   status.textContent='Saving your choice…';
   try{
    await decide(id,decision);
-   status.textContent=decision==='accept'?catalog[id].name+' awakened · Permanent slot filled.':'Offer declined.';
+   status.textContent=decision==='accept'?catalog[id].name+' learned.':'Offer declined.';
    if(decision==='accept'){
     stage.classList.add('awakened');accept.textContent=catalog[id].name+' learned';
     if(!reduced())await new Promise(resolve=>setTimeout(resolve,850));

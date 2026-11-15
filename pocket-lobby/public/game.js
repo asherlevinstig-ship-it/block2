@@ -6326,13 +6326,78 @@ function shadowstepTargets(){
   }
   return shadowstepPreview.tiles;
 }
+const abilitySetNames=['Set I','Set II','Set III','Set IV'];
+function abilitySetKey(){return 'ability-sets:'+window.playerCloud.characterKey;}
+function readAbilitySets(learned){
+  const saved=load(abilitySetKey(),{});
+  const active=Number.isInteger(saved?.active)&&saved.active>=0&&saved.active<abilitySetNames.length?saved.active:0;
+  const sets=abilitySetNames.map((_,index)=>{
+    const entries=saved?.sets?.[index];
+    return Array.isArray(entries)?[...new Set(entries.filter(id=>learned.includes(id)))].slice(0,window.abilitySlots):null;
+  });
+  return {active,sets};
+}
+function useAbilitySet(index){
+  const learned=window.playerCloud?.initial?.styleAbilities?.learned??[];
+  const config=readAbilitySets(learned);
+  config.active=index;
+  save(abilitySetKey(),config);
+  styleAbilityKey='';
+  refreshStyleAbilityBar();
+}
+function openAbilityWheel(){
+  const state=window.playerCloud?.initial;
+  if(!state)return;
+  const learned=state.styleAbilities?.learned??[];
+  const dialog=$('abilityWheel');
+  const choices=$('abilityWheelSets'),editor=$('abilityWheelEditor');
+  const config=readAbilitySets(learned);
+  function render(){
+    choices.replaceChildren();editor.replaceChildren();
+    for(const [index,name] of abilitySetNames.entries()){
+      const button=document.createElement('button');button.type='button';button.textContent=name;
+      button.setAttribute('aria-pressed',String(index===config.active));
+      button.onclick=()=>{useAbilitySet(index);config.active=index;render();};
+      choices.append(button);
+    }
+    const equipped=config.sets[config.active]??(config.active===0?learned.slice(0,window.abilitySlots):[]);
+    const title=document.createElement('p');title.textContent=abilitySetNames[config.active]+' · '+equipped.length+' / '+window.abilitySlots+' shortcuts';editor.append(title);
+    for(let slot=0;slot<window.abilitySlots;slot++){
+      const label=document.createElement('label');label.textContent='Slot '+(slot+1)+' ';
+      const select=document.createElement('select');select.add(new Option('Empty',''));
+      for(const id of learned){
+        if(id===equipped[slot]||!equipped.includes(id))select.add(new Option(window.styleAbilities[id].name,id));
+      }
+      select.value=equipped[slot]??'';
+      select.onchange=()=>{
+        const next=[...equipped];next[slot]=select.value;
+        config.sets[config.active]=next.filter(Boolean);
+        save(abilitySetKey(),config);refreshStyleAbilityBar();render();editor.querySelectorAll('select')[slot]?.focus();
+      };
+      label.append(select);editor.append(label);
+    }
+  }
+  render();
+  if(!dialog.open)dialog.showModal();
+}
+document.addEventListener('keydown',event=>{
+  if(event.repeat||!window.playerCloud?.initial||event.target.closest?.('input,textarea,select,button,[contenteditable]')||document.querySelector('dialog[open]'))return;
+  if(!['BracketLeft','BracketRight'].includes(event.code))return;
+  if(!(window.playerCloud.initial.styleAbilities?.learned?.length))return;
+  const {active}=readAbilitySets(window.playerCloud.initial.styleAbilities.learned);
+  event.preventDefault();
+  useAbilitySet((active+abilitySetNames.length+(event.code==='BracketRight'?1:-1))%abilitySetNames.length);
+});
 function refreshStyleAbilityBar(){
   const bar=$('styleAbilityBar'),state=window.playerCloud?.initial;
   if(!bar||!state||!window.styleAbilities)return;
   const learned=state.styleAbilities?.learned??[],offers=window.styleAbilityOffers(state);
   const teacher=state.styleAbilities?.teacherAccess===true;
-  const seconds=learned.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt?.[id]??0)-combatNow())/1000)));
-  const nextKey=JSON.stringify([teacher,learned,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
+  const config=readAbilitySets(learned);
+  const shortcuts=config.sets[config.active]??(config.active===0?learned.slice(0,window.abilitySlots):[]);
+  const visible=teacher?learned:shortcuts;
+  const seconds=visible.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt?.[id]??0)-combatNow())/1000)));
+  const nextKey=JSON.stringify([teacher,learned,config.active,visible,offers,seconds,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
   if(nextKey===styleAbilityKey)return;
   styleAbilityKey=nextKey;
   bar.hidden=!learned.length&&!offers.length;
@@ -6352,7 +6417,7 @@ function refreshStyleAbilityBar(){
   }
   const choices=controls?.querySelector('.teacher-ability-options');
   const existing=new Map(Array.from(choices?.children??[],element=>[element.dataset.ability,element]));
-  for(const [index,id] of learned.entries()){
+  for(const [index,id] of visible.entries()){
     const ability=window.styleAbilities[id],button=existing.get(id)??document.createElement('button');button.title=ability.description;
     existing.delete(id);
     button.type='button';button.dataset.ability=id;
@@ -6376,6 +6441,20 @@ function refreshStyleAbilityBar(){
     if(!button.parentNode)(choices??bar).append(button);
   }
   for(const stale of existing.values())stale.remove();
+  if(teacher&&shortcuts.length){
+    const quick=document.createElement('div');quick.className='teacher-quick-abilities';
+    for(const id of shortcuts){
+      const original=choices.querySelector('[data-ability="'+id+'"]');
+      if(original){const button=original.cloneNode(true);delete button.dataset.ability;button.onclick=original.onclick;quick.append(button);}
+    }
+    bar.querySelector('.teacher-quick-abilities')?.remove();bar.prepend(quick);
+  }
+  if(learned.length){
+    const wheel=bar.querySelector('.ability-wheel-toggle')??document.createElement('button');
+    wheel.className='ability-wheel-toggle';wheel.type='button';wheel.textContent='◉ '+abilitySetNames[config.active];
+    wheel.setAttribute('aria-label','Ability sets, '+abilitySetNames[config.active]);wheel.onclick=openAbilityWheel;
+    if(!wheel.parentNode)bar.append(wheel);
+  }
   const menu=bar.querySelector('.style-ability-menu')??document.createElement('button');menu.className='style-ability-menu';menu.type='button';menu.textContent=offers.length?'Ability offer'+(offers.length>1?'s':'')+' · '+offers.length:'Abilities';
   menu.onclick=()=>openStyleAbilities();if(!menu.parentNode)bar.append(menu);
 }

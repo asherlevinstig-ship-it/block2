@@ -576,3 +576,11 @@
 .teacher-ability-options{position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);z-index:2;display:grid;gap:4px;width:min(260px,80vw);max-height:min(280px,44dvh);overflow:auto;overscroll-behavior:contain;padding:6px;border:1px solid #8172a7;border-radius:9px;background:#151d36}
 .teacher-ability-options button{text-align:left;min-height:36px}
 .teacher-abilities:not([open]) .teacher-ability-options{display:none}
+
+#abilityWheel{width:min(460px,94vw)}
+#abilityWheelSets{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;width:min(260px,100%);aspect-ratio:1;margin:12px auto;border-radius:50%;background:radial-gradient(circle,#3a3563 0 22%,#1c2540 23% 62%,transparent 63%);padding:12px}
+#abilityWheelSets button:nth-child(1){grid-area:1/2}#abilityWheelSets button:nth-child(2){grid-area:2/3}#abilityWheelSets button:nth-child(3){grid-area:3/2}#abilityWheelSets button:nth-child(4){grid-area:2/1}
+#abilityWheelSets button[aria-pressed=true]{border-color:#edc57a;background:#524060;color:#fff3cf}
+#abilityWheelEditor label{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0}
+#abilityWheelEditor select{width:72%;min-width:0}
+.teacher-quick-abilities{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
