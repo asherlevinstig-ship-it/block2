@@ -5,7 +5,10 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
  dialog.innerHTML=`<header class="learning-head"><div><span class="eyebrow">THE TOWER ACADEMY</span><h2 id="learningTitle">Homework powers adventure.</h2></div><button class="close" type="button" aria-label="Close learning">×</button></header><div class="learning-banner"><span class="learning-gem" aria-hidden="true">ϟ</span><div><b>10 questions. One clear goal.</b><p>Each submitted answer earns 1 AP, up to 100 stored. Your progress is saved.</p></div><strong id="learningBalance"></strong></div><section class="learning-session" aria-label="Homework session progress"><div><b>Your homework</b><span id="learningSessionCount">0 / 10 answered</span></div><progress id="learningSessionBar" max="10" value="0" aria-label="Homework progress"></progress></section><form id="learningForm"><label id="learningSubjectField" class="learning-subject" hidden>Subject<select id="learningSubject"></select></label><fieldset><legend id="learningPrompt">Preparing your question…</legend><p id="learningTopic" class="eyebrow" hidden></p><pre id="learningSource" class="learning-feedback learning-source" hidden></pre><div id="learningChoices" class="learning-choices"></div></fieldset><section id="learningFeedback" class="learning-feedback" role="status" hidden></section><p id="learningError" class="learning-error" role="alert"></p><footer><span id="learningProgress"></span><button id="learningSubmit" class="primary" type="submit" disabled>Submit answer · +1 AP</button><button id="learningNext" class="primary" type="button" hidden>Next question</button></footer></form><article id="learningComplete" class="learning-complete" hidden aria-labelledby="homeworkCompleteTitle"><span class="homework-complete-mark" aria-hidden="true">✓</span><span class="eyebrow">TEN QUESTIONS ANSWERED</span><h3 id="homeworkCompleteTitle">Homework complete!</h3><p id="homeworkSummary"></p><p id="homeworkAvailable"></p><div class="homework-actions"><button id="homeworkAdventure" class="primary" type="button">Back to adventure</button><button id="homeworkAgain" type="button">Start another 10</button></div><small>You can return to questions whenever you want more AP.</small></article><div id="learningResume" class="homework-actions" hidden><button class="primary" type="button">Back to adventure</button></div><p id="homeworkError" class="learning-error" role="alert"></p>`;
  doc.body.append(dialog);
  const el=id=>dialog.querySelector('#'+id),form=el('learningForm'),submit=el('learningSubmit'),next=el('learningNext'),choices=el('learningChoices'),feedback=el('learningFeedback');
+ const prompt=el('learningPrompt'),fieldset=form.querySelector('fieldset');
+ prompt.tabIndex=-1;
  let current=null,selected=null,busy=false,animation=null,goalTrip=null;
+ let invalidAttemptId=null,lastMeditationPaint=-Infinity;
  const trip=doc.createElement('section'),tripStatus=doc.createElement('p'),tripContinue=doc.createElement('button');
  trip.hidden=true;trip.className='learning-feedback';tripStatus.setAttribute('role','status');
  tripContinue.type='button';tripContinue.textContent='Back to your upgrade goal';
@@ -33,8 +36,11 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
  const reduced=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;
  function drawMeditation(time){
   if(!dialog.open||!renderer){animation=null;return;}
-  const ctx=preview.getContext('2d'),s=getState();ctx.clearRect(0,0,180,180);
-  ctx.save();ctx.scale(4,4);renderer.draw(ctx,22.5,38,s.avatar,{meditating:true,direction:'right',time,reduced,vest:armourSelection(s.combatGear)});ctx.restore();
+  if(time-lastMeditationPaint>=80){
+   lastMeditationPaint=time;
+   const ctx=preview.getContext('2d'),s=getState();ctx.clearRect(0,0,180,180);
+   ctx.save();ctx.scale(4,4);renderer.draw(ctx,22.5,38,s.avatar,{meditating:true,direction:'right',time,reduced,vest:armourSelection(s.combatGear)});ctx.restore();
+  }
   animation=reduced?null:requestAnimationFrame(drawMeditation);
  }
  function stopAnimation(){if(animation!==null)cancelAnimationFrame(animation);animation=null;}
@@ -62,13 +68,13 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
   el('learningProgress').textContent=finished()?'10 / 10 complete':'Question '+Math.min(target,answered+1)+' of '+target;
  }
  function showComplete(){
-  summary();form.hidden=true;el('learningComplete').hidden=false;
+  form.hidden=true;el('learningComplete').hidden=false;summary();
   const s=getState(),session=s.learning.session,remaining=session.target-session.correct;
   el('homeworkSummary').textContent=session.correct+' correct'+(remaining?' · '+remaining+' to practise':'')+' · '+session.earned+' AP earned';
   el('homeworkAvailable').textContent=s.actionPoints?.unlimited?'Unlimited AP is on.':(s.actionPoints?.value??0)+' AP available for journeys, attacks, abilities and gathering.';
  }
- function showQuestion(){
-  summary();form.hidden=false;el('learningComplete').hidden=true;current=getState().learning?.attempt;selected=null;choices.replaceChildren();feedback.hidden=true;el('learningError').textContent='';
+ function showQuestion(focus=false){
+  form.hidden=false;el('learningComplete').hidden=true;summary();current=getState().learning?.attempt;selected=null;choices.replaceChildren();feedback.hidden=true;el('learningError').textContent='';
   submit.hidden=false;submit.disabled=true;next.hidden=true;
   submit.textContent=(getState().actionPoints?.value??0)>=100?'Submit answer · AP full':'Submit answer · +1 AP';
   const subject=el('learningSubject'),subjects=getState().learning?.subjects??[];
@@ -81,26 +87,43 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
   topic.textContent=[current?.course,current?.topic].filter(Boolean).join(' · ');topic.hidden=!topic.textContent;
   source.textContent=current?.source??'';source.hidden=!source.textContent;
   if(!current){el('learningPrompt').textContent='Preparing your question…';return;}
-  el('learningPrompt').textContent=current.prompt;
+  prompt.textContent=current.prompt;
+  if(!reduced)choices.animate?.([{opacity:.74,transform:'translateY(3px)'},{opacity:1,transform:'none'}],{duration:100,easing:'ease-out'});
   current.choices.forEach((text,i)=>{const label=doc.createElement('label'),radio=doc.createElement('input'),letter=doc.createElement('span'),answer=doc.createElement('b');
    radio.type='radio';radio.name='learningChoice';radio.value=i;radio.addEventListener('change',()=>{selected=i;submit.disabled=false;});
    letter.textContent=String.fromCharCode(65+i);answer.textContent=text;label.append(radio,letter,answer);choices.append(label);
   });
+  if(focus&&dialog.open)prompt.focus();
+ }
+ function formBusy(value){
+  fieldset.disabled=value;
+  form.setAttribute('aria-busy',String(value));
  }
  async function load(newSession=false,track){
   if(busy)return;if(finished()&&!newSession){showComplete();return;}
-  const subject=el('learningSubject');
-  busy=true;subject.disabled=true;next.disabled=true;submit.disabled=true;el('learningError').textContent='';el('homeworkError').textContent='';
-  try{await change('next',track===undefined?{}:{track});showQuestion();}
-  catch(error){el(form.hidden?'homeworkError':'learningError').textContent=error.message;next.hidden=false;next.textContent='Retry question';}
+  const saved=getState().learning?.attempt;
+  if(!newSession&&track===undefined&&saved&&saved.id!==current?.id&&saved.id!==invalidAttemptId){showQuestion(true);return;}
+  const subject=el('learningSubject'),again=el('homeworkAgain'),nextLabel=next.textContent;
+  busy=true;formBusy(true);subject.disabled=true;next.disabled=true;submit.disabled=true;again.disabled=true;
+  if(!next.hidden)next.textContent='Getting question…';
+  el('learningError').textContent='';el('homeworkError').textContent='';
+  try{await change('next',track===undefined?{}:{track});showQuestion(true);}
+  catch(error){
+   el(form.hidden?'homeworkError':'learningError').textContent=error.message;
+   if(track===undefined){next.hidden=false;next.textContent='Retry question';}
+  }
   finally{
-   busy=false;subject.disabled=false;next.disabled=false;
-   if(track!==undefined){subject.value=getState().learning?.track??'';if(!submit.hidden)submit.disabled=selected===null;}
+   busy=false;formBusy(false);subject.disabled=false;next.disabled=false;again.disabled=false;
+   if(next.textContent==='Getting question…')next.textContent=nextLabel;
+   if(track!==undefined)subject.value=getState().learning?.track??'';
+   if(!submit.hidden)submit.disabled=selected===null;
   }
  }
  form.onsubmit=async event=>{
   event.preventDefault();if(busy||selected===null||!current)return;
-  busy=true;el('learningSubject').disabled=true;submit.disabled=true;el('learningError').textContent='';
+  busy=true;formBusy(true);el('learningSubject').disabled=true;submit.disabled=true;el('learningError').textContent='';
+  const submitLabel=submit.textContent;
+  submit.textContent='Checking answer…';
   try{
    await change('answer',{attemptId:current.id,choice:selected});summary();
    const result=getState().learning.last;feedback.hidden=false;feedback.dataset.correct=String(result.correct);
@@ -110,11 +133,12 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
    const explanation=doc.createElement('p');explanation.className='learning-explanation';explanation.textContent=result.explanation??'';
    feedback.append(reward,detail,explanation);choices.querySelectorAll('input').forEach(input=>input.disabled=true);
    submit.hidden=true;next.hidden=false;next.textContent=finished()?'See homework summary':'Next question';
+   if(dialog.open)next.focus({preventScroll:true});
   }catch(error){el('learningError').textContent=error.message;
-   if(error.data?.code==='curriculum-changed'){submit.hidden=true;next.hidden=false;next.textContent='Next question';}
+   if(error.data?.code==='curriculum-changed'){invalidAttemptId=current.id;submit.hidden=true;next.hidden=false;next.textContent='Next question';}
    else submit.disabled=false;
   }
-  finally{busy=false;el('learningSubject').disabled=false;}
+  finally{busy=false;formBusy(false);submit.textContent=submitLabel;el('learningSubject').disabled=false;}
  };
  el('learningSubject').onchange=event=>load(false,event.target.value);
  next.onclick=()=>{if(finished())showComplete();else load();};
@@ -130,7 +154,17 @@ export function initializeLearning({doc=document,change,getState,renderer=null,i
  el('homeworkAdventure').onclick=resumeButton.onclick=resumeAdventure;
  close.onclick=()=>{if(!isPausedForPoints())dialog.close();};
  dialog.oncancel=event=>{if(isPausedForPoints())event.preventDefault();};
- const open=(options,forPoints=false)=>{goalTrip=typeof options?.onContinue==='function'?options:null;stopAnimation();if(dialog.open)dialog.close();dialog.showModal();summary();for(const trigger of triggers)trigger.setAttribute('aria-expanded','true');if(renderer)drawMeditation(performance.now());load(forPoints&&!!finished());};
+ const open=(options,forPoints=false)=>{
+  goalTrip=typeof options?.onContinue==='function'?options:null;
+  if(dialog.open){summary();return;}
+  const saved=getState().learning?.attempt,another=forPoints&&!!finished();
+  if(!another&&finished())showComplete();
+  else if(!busy&&(saved?.id!==invalidAttemptId||!saved))showQuestion();
+  dialog.showModal();summary();
+  for(const trigger of triggers)trigger.setAttribute('aria-expanded','true');
+  if(renderer){lastMeditationPaint=-Infinity;drawMeditation(performance.now());}
+  if(another||!finished()&&(!saved||saved.id===invalidAttemptId))load(another);
+ };
  const triggers=['openLearning','hotbarQuestions'].map(id=>doc.getElementById(id)).filter(Boolean);for(const trigger of triggers)trigger.onclick=open;
  return {open,openForPoints(){if(dialog.open)summary();else open(undefined,true);},dialog,get active(){return dialog.open;}};
 }
