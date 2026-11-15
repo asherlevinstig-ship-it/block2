@@ -205,6 +205,8 @@ test('the locked Hunter’s Sweep can be crossed on foot or with Shadowstep',()=
  assert.deepEqual(r.targetTile,locked);
  assert.equal(a.actionPoints.value,ap-1);
  assert(a.styleAbilities.readyAt.shadowstep>lands);
+ assert.deepEqual(publicVaultParty(r,'b',lands-400).members.find(m=>m.id===r.members.a.id).blink.from,locked);
+ assert.deepEqual(publicVaultParty(r,'b',lands-400).members.find(m=>m.id===r.members.a.id).blink.to,tile);
  assert.throws(()=>act(r,a,'a','shadowstep',lands-400,{tile:{x:5,y:6}}),/recharging/);
  b.position={x:9,y:7};act(r,b,'b','tick',lands-350);
  advanceVaultParty(r,lands);

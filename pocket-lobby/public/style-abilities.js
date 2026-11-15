@@ -109,6 +109,9 @@ export function normalizeStyleAbilities(input){
  const readyAt=Object.fromEntries(learned.filter(id=>Number.isSafeInteger(input?.readyAt?.[id])&&input.readyAt[id]>0).map(id=>[id,input.readyAt[id]]));
  const quietUntil=Number.isSafeInteger(input?.quietUntil)&&input.quietUntil>0&&learned.includes('shadowstep')?input.quietUntil:0;
  const lastBlinkAt=learned.includes('shadowstep')&&Number.isSafeInteger(input?.lastBlinkAt)?Math.max(0,input.lastBlinkAt):0;
+ const step=input?.blink,tile=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&p.x>=0&&p.x<30&&p.y>=0&&p.y<30;
+ const blink=lastBlinkAt>0&&step?.at===lastBlinkAt&&typeof step.room==='string'&&/^[a-zA-Z]{1,30}$/.test(step.room)&&tile(step.from)&&tile(step.to)?
+  {at:lastBlinkAt,room:step.room,from:{x:step.from.x,y:step.from.y},to:{x:step.to.x,y:step.to.y}}:null;
  const trail=input?.preyTrail;
  const tracked=learned.includes('trackPrey')&&Number.isSafeInteger(trail?.until)&&trail.until>0&&Number.isInteger(trail.step)&&trail.step>=0&&trail.step<=preyTrail.tracks.length;
  const scout=input?.scout;
@@ -125,7 +128,7 @@ export function normalizeStyleAbilities(input){
  const pvpTimers=Object.fromEntries(['deathmarkUntil','bloodlustUntil'].filter(key=>learned.includes(key==='deathmarkUntil'?'deathmark':'bloodlust')&&Number.isSafeInteger(input?.[key])&&input[key]>0).map(key=>[key,input[key]]));
  const pursuit=input?.pursuit;
  const pursuing=learned.includes('shadowPursuit')&&typeof pursuit?.room==='string'&&/^[a-zA-Z]{1,30}$/.test(pursuit.room)&&typeof pursuit.name==='string'&&Number.isSafeInteger(pursuit.until)&&pursuit.until>0;
- return {learned,declined,readyAt,...(teacherAccess?{teacherAccess:true,permanentLearned:earned}:{}),quietUntil,lastBlinkAt,...normalizeNecromancy(input,learned),...pvpTimers,...(pursuing?{pursuit:{room:pursuit.room,name:pursuit.name.slice(0,40),until:pursuit.until}}:{}),...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
+ return {learned,declined,readyAt,...(teacherAccess?{teacherAccess:true,permanentLearned:earned}:{}),quietUntil,lastBlinkAt,...(blink?{blink}:{}),...normalizeNecromancy(input,learned),...pvpTimers,...(pursuing?{pursuit:{room:pursuit.room,name:pursuit.name.slice(0,40),until:pursuit.until}}:{}),...(learned.includes('patientCast')&&input?.patientCastReady===true?{patientCastReady:true}:{}),...(guarded?{stoneguard:{until:guard.until,reduction:guard.reduction,credited:guard.credited===true}}:{}),...(Object.keys(mastery).length?{mastery}:{}),...(warming?{hearth:{nextAt:hearth.nextAt,ticks:hearth.ticks,...([4,6,8].includes(hearth.perTick)?{perTick:hearth.perTick}:{})}}:{}),...(scouting?{scout:{room:scout.room,at:scout.at}}:{}),...(tracked?{preyTrail:{until:trail.until,step:trail.step,cleared:trail.cleared===true}}:{})};
 }
 export function styleAbilityOffers(state){
  const {learned,declined}=normalizeStyleAbilities(state.styleAbilities);

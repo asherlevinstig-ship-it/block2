@@ -138,6 +138,7 @@ export function styleAbilityAction(state,action,body,now){
   const room=state.location,to=body.tile;
   if(encounter&&encounter.arenaVersion!==1)throw invalid('Shadowstep requires an arena with combat movement.');
   if(!shadowstepTiles(state).some(tile=>tile.x===to?.x&&tile.y===to?.y))throw invalid('Choose a reachable floor tile up to four steps away.');
+  abilities.blink={at:now,room,from:{...state.position},to:{x:to.x,y:to.y}};
   state.position={x:to.x,y:to.y};
   abilities.lastBlinkAt=now;
   if(encounter){

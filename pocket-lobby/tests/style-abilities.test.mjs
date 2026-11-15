@@ -50,6 +50,8 @@ test('Shadowstep cannot cross a closed creek or land in water',()=>{
  assert.deepEqual(state.position,{x:6,y:4});
  assert.equal(state.actionPoints.value,4);
  assert.equal(state.styleAbilities.readyAt.shadowstep,46000);
+ assert.deepEqual(state.styleAbilities.blink,{at:1000,room:'creek',from:{x:4,y:4},to:{x:6,y:4}});
+ assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(state))).styleAbilities.blink,state.styleAbilities.blink);
 });
 
 test('Track Prey reveals the Dusktusk only after reading three tracks in order',()=>{

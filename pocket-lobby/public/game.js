@@ -666,6 +666,7 @@ function receivePeers(peers){
     if(old)Object.assign(old,peer,{walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName});
     else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now()});
     const actor=remotePeers.get(peer.id),cast=peer.abilityCast;
+    if(peer.blink)beginShadowstep(actor,peer.blink);
     if(cast&&cast.at!==actor.lastSignatureCast){
       actor.lastSignatureCast=cast.at;
       actor.raidCastAt=performance.now()-Math.max(0,combatNow()-cast.at);
@@ -686,6 +687,25 @@ function characterWalkCycle(actor,x,y,moving){
   actor.animationStep={x,y,stride:stride%2};
   return moving?(stride%2)||.0001:0;
 }
+function beginShadowstep(actor,blink){
+  if(!blink||blink.room!==currentRoom||actor.lastBlink===blink.at)return;
+  actor.lastBlink=blink.at;
+  const age=Math.max(0,combatNow()-blink.at);
+  if(age>=700)return;
+  actor.shadowstep={from:blink.from,room:blink.room,started:performance.now()-age};
+  if(actor!==player){
+    actor.x=actor.rx=blink.to.x;actor.y=actor.ry=blink.to.y;
+    actor.walk=null;actor.walking=false;
+  }
+  for(const [phase,tile] of [['departure',blink.from],['arrival',blink.to]]){
+    abilityBursts.push({id:'shadowstep',room:currentRoom,tile,phase,started:performance.now()-age,...(phase==='arrival'?{from:blink.from}:{})});
+  }
+}
+function shadowstepBody(actor,time){
+  const effect=actor.shadowstep,age=effect?time-effect.started:Infinity;
+  if(age<0||age>=700||effect.room!==currentRoom){actor.shadowstep=null;return null;}
+  return {age,from:point(effect.from.x+.5,effect.from.y+.5)};
+}
 function drawRemote(peer,time){
   const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
@@ -700,7 +720,7 @@ function drawRemote(peer,time){
   const raidPose=time-(peer.raidStrikeAt??-10000)<950?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,castKind:peer.raidCastKind,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(peer.stoneguardUntil>now)window.drawStoneguard?.(ctx,x,y,time,peer.stoneguardUntil-now,reducedMotion.matches);
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
   if(peer.undead?.until>now){const [ux,uy]=point(peer.rx+1.25,peer.ry+1.25);drawUndeadAlly(ctx,ux,uy,peer.undead,time,reducedMotion.matches,{attackAge:now-(peer.undead.lastStrikeAt??0),flipped:peer.direction==='left'});}
@@ -4116,7 +4136,7 @@ function draw(time){
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
     if(undead){const [ux,uy]=point(player.x+1.25,player.y+1.25);drawUndeadAlly(ctx,ux,uy,undead,time,reducedMotion.matches,{attackAge:combatNow()-(undead.lastStrikeAt??0),flipped:player.direction==='left'});}
     if(hunting.encounter?.sanctuaryWard&&hunting.encounter.magicWardUntil>combatNow()){
@@ -6814,6 +6834,13 @@ async function castStyleAbility(id,body){
       worldLabelKey='';note('Fresh tracks. Walk to the glowing pawprints and read them.');
       refreshStyleAbilityBar();return;
     }
+    if(id==='shadowstep'){
+      player.seat=null;
+      player.x=player.cx=state.position.x;player.y=player.cy=state.position.y;
+      beginShadowstep(player,state.styleAbilities?.blink??{at:combatNow(),room,from,to:state.position});
+      note('Shadowstep · 1 AP');
+      refreshStyleAbilityBar();return;
+    }
     abilityBursts.push({id,room,tile:from,phase:'departure',started:performance.now()});
     if(id==='waypoint'){
       if(!reducedMotion.matches){
@@ -9348,7 +9375,7 @@ function correctRoomPosition(position){
 }
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
-    getLocal:()=>({meditating:playerMeditating(),room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped],...['faultbreaker','sanctuary','bloodPrice'].map(id=>window.playerCloud?.initial?.styleAbilities?.readyAt?.[id]??0)])}),
+    getLocal:()=>({meditating:playerMeditating(),room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped],...['faultbreaker','sanctuary','bloodPrice'].map(id=>window.playerCloud?.initial?.styleAbilities?.readyAt?.[id]??0),window.playerCloud?.initial?.styleAbilities?.lastBlinkAt??0])}),
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
@@ -9457,7 +9484,7 @@ window.towerVaultCoopHooks={
  },
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
- strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:(tile,kind)=>{faceVaultTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}}
+ strike:tile=>{faceVaultTarget(tile);combatArt.strikeAt=performance.now();},cast:(tile,kind)=>{faceVaultTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},dodge:()=>{combatArt.dodgeAt=performance.now();},victory:()=>{combatArt.victoryAt=performance.now();},peer:cue=>{const peer=remotePeers.get(cue.id);if(peer){if(cue.blink)beginShadowstep(peer,cue.blink);if(cue.strike)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}}}
 };
 
 async function visitMillCellar(action){

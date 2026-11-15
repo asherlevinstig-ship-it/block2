@@ -503,6 +503,25 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
   }
   function grip(x,y,options={}){const {detail}=towerCharacterPose(meta,options);return [x+(detail.grip[0]-meta.pivot[0])*meta.scale,y+(detail.grip[1]-meta.pivot[1])*meta.scale];}
   function draw(ctx,x,y,appearance={},options={}){
+    const blink=options.shadowstep;
+    if(blink&&blink.age>=0&&blink.age<700){
+      const age=blink.age,still=options.reduced;
+      const body={...options,shadowstep:null,pose:{},cycle:0,seated:false,reading:false,meditating:false,fishing:false,wave:null,weapon:false,sheathed:false,state:'dodge'};
+      if(!still&&blink.from){
+        ctx.save();
+        ctx.globalAlpha*=Math.max(0,1-age/520)*(age<130?1:.45);
+        draw(ctx,blink.from[0],blink.from[1],age<130?appearance:{...appearance,outfit:12,hair:4,skinTone:3},{...body,frame:age<70?0:1});
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.globalAlpha*=still?1:Math.max(.08,Math.min(1,(age-100)/150));
+      const result=draw(ctx,x,y,appearance,{...body,frame:still?3:age<350?2:3});
+      ctx.restore();
+      ctx.save();ctx.strokeStyle='#c5a1ff';ctx.lineWidth=.8;ctx.globalAlpha*=Math.max(0,1-age/700);
+      ctx.beginPath();ctx.ellipse(x,y+1,still?14:10+Math.min(1,age/300)*8,5,0,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+      return result;
+    }
     if(options.reading)options={...options,meditating:false,weapon:false,sheathed:false,wave:null,fishing:false,pose:{}};
     if(options.meditating)options={...options,weapon:false,sheathed:false};
     const selection=towerCharacterPose(meta,options),image=frameImage(appearance,selection,options.vest);

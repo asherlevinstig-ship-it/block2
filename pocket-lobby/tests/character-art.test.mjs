@@ -36,6 +36,19 @@ test('signature abilities select distinct body poses and hold the Faultbreaker i
  assert.equal(pose('faultbreaker',.6).column,pose('faultbreaker',.68).column);
  for(const id of ['faultbreaker','sanctuary','bloodPrice'])assert.equal(pose(id,.1,true).state,pose(id,.8,true).state);
 });
+test('Shadowstep draws a departure afterimage and landing, with one still pose for reduced motion',()=>{
+ const normal={data:new Uint8ClampedArray(meta.width*meta.height*4)},images=[];
+ const renderer=createTowerCharacterRenderer({metadata:meta,atlases:{normal,armour:normal},createCanvas:()=>({getContext:()=>({putImageData(){}})})});
+ const ctx={save(){},restore(){},beginPath(){},ellipse(){},stroke(){},drawImage:(...args)=>images.push(args),globalAlpha:1};
+ const selection=renderer.draw(ctx,50,60,{}, {shadowstep:{age:200,from:[10,20]}});
+ assert.equal(images.length,2);assert.equal(selection.state,'dodge');
+ images.length=0;
+ renderer.draw(ctx,50,60,{}, {reduced:true,shadowstep:{age:200,from:[10,20]}});
+ assert.equal(images.length,1);
+ images.length=0;
+ assert.equal(renderer.draw(ctx,50,60,{}, {shadowstep:{age:700,from:[10,20]}}).state,'idle');
+ assert.equal(images.length,1);
+});
 test('skin tones recolour skin pixels while leaving garment materials intact',()=>{
  const pixels=new Uint8ClampedArray(80*100*4),skin=(24*80+40)*4,cloth=(55*80+40)*4;
  pixels.set([254,223,177,255],skin);pixels.set([90,80,120,255],cloth);

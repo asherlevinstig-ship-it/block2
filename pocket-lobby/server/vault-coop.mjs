@@ -93,7 +93,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
  const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,marks:r.marks,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
-  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0,castKind:m.castKind??null})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
+  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0,castKind:m.castKind??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
  s.routineLastSeen=now;
@@ -145,6 +145,8 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   const tile=shadowstepTiles({...s,hunting:{encounter}}).find(p=>p.x===body.tile?.x&&p.y===body.tile?.y);
   if(!tile)throw invalid('Choose a reachable floor tile up to four steps away.');
   requireActionPoint(s);
+  abilities.blink={at:now,room:s.location,from:{...m.pos},to:{x:tile.x,y:tile.y}};
+  m.blink=abilities.blink;
   s.position=m.pos={x:tile.x,y:tile.y};
   abilities.readyAt[kind]=now+abilityMastery(s,kind).cooldown;
   abilities.lastBlinkAt=now;
