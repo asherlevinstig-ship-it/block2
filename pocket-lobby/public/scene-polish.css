@@ -1,0 +1,9 @@
+/* World presentation layer (scene-polish.js). The original canvas stays in place for input. */
+#gameFx{position:absolute;pointer-events:none;filter:drop-shadow(0 30px 24px #01081880)}
+html.scene-polish #game{opacity:0}
+#polishToggle[aria-pressed="false"]{opacity:.55}
+#polishToggle[aria-pressed="true"]{color:#f3d48f;border-color:#b99a5d}
+/* Tactile controls: a small press on every button, without touching buttons that use transform. */
+button{transition:scale .09s ease-out}
+button:active:not(:disabled){scale:.96}
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){scale:1}}

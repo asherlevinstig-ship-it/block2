@@ -6,25 +6,46 @@ const stone=['#94aeb3','#35495c','#597484'];
 export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
  const gate=room==='depthsGate',gallery=room==='depthsGallery',vault=room==='depthsVault';
  const tint=gate?['#697f88','#354e60','#486472']:gallery?['#708c7d','#2e4e4b','#4d6f60']:vault?['#8f859d','#403c59','#635a78']:['#7b7b94','#353e59','#555774'];
+ // A glow from far below turns the slab into a platform over deep water rather than a tile floating in the dark.
+ const mist=gate?'#58c8d4':gallery?'#6fd0a0':vault?'#a58cf0':'#8f95e8';
+ for(let i=0;i<6;i++)surface(-.6+i*.75,-1+i*.7,13.2-i*1.5,12-i*1.4,-30,mist+'1a');
  for(let y=0;y<10;y++)for(let x=0;x<12;x++){
   if(!dungeonFloor(room,x,y))continue;
   const water=gate&&x===8;
   block(x,y,1,1,-8,8,tint);surface(x+.025,y+.025,.95,.95,.12,water?'#315f76':(x*7+y*3)%5===0?tint[0]:tint[2],tint[1]);
   if(!water){const k=(x*13+y*7)%4;surface(x+.11,y+.15,.4,.025,.3,'#b2c6bb33');if(k===0){surface(x+.5,y+.05,.025,.38,.3,'#182e3c88');surface(x+.5,y+.43,.27,.025,.3,'#182e3c88');}}
+  if(!water){
+   // Worn, stained and chipped flags, with a pale lip where the slab ends.
+   const h=(x*29+y*17+x*y*7)%11;
+   if(h<3)surface(x+.025,y+.025,.95,.95,.13,'#0b0d1c1c');else if(h===7)surface(x+.025,y+.025,.95,.95,.13,'#ffffff0d');
+   if(h===2||h===9){surface(x+.58,y+.6,.3,.26,.14,mist+'2a');surface(x+.66,y+.52,.16,.14,.14,mist+'38');}
+   if(h===5){surface(x+.2,y+.62,.07,.07,.3,tint[0]);surface(x+.3,y+.72,.05,.05,.3,tint[1]);}
+   if(!dungeonFloor(room,x+1,y))surface(x+.9,y+.025,.075,.95,.14,'#ffffff16');
+   if(!dungeonFloor(room,x,y+1))surface(x+.025,y+.9,.95,.075,.14,'#ffffff10');
+  }
   for(const [dx,dy,w,d] of [[-1,0,.1,1],[0,-1,1,.1]])if(!dungeonFloor(room,x+dx,y+dy))block(x,y,w,d,0,9,tint);
  }
  // Entrance threshold, leading lines, and a large inlaid seal make the architecture legible.
  for(let x=2;x<6;x++)surface(x,5,.95,.9,.4,gate?'#b7ae8b':gallery?'#9ab69c':'#b3a0ba',tint[1]);
  if(vault){
   const [cx,cy]=point(6.5,5.5,.8);for(const radius of [36,53,70]){const points=[];for(let i=0;i<12;i++){const a=i/12*Math.PI*2;points.push([cx+Math.cos(a)*radius,cy+Math.sin(a)*radius*.5]);}polygon(points,'#75678444','#c1a7c088');}
-  for(let i=0;i<8;i++){const a=i/8*Math.PI*2;surface(6.15+Math.cos(a)*2.1,5.15+Math.sin(a)*2.1,.28,.28,.6,'#d6b77a');}
+  for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const sx=6.15+Math.cos(a)*2.1,sy=5.15+Math.sin(a)*2.1;surface(sx-.12,sy-.12,.52,.52,.6,'#ffd98a16');surface(sx,sy,.28,.28,.6,'#d6b77a');surface(sx+.08,sy+.08,.12,.12,.6,'#fff0c4');}
  }
  // Broken retaining walls surround a chamber rather than a freestanding flat square.
  for(let x=2;x<=10;x++)if(dungeonFloor(room,x,2)){
   const top=17+(x%3)*6;
+  surface(x,2.07,.95,.5,.2,'#080a181c');surface(x,2.07,.95,.24,.2,'#080a182a');
   block(x,1.85,.93,.22,0,top,tint);
   for(let z=7;z<top;z+=7)block(x+(z%2)*.03,2.08,.88,.035,z,.9,[tint[1],tint[1],tint[1]]);
   if(x%3===0)block(x,1.83,.25,.33,top-3,12,tint);
+  // Braziers on the wall give each chamber warm light against the cold stone.
+  if(x%3===1){
+   const [tx,ty]=point(x+.47,1.96,top);
+   for(const [r,a] of [[13,'14'],[9,'1e'],[5,'30']]){const ring=[];for(let i=0;i<10;i++){const t=i/10*Math.PI*2;ring.push([tx+Math.cos(t)*r,ty-9+Math.sin(t)*r]);}polygon(ring,'#ffb65c'+a);}
+   surface(x-.25,2.1,1.45,1.5,.2,'#ffb65c10');surface(x+.05,2.1,.85,.9,.2,'#ffc67a16');
+   rect(tx-1,ty-5,2,6,'#3a2c30');rect(tx-3,ty-6,6,2,'#6b5148');
+   rect(tx-2,ty-11,4,5,'#ff9a3c');rect(tx-1,ty-13,2,6,'#ffd27a');rect(tx-1,ty-10,2,3,'#fff3cf');
+  }
  }
  for(const [x,y] of [[4.5,3.5],[3.5,6.5]]){
   for(let i=0;i<4;i++)surface(x-.3-i*.08,y-.27-i*.06,.6+i*.16,.54+i*.12,.3+i*.02,'#99d0be0b');

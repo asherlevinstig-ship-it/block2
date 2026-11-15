@@ -77,7 +77,7 @@ let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAn
 let familiarReaction=null;
 const familiarFollowers=new Map(),familiarPortraits=[];
 const renderedActors=[],actorNameplates=new Map();
-let worldLabelBounds=[];
+let worldLabelBounds=[],worldLabelAnchors=[],worldLabelLayoutKey='';
 const woodlandRouteRooms=new Set(['grove','creek','roots','thornwood']);
 const woodlandReadabilityRooms=new Set(['logging','pond',...woodlandRouteRooms]);
 const crowdedRoom=()=>remotePeers.size>=6&&(currentRoom==='hub'||woodlandReadabilityRooms.has(currentRoom));
@@ -651,9 +651,9 @@ function updateWorldFloats(time){
   const f=worldFloats[i],age=time-f.started,peer=f.actor==='self'?player:remotePeers.get(f.actor)??f.anchor;
   if(age>1800||f.room!==currentRoom||!peer){f.node.remove();f.fx?.remove();worldFloats.splice(i,1);continue;}
   const [x,y]=peer.seat?seatAnchor(peer.seat):point((f.actor==='self'?player.x:peer.rx)+.5,(f.actor==='self'?player.y:peer.ry)+.5);
-  if(f.fx){f.fx.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale)+'px';f.fx.style.top=Math.round(bounds.y+((y-20-cy)*zoom+cy)*bounds.scale)+'px';if(age>950){f.fx.remove();f.fx=null;}}
-  f.node.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale+(f.lane%2?12:-12))+'px';
-  f.node.style.top=Math.round(bounds.y+((y-52-cy)*zoom+cy)*bounds.scale-f.lane*18-(reducedMotion.matches?0:age/55))+'px';
+  if(f.fx){f.fx.style.left=Math.round(bounds.x+((x-camX)*zoom+cx)*bounds.scale)+'px';f.fx.style.top=Math.round(bounds.y+((y-20-camY)*zoom+cy)*bounds.scale)+'px';if(age>950){f.fx.remove();f.fx=null;}}
+  f.node.style.left=Math.round(bounds.x+((x-camX)*zoom+cx)*bounds.scale+(f.lane%2?12:-12))+'px';
+  f.node.style.top=Math.round(bounds.y+((y-52-camY)*zoom+cy)*bounds.scale-f.lane*18-(reducedMotion.matches?0:age/55))+'px';
   const quiet=currentRoom==='pond'&&crowdedRoom()&&f.actor!=='self'&&f.node.dataset.kind==='catch';
   f.node.style.opacity=String(Math.min(1,(1800-age)/500)*(quiet?.55:1));
  }
@@ -698,7 +698,7 @@ function updateActorNameplates(){
  const layer=$('playerLabels'),seen=new Set();
  if(renderedActors.length){
   const p=canvasBounds(),layerBox=layer.getBoundingClientRect(),cx=view.width/2,cy=view.height/2-4;
-  const toScreen=(x,y)=>({x:p.left-layerBox.left+p.x+((x-cx)*zoom+cx)*p.scale,y:p.top-layerBox.top+p.y+((y-cy)*zoom+cy)*p.scale});
+  const toScreen=(x,y)=>({x:p.left-layerBox.left+p.x+((x-camX)*zoom+cx)*p.scale,y:p.top-layerBox.top+p.y+((y-camY)*zoom+cy)*p.scale});
   const crowded=crowdedRoom();
   const occupied=crowded?[...worldLabelBounds]:[];
   const render=(key,name,detail,position,kind,color,action)=>{
@@ -2176,7 +2176,7 @@ function updateCombatMoment(time){
   }
   if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
 }
-let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
+let editing=false,selection=null,zoom=1,camX=standardView.width/2,camY=standardView.height/2-4,camSmoothX=camX,camSmoothY=camY,camRoom='',camZoom=1,camAt=0,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
   ['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
   ['plant',1,1],['plant',16,1],
@@ -2469,8 +2469,27 @@ function drawEntryWalls(){
     for(let u=1.4;u<10;u+=1.4)wall(side,u,u+.018,23,62,lit?'#546179':'#435168');
   }
   wall('left',0,.13,0,68,'#65758e');wall('right',0,.13,0,68,'#7a89a0');
+  drawEntryWindow(7.15,9.25);
+  for(const [side,u] of [['left',2.1],['right',1.25],['right',8.75]])drawLobbySconce(side,u);
   drawHomeSign();
   drawDoor(homeExit);
+}
+// A moonlit window gives the first room its own light and a view of the valley.
+function drawEntryWindow(a,b){
+  const at=(u,z)=>point(0,u,z),mid=(a+b)/2;
+  wall('left',a-.08,b+.08,25,62,'#1a2538');
+  wall('left',a,b,27,60,'#8f97a8');
+  wall('left',a+.1,b-.1,29,58,'#1c2f55');
+  wall('left',a+.1,b-.1,29,47,'#2b4a7a');
+  wall('left',a+.1,b-.1,29,37,'#4a6f9c');
+  const [mx,my]=at(a+.62,51);
+  rect(mx-2,my-4,4,8,'#eef3ff');rect(mx-4,my-2,8,4,'#eef3ff');rect(mx-3,my-3,6,6,'#f8fbff');
+  for(const [u,z] of [[mid+.32,54],[b-.42,49],[mid-.12,43],[b-.3,56]]){const [sx,sy]=at(u,z);rect(sx,sy,1,1,'#cfe0ff');}
+  polygon([at(a+.1,29),at(a+.1,33),at(a+.6,38),at(mid,32),at(b-.55,40),at(b-.1,34),at(b-.1,29)],'#16233f');
+  wall('left',mid-.035,mid+.035,29,58,'#aab2c0');
+  wall('left',a+.08,b-.08,44,45,'#aab2c0');
+  wall('left',a-.11,b+.11,25,28,'#c9ad78');
+  for(const inset of [0,.16,.32])polygon([point(.06,a+inset),point(.06,b-inset),point(3.4-inset*2,b-1.2-inset),point(3.4-inset*2,a-1.2+inset)],'#bcd4ff16');
 }
 function drawDoor(door){
   const {side,start,end,height,label}=door;
@@ -3406,23 +3425,63 @@ function makeRoomLayer(drawLayer,layerView=standardView){
   ctx=previousContext;view=previousView;
   return layer;
 }
+// Depth for the shared 10x10 rooms: stepped shade where walls meet ceiling, corner and floor, a warm pool
+// mid-floor, and a fine grain so flat fills read as plaster, wood and stone. Baked once per room layer.
+function shadeRoom(wallTop){
+  const {cols,rows,width,height}=view,ink='#080c1e';
+  ctx.save();ctx.globalCompositeOperation='source-atop';
+  for(const side of ['left','right']){
+    const span=side==='left'?rows:cols;
+    for(const [lo,a] of [[wallTop-20,'12'],[wallTop-13,'16'],[wallTop-7,'1c'],[wallTop-3,'22']])wall(side,0,span,lo,wallTop+1,ink+a);
+    for(const [hi,a] of [[5,'14'],[2.5,'20']])wall(side,0,span,0,hi,ink+a);
+    for(const [u,a] of [[1.5,'10'],[.9,'14'],[.4,'1a']])wall(side,0,u,0,wallTop+1,ink+a);
+  }
+  for(const [w,a] of [[1.2,'0e'],[.8,'12'],[.5,'16'],[.26,'1c'],[.1,'24']]){surface(0,0,cols,w,0,ink+a);surface(0,0,w,rows,0,ink+a);}
+  for(const [w,a] of [[.45,'0c'],[.2,'12']]){surface(0,rows-w,cols,w,0,ink+a);surface(cols-w,0,w,rows,0,ink+a);}
+  const [mx,my]=point(cols/2,rows/2);lobbyLight(mx,my,150,'#ffe9c41c',.5);
+  ctx.restore();
+  grainLayer();
+}
+// A fine per-pixel grain so flat fills read as plaster, wood and stone. Optional: skipped where pixels cannot be read back.
+function grainLayer(){
+  const {width,height}=view,image=ctx.getImageData?.(0,0,width,height),data=image?.data;
+  if(!data)return;
+  for(let y=0,i=0;y<height;y++)for(let x=0;x<width;x++,i+=4){
+    if(!data[i+3])continue;
+    let n=Math.imul(x,374761393)+Math.imul(y,668265263);n=Math.imul(n^n>>>13,1274126177);
+    const grain=((n>>>24)-127.5)/127.5*5;
+    data[i]+=grain;data[i+1]+=grain;data[i+2]+=grain;
+  }
+  ctx.putImageData(image,0,0);
+}
+function shadedRoom(drawLayer,wallTop=71){
+  return makeRoomLayer(()=>{drawLayer();shadeRoom(wallTop);});
+}
+// Indoor and courtyard props cast a stepped contact shadow toward the viewer, so they sit on the floor.
+function groundShadow(item){
+  if(moonwood.has(currentRoom)||/rug|carpet|mat$/i.test(item.type))return;
+  const [w,d]=dimensions(item),{x,y}=item;
+  if(!(w>0&&d>0&&w*d<=9&&Number.isFinite(x)&&Number.isFinite(y)))return;
+  surface(x+.2,y+.14,w+.06,d+.1,0,'#0a0e2020');
+  surface(x+.12,y+.1,w,d,0,'#0a0e2030');
+}
 const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
-  library:makeRoomLayer(drawLibrary),
-  tailor:makeRoomLayer(()=>{drawFishingStore('tailor');for(const [x,y,index] of [[7.7,.7,7],[.7,2,8],[.7,8,9]]){const [px,py]=point(x,y,24);sprite(ctx,px,py,{outfit:index,trousers:index-3,boots:index-3,hair:1},{time:0});}surface(3.3,5,3.4,3,.5,'#603d62','#c4a078');}),
+  library:shadedRoom(drawLibrary,67),
+  tailor:shadedRoom(()=>{drawFishingStore('tailor');for(const [x,y,index] of [[7.7,.7,7],[.7,2,8],[.7,8,9]]){const [px,py]=point(x,y,24);sprite(ctx,px,py,{outfit:index,trousers:index-3,boots:index-3,hair:1},{time:0});}surface(3.3,5,3.4,3,.5,'#603d62','#c4a078');}),
   hub:makeRoomLayer(()=>drawGrandLobby(),hubView),
   hubIntro:makeRoomLayer(()=>drawGrandLobby(false),hubView),
-  lounge:makeRoomLayer(()=>{room();drawDoor(storeExit);}),
+  lounge:shadedRoom(()=>{room();drawDoor(storeExit);}),
   outside:makeRoomLayer(drawCourtyard,courtyardView),
-  store:makeRoomLayer(drawFishingStore),
-  market:makeRoomLayer(()=>{drawFishingStore(true);drawDoor(bakeryDoor);}),
-  bakery:makeRoomLayer(drawBakery),
-  [factionHall]:makeRoomLayer(drawFactionHall),
-  furnishings:makeRoomLayer(()=>drawFishingStore('furnishings')),
-  armory:makeRoomLayer(()=>drawFishingStore('armory'))
+  store:shadedRoom(drawFishingStore),
+  market:shadedRoom(()=>{drawFishingStore(true);drawDoor(bakeryDoor);}),
+  bakery:shadedRoom(drawBakery,66),
+  [factionHall]:shadedRoom(drawFactionHall,67),
+  furnishings:shadedRoom(()=>drawFishingStore('furnishings')),
+  armory:shadedRoom(()=>drawFishingStore('armory'))
 };
 for(const id of Object.keys(moonwood.areas)){
-  roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),id===wildlifeRoom?wildlifeView:id==='willowbank'?willowbankView:moonwood.view);
+  roomLayers[id]=makeRoomLayer(()=>{moonwood.drawGround(id,worldDrawing);if(depthsStageIndex(id)>=0)grainLayer();},id===wildlifeRoom?wildlifeView:id==='willowbank'?willowbankView:moonwood.view);
 }
 function moonfinPoolOpen(){
   return currentRoom===moonfinPool.room&&window.millRaidClient?.phase==='victory';
@@ -3633,40 +3692,15 @@ function openVenueLicence(){
   shopLicenceError='';renderShopLicence();refreshShopLicence();
   if(!dialog.open)dialog.showModal();
 }
-function updateWorldLabels(){
-  const fallen=window.playerCloud?.initial?.styleAbilities?.fallen;
-  const raiseReady=fallen?.room===currentRoom&&fallen.until>combatNow()&&!hunting.encounter&&!activeRaised(window.playerCloud.initial,combatNow())&&(window.playerCloud.initial.styleAbilities.readyAt.raiseFallen??0)<=combatNow();
-  const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
-  const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const clue=moonbackClue();
-  const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
-  const poolCast=currentRoom===moonfinPool.room&&fishingSession?.room===moonfinPool.room;
-  const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
-  const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
-  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
-  const owner=currentShopLicence();
-  const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
-  const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
-  const scout=scoutedKeeperClue();
-  const labelKey=key+'|'+(raiseReady?fallen.id:'')+'|'+(scout?.room??'')+'|'+(currentRoom===waystationRoom&&atHearth(player)?hearthBoard?.incoming[0]?.id??'':'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
-  if(labelKey===worldLabelKey)return;
-  worldLabelKey=labelKey;
+function positionWorldLabels(p){
+  const layoutKey=[camX,camY,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  if(layoutKey===worldLabelLayoutKey)return;
+  worldLabelLayoutKey=layoutKey;
   worldLabelBounds=[];
-  const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
-  container.classList.toggle('woodland-route-labels',woodlandRouteRooms.has(currentRoom));
   const separateLabels=woodlandRouteRooms.has(currentRoom)&&canvas.clientWidth<520;
-  const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
-    if(['Fishing station','Hidden fishing pool'].includes(text)&&!subtitle)subtitle='1 AP / catch';
-    const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
-    if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
-    const title=document.createElement('span');title.textContent=text;label.append(title);
-    if(subtitle){const detail=document.createElement('small');detail.textContent=subtitle;label.append(detail);}
-    label.title=text+(subtitle?' · '+subtitle:'');
-
-    container.append(label);
+  for(const {label,text,x,y,kind,action,subtitle,mount} of worldLabelAnchors){
     const centerX=view.width/2,centerY=view.height/2-4;
-    const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
+    const screenX=p.x+((x-camX)*zoom+centerX)*p.scale,screenY=p.y+((y-camY)*zoom+centerY)*p.scale;
     if(currentRoom==='home'&&kind!=='npc'){
       const scale=p.scale*zoom;
       label.dataset.wall=kind==='sign'?'right':'left';
@@ -3700,6 +3734,41 @@ function updateWorldLabels(){
     }
     label.style.left=left+'px';label.style.top=top+'px';
     if(action)worldLabelBounds.push({left,right:left+width,top,bottom:top+height});
+  }
+}
+function updateWorldLabels(){
+  const fallen=window.playerCloud?.initial?.styleAbilities?.fallen;
+  const raiseReady=fallen?.room===currentRoom&&fallen.until>combatNow()&&!hunting.encounter&&!activeRaised(window.playerCloud.initial,combatNow())&&(window.playerCloud.initial.styleAbilities.readyAt.raiseFallen??0)<=combatNow();
+  const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
+  const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
+  const clue=moonbackClue();
+  const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
+  const poolCast=currentRoom===moonfinPool.room&&fishingSession?.room===moonfinPool.room;
+  const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
+  const poolLabel=poolBite?'Reel in!':moonfinPoolOpen()&&!poolCast&&!routineControlled()?'Fish Moonfin Pool':'';
+  const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
+  const key=[currentRoom,currentRoom===waystationRoom?waystationBoard?.revision:'',currentRoom==='willowbank'?[player.cx,player.cy,adventure.willowbankShortcut,adventure.willowbankNook].join(','):'',cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,currentRoom==='pond'&&!!fishingSession,currentRoom==='creek'&&player.cx<5,currentRoom==='grove'&&adventure.lantern,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),JSON.stringify(depthsRun?.galleryLight),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination].join('|');
+  const owner=currentShopLicence();
+  const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
+  const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
+  const scout=scoutedKeeperClue();
+  const labelKey=key+'|'+(raiseReady?fallen.id:'')+'|'+(scout?.room??'')+'|'+(currentRoom===waystationRoom&&atHearth(player)?hearthBoard?.incoming[0]?.id??'':'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  if(labelKey===worldLabelKey){positionWorldLabels(p);return;}
+  worldLabelKey=labelKey;
+  worldLabelAnchors=[];
+  worldLabelLayoutKey='';
+  const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
+  container.classList.toggle('woodland-route-labels',woodlandRouteRooms.has(currentRoom));
+  const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
+    if(['Fishing station','Hidden fishing pool'].includes(text)&&!subtitle)subtitle='1 AP / catch';
+    const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
+    if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
+    const title=document.createElement('span');title.textContent=text;label.append(title);
+    if(subtitle){const detail=document.createElement('small');detail.textContent=subtitle;label.append(detail);}
+    label.title=text+(subtitle?' · '+subtitle:'');
+
+    container.append(label);
+    worldLabelAnchors.push({label,text,x,y,kind,action,subtitle,mount});
     return label;
   };
   const guidedDoor=nextExplorationDoor()??(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination());
@@ -3891,6 +3960,7 @@ function updateWorldLabels(){
     const names={furnishings:['TOWER','FURNISHINGS'],store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
     add(names[currentRoom][0],...point(3.42,0,46),'sign',null,names[currentRoom][1],{side:'right',width:58,font:5.7});
   }
+  positionWorldLabels(p);
 }
 const willowbankFlock=createWillowbankFlock();
 function draw(time){
@@ -3906,7 +3976,7 @@ function draw(time){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,width,height);
   const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
-  ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
+  ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);updateCamera(time,centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-camX,-camY);
   const layer=currentRoom==='hub'&&!lobbyRoutesOpen()?'hubIntro':currentRoom;
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
   if(currentRoom==='outside')for(const lamp of courtyardFurniture.filter(item=>item.type==='streetlamp')){
@@ -4065,8 +4135,8 @@ function draw(time){
       if(time>bubbleUntil)$('bubble').hidden=true;
       else{
         const p=canvasBounds();
-        $('bubble').style.left=(p.x+((x-centerX)*zoom+centerX)*p.scale)+'px';
-        $('bubble').style.top=(p.y+((y-49-centerY)*zoom+centerY)*p.scale)+'px';
+        $('bubble').style.left=(p.x+((x-camX)*zoom+centerX)*p.scale)+'px';
+        $('bubble').style.top=(p.y+((y-49-camY)*zoom+centerY)*p.scale)+'px';
       }
     }
   };
@@ -4106,7 +4176,7 @@ function draw(time){
 
     const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
     if(['millRaidMob','millRaidMerchant','millRaidBarricade'].includes(item.type))window.millRaidClient?.drawMob(item,{ctx,point,time,reduced:reducedMotion.matches,actors:renderedActors});
-    else object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time,weather);
+    else{groundShadow(item);object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time,weather);}
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
@@ -4139,6 +4209,7 @@ function draw(time){
   if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
   updateWorldFloats(time);
   for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
+  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(currentRoom==='depthsVault'&&!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom)});}
 }
 
 
@@ -4217,8 +4288,8 @@ function pointer(e){
   bounds=null;
   const p=canvasBounds();
   const centerX=view.width/2,centerY=view.height/2-4;
-  const x=((e.clientX-p.left-p.x)/p.scale-centerX)/zoom+centerX;
-  const y=((e.clientY-p.top-p.y)/p.scale-centerY)/zoom+centerY;
+  const x=((e.clientX-p.left-p.x)/p.scale-centerX)/zoom+camX;
+  const y=((e.clientY-p.top-p.y)/p.scale-centerY)/zoom+camY;
   const gx=Math.floor(((x-view.originX)/18+(y-view.originY)/9)/2);
   const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
   const door=roomDoors[currentRoom].find(portal=>doorAvailable(portal)&&hitDoor(x,y,portal));
@@ -5100,8 +5171,8 @@ function drawCatchReveal(x,y,time){
   const element=$('catchReveal');
   if(!catchReveal||time>catchReveal.until){element.hidden=true;catchReveal=null;return;}
   const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
-  const anchorX=p.x+((x-cx)*zoom+cx)*p.scale;
-  const anchorY=p.y+((y-53-cy)*zoom+cy)*p.scale;
+  const anchorX=p.x+((x-camX)*zoom+cx)*p.scale;
+  const anchorY=p.y+((y-53-camY)*zoom+cy)*p.scale;
   const half=element.offsetWidth/2||95;
   element.style.left=Math.max(half+8,Math.min(canvas.clientWidth-half-8,anchorX))+'px';
   element.style.top=Math.max(element.offsetHeight+8,anchorY)+'px';
@@ -8754,7 +8825,23 @@ document.addEventListener('keydown',e=>{
     canvas.focus({preventScroll:true});
   }
 });
-function defaultRoomZoom(room){return depthsStageIndex(room)>=0?1.27:['pond','millCellar','logging','clearing'].includes(room)?1.10:1;}
+// The lobby and courtyard open closer in with a following camera; the 10x10 rooms use the closest zoom that still shows the whole room.
+function defaultRoomZoom(room){return depthsStageIndex(room)>=0?1.27:['pond','millCellar','logging','clearing'].includes(room)?1.10:moonwood.has(room)?1:room==='hub'||room==='outside'?1.25:1.125;}
+// Past 1x the camera tracks the player without looking beyond the canvas. Arenas, raids and decorating stay centred so nothing important slides out of view.
+function updateCamera(time,centerX,centerY){
+  const {width,height}=view;let x=centerX,y=centerY;
+  if(zoom>1&&!editing&&!player.inCombat&&depthsStageIndex(currentRoom)<0&&!window.millRaidClient?.active){
+    const [px,py]=point(player.x+.5,player.y+.5);
+    x=Math.max(centerX/zoom,Math.min(width-(width-centerX)/zoom,px));
+    y=Math.max(centerY/zoom,Math.min(height-(height-centerY)/zoom,py-16));
+  }
+  const snap=reducedMotion.matches||camRoom!==currentRoom||camZoom!==zoom||time-camAt>400;
+  const amount=snap?1:Math.min(1,Math.max(0,time-camAt)/170);
+  camSmoothX+=(x-camSmoothX)*amount;camSmoothY+=(y-camSmoothY)*amount;
+  camRoom=currentRoom;camZoom=zoom;camAt=time;
+  // Whole device-independent pixels keep the pixel art from shimmering while the camera glides.
+  camX=Math.round(camSmoothX*zoom)/zoom;camY=Math.round(camSmoothY*zoom)/zoom;
+}
 function setZoom(value){
   zoom=Math.max(.75,Math.min(1.5,value));hover=null;hoverItem=null;
   $('plus').disabled=zoom===1.5;$('minus').disabled=zoom===.75;
@@ -8886,7 +8973,7 @@ function openAvatar(){
 }
 function updateName(){
   $('profile').children[1].firstChild.textContent=avatar.name;
-  roomLayers.home=makeRoomLayer(()=>room(true));
+  roomLayers.home=shadedRoom(()=>room(true));
   if(atHome())updateRoomLabel();
   const portrait=$('portrait').getContext('2d');
   portrait.clearRect(0,0,24,24);
