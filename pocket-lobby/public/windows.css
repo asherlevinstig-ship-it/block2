@@ -611,9 +611,14 @@
 .ability-card-heading{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:9px;color:#ffe8bf}
 #styleAbilityDialog .offer-stage{border-color:#ad936b;box-shadow:0 5px 16px #050b17}
 @media(max-width:520px){.ability-switch-layout{grid-template-columns:1fr;gap:10px;padding:10px;background-position:left center}#abilityWheelSets{width:min(220px,100%)}#abilityWheelSets button{min-width:48px;min-height:44px;font-size:11px}#abilityWheelSets button svg{width:17px;height:17px}#abilityWheelPreview li{min-height:34px;padding:3px 7px}}
-.teacher-quick-abilities{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
+.ability-shortcut-slots{display:grid;grid-template-columns:repeat(4,42px);gap:5px}
+.style-ability-bar .ability-shortcut-slots button{position:relative;display:grid;place-items:center;width:42px;height:42px;padding:0 0 4px;border-color:#b19873;background:linear-gradient(145deg,#3c3a57,#1b2039)}
+.style-ability-bar .ability-shortcut-slots .empty-slot{border-style:dashed;border-color:#82769e;background:#1b223b;color:#c8b5df;font-size:18px}
+.ability-shortcut-slots kbd{position:absolute;right:2px;bottom:2px;padding:0 3px;border-radius:3px;background:#11182e;color:#f6dcab;font-size:10px;line-height:14px}
 
 .ability-art{display:block;flex:none;object-fit:contain;image-rendering:pixelated}
 .style-ability-bar button:has(.ability-art),.offer-choices button:has(.ability-art),#styleAbilityContents .ability-offer-title{display:flex;align-items:center;gap:6px}
 #abilityWheelPreview li>span:first-child,.ability-card-icon{overflow:hidden}
 #styleAbilityContents .ability-offer-title{gap:10px}
+
+.ability-slot-cooldown{position:absolute;inset:0;display:grid;place-items:center;background:#10172cbf;color:#fff2cb;font-size:12px;font-weight:bold;pointer-events:none}
