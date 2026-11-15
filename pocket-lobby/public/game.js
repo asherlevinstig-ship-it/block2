@@ -3793,6 +3793,21 @@ async function submitShopLicence(kind){
   }finally{shopLicenceBusy=false;renderShopLicence();}
 }
 let worldLabelKey='';
+const travelBadges=new WeakMap();
+let hoveredTravelBadge=null;
+function highlightTravelBadge(portal){
+  const badge=travelBadges.get(portal)??null;
+  if(badge===hoveredTravelBadge)return;
+  hoveredTravelBadge?.removeAttribute('data-travel-hover');
+  hoveredTravelBadge=badge;
+  badge?.setAttribute('data-travel-hover','');
+}
+function registerTravelBadge(sign,portal,name){
+  travelBadges.set(portal,sign);
+  sign.dataset.apCost='1';
+  sign.removeAttribute('title');
+  sign.setAttribute('aria-label','Go to '+name+' · Travel · 1 AP');
+}
 
 function openVenueLicence(){
   const dialog=$('venueLicenceDialog'),offer=window.shopLicences?.[currentRoom];
@@ -3905,7 +3920,7 @@ function updateWorldLabels(time){
     const label=bridge?'Silverfin Bridge':currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.side==='wild'?explorationName(door.to):door.label;
     const sign=add(label,...anchor,'door',()=>travelDoor(door),bridge?explorationName(door.to):'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
     if(currentRoom==='creek'&&door.to==='ruins')sign.classList.add('creek-crossing-label');
-    sign.dataset.apCost='1';sign.title=label+' · Travel · 1 AP';sign.setAttribute('aria-label','Go to '+label+' · Travel · 1 AP');
+    registerTravelBadge(sign,door,label);
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
   if(raiseReady)add('Raise Fallen',...point(fallen.x+.5,fallen.y+.5,20),'npc',()=>castStyleAbility('raiseFallen',{}),'Necromancy · 1 AP');
@@ -4054,7 +4069,7 @@ function updateWorldLabels(time){
         :depthsRun.routeChoice==='pending'?'Choose a passage'
         :depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated?'To the Sealed Alcove':'To Shell Gallery';
       const exit=add(name,...point(item.x+.5,item.y+.5,60),'npc',()=>use(item));
-      if(!['Passage locked','Choose a passage'].includes(name)){exit.dataset.apCost='1';exit.title=name+' · Travel · 1 AP';}
+      if(!['Passage locked','Choose a passage'].includes(name))registerTravelBadge(exit,item,name);
     }
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
     if(passage&&depthsSideForRoom(currentRoom))add('Shell Gallery ←',...point(passage.x+.5,passage.y+.5,38),'npc',()=>visitDungeonSide('return'));
@@ -8997,9 +9012,10 @@ $('resetRoom').onclick=()=>{
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
+  highlightTravelBadge(e.pointerType==='touch'||shadowstepTargeting||editing?null:p.door??p.item);
   canvas.style.cursor=shadowstepTargeting?(shadowstepTargets().some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):p.item||p.door||p.shoalHit?'pointer':'crosshair';
 });
-canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
+canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;highlightTravelBadge(null);});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
