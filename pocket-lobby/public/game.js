@@ -3129,7 +3129,9 @@ function object(item,highlight=false,time=0,weather=null) {
     }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
       const actorEncounter=item.coopBoss?window.towerVaultCoop?.encounter():item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
-      const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat||item.coopBoss?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
+      const now=combatNow();
+      const pose=boarCombatPose({time,now,encounter:player.inCombat||item.coopBoss?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
+      if(item.type==='stonebackBeetle'&&item.room==='emberwood')pose.now=now;
       let facing=!player.inCombat&&['wildboar'].includes(type)?{x:item.x-1,y:item.y}:player;
       if(['crystalGuardian','depthsSkitter','depthsSeer','depthsWarden','depthsSentinel','depthsColossus'].includes(type)){
         pose.now=combatNow();
@@ -3155,7 +3157,7 @@ function object(item,highlight=false,time=0,weather=null) {
           const summoning=item.add&&combatNow()<item.add.spawnAt;
           const key=item.addId??'leader',selected=player.inCombat&&hunting.encounter?.combatTarget===key;
           renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':type==='moonbackStag'&&!player.inCombat?'Rare sighting':'',
-            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.boarArtHeight(item)??moonwood.heights[type]??34)+8),
+            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.mobArtHeight(item)??moonwood.heights[type]??34)+8),
             action:summoning||player.inCombat&&hunting.encounter?.addsVersion!==1?null:()=>use(item)});
         }
       }
@@ -4418,7 +4420,7 @@ function draw(time){
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
-    const height=(moonwood.boarArtHeight(item)??(isTimberTree(item)&&timberCanopyOpacity(item)<1?20:['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h));
+    const height=(moonwood.mobArtHeight(item)??(isTimberTree(item)&&timberCanopyOpacity(item)<1?20:['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h));
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
   }

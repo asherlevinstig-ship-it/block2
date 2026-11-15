@@ -13,7 +13,7 @@ export const ashenAreas={
  emberwood:{number:'31',name:'The Emberwood',region:'Ashen March',badge:'ASHEN MARCH · HOSTILE',floor:'Ash woodland',
   description:'Follow the amber lamps. Give the Ashback room, then reach the old latch to link this trail with the Broken Road.',
   center:[6,7],palette:['#49454b','#605059','#bd9a6f'],landmark:['stonebackBeetle',6,5,5,5],
-  authored:[['ashenSnag',1,1],['ashenSnag',3,2],['ashenSnag',8,2],['ashenSnag',10,1],['watchRock',8,5],['watchMushroom',4,6],['watchMushroom',8,8],['riverLantern',3,7],['riverLantern',8,7],['ashenLatch',ashenLatch.x,ashenLatch.y]]}
+  authored:[['ashenSnag',1,1],['ashenSnag',3,2],['ashenSnag',8,2],['ashenSnag',10,1],['riverLantern',8,5],['watchMushroom',4,6],['watchMushroom',8,8],['riverLantern',3,7],['watchRock',8,7],['ashenLatch',ashenLatch.x,ashenLatch.y]]}
 };
 export const ashenRooms=Object.keys(ashenAreas);
 export const ashenMapPositions={cinderwatch:[110,1290],brokenRoad:[110,1405],emberwood:[365,1405]};
@@ -119,4 +119,47 @@ export function drawCinderback(item,time,{point,polygon,rect,surface,reduced,pos
  shape([[21,-6+lean],[25,-8+lean],[27,-15+lean],[29,-16+lean],[29,-10+lean],[25,-4+lean]],'#f0d1a2','#815e57');
  rect(px+21,py-15+bob+lean,3,2,pose.defeated?'#463142':wind>.3?'#fff2b2':'#f9a477');
  rect(px+25,py-10+bob+lean,4,2,'#422d3b');
+}
+
+export const ashbackArtHeight=38;
+
+export function drawAshback(item,time,{point,polygon,rect,surface,reduced,pose,exposed}){
+ const {x,y}=item,[px,py]=point(x+.5,y+.5);
+ const wind=pose.defeated||exposed?0:pose.windup??0;
+ const age=pose.attackAge??Infinity;
+ const opening=pose.defeated||!exposed?0:reduced?1:Math.min(1,Math.max(.45,age/160));
+ const spread=Math.round(opening*8);
+ const lift=Math.round(wind*6),slump=pose.defeated?4:0;
+ const shape=(vertices,fill,edge)=>polygon(vertices.map(([u,v])=>[px+u,py+v]),fill,edge);
+ const ink='#292232',joint='#825963',edge=pose.hit?'#f2baaa':'#a97c82';
+ const shell=pose.hit?'#bc8694':'#754f62',side='#4a354d';
+ const ember=exposed?'#fff0b3':wind>.5?'#ffb369':'#dc8b72';
+
+ surface(x-.20,y-.13,1.40,1.28,.22,'#2519277d');
+ for(const direction of [-1,1]){
+  for(let i=0;i<3;i++){
+   const stride=!reduced&&!exposed&&!pose.defeated?Math.round(Math.sin(time/165+i+direction)*wind*2):0;
+   const jointX=direction*(18+i*2+spread*.35),jointY=-17+i*5-lift*(i===2?1:0)+slump;
+   const footX=direction*(25+i*2+spread*.25),footY=-8+i*5+stride;
+   shape([[direction*(9+i*2),jointY+4],[jointX,jointY-4],[footX,footY],[footX-direction*6,footY-1],[jointX-direction*3,jointY+3],[direction*8,jointY+9]],i===2?joint:side,ink);
+   shape([[jointX,jointY-3],[jointX-direction*4,jointY+1],[footX-direction*3,footY-2]],edge);
+  }
+ }
+ shape([[-16,-12],[-10,-27-lift],[-2,-29-lift],[12,-23-lift],[18,-13],[11,-6],[-9,-6]],'#473041',ink);
+ if(opening){
+  shape([[-3,-28],[4,-26],[9,-15],[3,-9],[-4,-13],[-8,-20]],'#b45951',ink);
+  shape([[-2,-25],[4,-23],[6,-17],[2,-12],[-4,-16]],'#ffb66f','#f08157');
+  shape([[-1,-23],[2,-20],[-1,-15],[-3,-19]],ember);
+  rect(px-1,py-22,2,3,'#fff6ce');
+ }
+ for(const direction of [-1,1]){
+  const plate=(vertices,fill,stroke)=>shape(vertices.map(([u,v])=>[direction*(u+spread),v-lift+slump-Math.round(opening*u*.39)]),fill,stroke);
+  plate([[1,-31],[10,-34],[18,-27],[20,-20],[15,-13],[4,-12],[1,-17]],side,ink);
+  plate([[1,-31],[10,-34],[18,-27],[16,-21],[6,-17],[2,-22]],shell,ink);
+  plate([[3,-31],[10,-33],[16,-28],[11,-28],[7,-26]],edge);
+  plate([[1,-29],[3,-25],[2,-23],[4,-20],[2,-18],[1,-21]],ember);
+ }
+ shape([[6,-15-lift],[14,-18-lift],[20,-13-lift],[19,-7],[12,-5],[7,-8]],'#885768',ink);
+ rect(px+14,py-14-lift,3,2,pose.defeated?ink:ember);
+ shape([[17,-10],[23,-10],[27,-13],[25,-8],[20,-6]],'#ba8f84',ink);
 }

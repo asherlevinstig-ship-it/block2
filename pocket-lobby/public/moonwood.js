@@ -1,6 +1,6 @@
 import {drawWildBoar,boarArtHeight} from './wild-boar-art.js';
 import {drawMapProp} from './map-prop-art.js';
-import {ashenAreas,ashenPropHeights,drawAshenGround,drawAshenProp,drawCinderback} from './ashen-march.js';
+import {ashenAreas,ashenPropHeights,ashbackArtHeight,drawAshenGround,drawAshenProp,drawCinderback,drawAshback} from './ashen-march.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
 import {waystationRoom,waystationArea} from './waystation.js';
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
@@ -264,6 +264,9 @@ export const moonwood=(()=>{
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,canopyOpacity=1,portalOpen=false}){
     if(Object.hasOwn(ashenPropHeights,item.type)){drawAshenProp(item,time,{point,polygon,rect,surface,block,reduced});return;}
+    if(item.type==='stonebackBeetle'&&item.room==='emberwood'){
+      drawAshback(item,time,{point,polygon,rect,surface,reduced,pose,exposed:(combat?.exposedUntil??0)>(pose.now??Date.now())});return;
+    }
     if(item.type==='wildboar'&&item.room==='brokenRoad'){drawCinderback(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     if(item.type==='ashenLatch'){
       const [x,y]=point(item.x+.5,item.y+.5);
@@ -510,8 +513,7 @@ export const moonwood=(()=>{
       const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
       const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
       const gilded=item.cacheGuardian===true||item.archetype==='armoured';
-      const ashen=item.room==='emberwood';
-      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:ashen?['#a68489','#392d41','#624d63']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
+      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
       for(const [u,v] of [[.13,.22],[.13,.48],[.13,.73],[.69,.22],[.69,.48],[.69,.73]]){
         part(u,v,.19,.10,flipped?6:0,flipped?5:4,['#687b77','#263948','#41545b']);
       }
@@ -531,10 +533,6 @@ export const moonwood=(()=>{
           part(.28,.28,.44,.39,19,3,['#e5c77e','#785c69','#b29469']);
           polygon([[px,py-31],[px+4,py-25],[px,py-20],[px-4,py-25]],'#a9edec');
           rect(px-10,py-24,2,7,'#e5c77e');rect(px+8,py-24,2,7,'#e5c77e');
-        }
-        if(ashen){
-          polygon([[px-8,py-22],[px-1,py-19],[px+5,py-21],[px+2,py-16],[px-4,py-16]],'#e39a81');
-          rect(px-1,py-19,2,2,'#ffe0a1');
         }
         rect(px-3,py-17,2,5,'#455a60');
         rect(px-8,py-12,5,1,'#91a5a0');
@@ -632,5 +630,6 @@ export const moonwood=(()=>{
       }
     }
   }
-  return {view,areas,doors,heights,boarArtHeight,drawMapProp,drawDungeonSideAtmosphere,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
+  const mobArtHeight=item=>item.type==='stonebackBeetle'&&item.room==='emberwood'?ashbackArtHeight:boarArtHeight(item);
+  return {view,areas,doors,heights,mobArtHeight,drawMapProp,drawDungeonSideAtmosphere,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
 })();
