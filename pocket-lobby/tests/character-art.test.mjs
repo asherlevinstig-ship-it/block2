@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {shapeCharacterIdentity,uniqueTowerOutfit,tailorTowerFrame,readingTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {finishCharacterFace,shapeCharacterIdentity,uniqueTowerOutfit,tailorTowerFrame,readingTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
 import {normalizeState} from '../server/player-state.mjs';
 const root=new URL('../public/art/',import.meta.url),meta=JSON.parse(fs.readFileSync(new URL('tower-adventurer.json',root),'utf8'));
 
@@ -11,6 +11,29 @@ test('female character choice survives saves and older characters retain their a
  const female=normalizeState({...old,avatar:{...old.avatar,gender:'female'}});
  assert.equal(normalizeState(JSON.parse(JSON.stringify(female))).avatar.gender,'female');
  assert.throws(()=>normalizeState({...old,avatar:{...old.avatar,gender:'invalid'}}),/gender/);
+});
+test('appearance choices survive normalization and reject malformed options',()=>{
+ const avatar={name:'Aria',outfit:0,hair:2,gender:'female',hairStyle:'ponytail',faceStyle:'soft',skinTone:3};
+ const saved=normalizeState({avatar});
+ assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(saved))).avatar,saved.avatar);
+ for(const change of [{skinTone:4},{skinTone:-1},{faceStyle:'unknown'},{hairStyle:'unknown'}]){
+  assert.throws(()=>normalizeState({avatar:{...avatar,...change}}),/Invalid/);
+ }
+});
+test('walking frames follow travelled stride and spell casting uses its own gesture',()=>{
+ const a=towerCharacterPose(meta,{cycle:.75,time:0,pose:{ready:true}});
+ const b=towerCharacterPose(meta,{cycle:.75,time:40000,pose:{ready:true}});
+ assert.equal(a.state,'walk');assert.equal(a.column,b.column);
+ assert.notEqual(a.column,towerCharacterPose(meta,{cycle:1.5}).column);
+ assert.equal(towerCharacterPose(meta,{weapon:true,pose:{casting:.5,attack:.5}}).state,'cast');
+ assert.equal(towerCharacterPose(meta,{time:900}).column,towerCharacterPose(meta,{time:1700}).column);
+});
+test('skin tones recolour skin pixels while leaving garment materials intact',()=>{
+ const pixels=new Uint8ClampedArray(80*100*4),skin=(24*80+40)*4,cloth=(55*80+40)*4;
+ pixels.set([254,223,177,255],skin);pixels.set([90,80,120,255],cloth);
+ finishCharacterFace(pixels,80,100,{skinTone:3,faceStyle:'classic'},{row:1});
+ assert.deepEqual([...pixels.slice(skin,skin+4)],[145,95,70,255]);
+ assert.deepEqual([...pixels.slice(cloth,cloth+4)],[90,80,120,255]);
 });
 
 test('female hair follows the source head and leaves legacy frames untouched',()=>{

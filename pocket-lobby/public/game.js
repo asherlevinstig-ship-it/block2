@@ -672,6 +672,13 @@ function receivePeers(peers){
     const destination=autoWorkTile(state);if(destination?.path.length){autoJourneyState=state;autoJourney={room:currentRoom,blocked:false};route=destination.path;target={x:destination.x,y:destination.y};}
   }
 }
+function characterWalkCycle(actor,x,y,moving){
+  const last=actor.animationStep;
+  const distance=last?Math.abs(x-last.x)+Math.abs(y-last.y):0;
+  const stride=(last?.stride??0)+(moving&&distance<1.5?distance:0);
+  actor.animationStep={x,y,stride:stride%2};
+  return moving?(stride%2)||.0001:0;
+}
 function drawRemote(peer,time){
   const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
@@ -682,10 +689,11 @@ function drawRemote(peer,time){
   const fishingPhase=cast?fishingMoments.phase(cast,time):null;
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
+  const cycle=characterWalkCycle(peer,peer.rx,peer.ry,moving);
   const raidPose=time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender},{reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(peer.stoneguardUntil>now)window.drawStoneguard?.(ctx,x,y,time,peer.stoneguardUntil-now,reducedMotion.matches);
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
   if(peer.undead?.until>now){const [ux,uy]=point(peer.rx+1.25,peer.ry+1.25);drawUndeadAlly(ctx,ux,uy,peer.undead,time,reducedMotion.matches,{attackAge:now-(peer.undead.lastStrikeAt??0),flipped:peer.direction==='left'});}
@@ -4083,7 +4091,7 @@ function draw(time){
       surface(player.x+.17,player.y+.23,.71,.61,.2,'#43324452');
       surface(player.x+.27,player.y+.34,.50,.38,.3,'#43324462');
     }
-    const cycle=autoServerWalking?time/STEP_MS:step?(player.stride%2)+Math.min(1,(time-step.started)/playerStepMs()):0;
+    const cycle=characterWalkCycle(player,player.x,player.y,!!step||autoServerWalking);
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:window.towerVaultCoop?.encounter(),events:combatArt,reduced:reducedMotion.matches});
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
@@ -6760,6 +6768,7 @@ async function castStyleAbility(id,body){
       await serverGameplay('abilityCast',{id,...body});
     if(!result?.state||id==='shadowstep'&&result.state.location!==room)return;
     const {state}=result;
+    if(id!=='shadowstep'&&id!=='waypoint')combatArt.castAt=performance.now();
     if(dialog.open)dialog.close();
     if(id==='bindBeast'){
       setPlayerCombat(false);resetCombatArt();updateCombatPanel();worldLabelKey='';
@@ -8876,12 +8885,18 @@ function drawAvatarPreview(time){
 }
 function updateAvatarPreview(){
   $('avatarGender').value=draft.gender??'male';
+  $('avatarHairStyle').value=draft.hairStyle??(draft.gender==='female'?'long':'short');
+  $('avatarFaceStyle').value=draft.faceStyle??(draft.gender==='female'?'soft':'classic');
+  $('avatarSkinTone').value=draft.skinTone??0;
   drawAvatarPreview(performance.now());
   for(const group of ['hair']){
     for(const [index,button] of Array.from($(group).children).entries())button.setAttribute('aria-pressed',String(draft.hair===index));
   }
 }
 $('avatarGender').onchange=()=>{draft.gender=$('avatarGender').value;updateAvatarPreview();};
+for(const [id,key] of [['avatarHairStyle','hairStyle'],['avatarFaceStyle','faceStyle'],['avatarSkinTone','skinTone']]){
+  $(id).onchange=()=>{draft[key]=key==='skinTone'?Number($(id).value):$(id).value;updateAvatarPreview();};
+}
 for(const [group,key,colors,names] of [
   ['hair','hair',hairColors,['Chestnut','Midnight','Copper','Honey','Violet']]
 ]){

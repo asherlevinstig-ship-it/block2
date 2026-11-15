@@ -14,10 +14,11 @@ export function playerCombatPose({time,now,encounter,events,reduced=false}){
   const strike=swing?clamp(strikeAge/140):0;
   const recover=swing?clamp((strikeAge-140)/220):0;
   return {
-    armed:ready||victory,ready,victory,attack:swing?clamp(strikeAge/360):null,
+    armed:ready||victory,ready,victory,casting:casting?clamp(castAge/380):null,attack:swing?clamp(strikeAge/360):null,
     angle:reduced?-.45:victory?-1.05:casting?-.55-pulse(castAge,380)*1.15:swing?-.95+strike*2.55-recover*1.95:-.45-windup*.7,
     lunge:reduced||!swing?0:pulse(strikeAge,340)*5,
     recoil:reduced?0:pulse(time-events.hurtAt,280)*4,
+    hurtProgress:clamp((time-events.hurtAt)/280),
     dodge:reduced?0:pulse(time-events.dodgeAt,430)*6,
     crouch:reduced?0:ready?1+windup:0,
     lift:reduced?0:victory?pulse(victoryAge,700)*3:casting?pulse(castAge,380)*2:0

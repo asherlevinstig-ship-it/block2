@@ -6,7 +6,7 @@ const rgb=hex=>[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
 const PALETTES=[null,JACKETS,TROUSERS,BOOTS,HAIR].map(group=>group?.map(ramp=>ramp.map(rgb)));
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
 export function shapeCharacterIdentity(pixels,source,width,height,appearance,selection){
-  if(appearance.gender!=='female')return;
+  const style=appearance.hairStyle??(appearance.gender==='female'?'long':'short');
   const hair=[];
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const i=(y*width+x)*4;
@@ -17,15 +17,29 @@ export function shapeCharacterIdentity(pixels,source,width,height,appearance,sel
   const top=Math.min(...hair.map(p=>p.y)),bottom=Math.max(...hair.map(p=>p.y));
   const ramp=HAIR[appearance.hair??0]??HAIR[0],back=selection.row>=2;
   const put=(x,y,color)=>{if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],(y*width+x)*4);};
+  if(style==='short')return;
+  const sway=selection.state==='walk'?[0,0,1,1,0,0,-1,-1][selection.frame%8]:0;
+  if(style==='ponytail'){
+    const edge=selection.row===0||selection.row===3?right:left;
+    const side=edge===right?1:-1;
+    for(let dx=0;dx<=5;dx++)for(let dy=0;dy<3;dy++)put(edge+side*dx,top+9+dy,dy===0?ramp[2]:ramp[1]);
+    for(let y=top+9;y<=bottom+11;y++){
+      const bend=Math.round((y-top-9)/7)+sway;
+      const half=y>bottom+7?1:2;
+      for(let dx=-half;dx<=half;dx++)put(edge+side*(4+bend)+dx,y,dx===-half?ramp[0]:dx===0?ramp[2]:ramp[1]);
+    }
+    for(let dx=-2;dx<=2;dx++)put(edge+side*4+dx,top+10,'#d6b675');
+    return;
+  }
   // Anchor the longer hair to the authored head in every animation frame.
   for(let y=top+7;y<=bottom+9;y++){
-    const taper=Math.max(0,Math.floor((y-bottom-3)/3));
+    const taper=Math.max(0,Math.floor((y-bottom-3)/2));
     for(const side of [-1,1]){
-      const edge=side<0?left:right;
+      const edge=(side<0?left:right)+(y>bottom?sway:0);
       for(let n=0;n<4-taper;n++){
         const x=edge+(side<0?n:-n),i=(y*width+x)*4;
         if(!back&&pixels[i+3]&&x>left+2&&x<right-2)continue;
-        put(x,y,n===0?'#292433':ramp[n===2?2:0]);
+        put(x,y,n===0?'#292433':ramp[n===2&&y%5<3?2:1]);
       }
     }
   }
@@ -34,24 +48,62 @@ export function shapeCharacterIdentity(pixels,source,width,height,appearance,sel
     put(x,y,(x-left)%5===0?ramp[2]:ramp[1]);
   }
 }
+const skinPalette=[
+  null,
+  ['#bd865e','#dba378','#efc596','#f9dbb2'],
+  ['#80513e','#a66d4b','#c18b60','#deac7c'],
+  ['#4e3534','#704738','#915f46','#b5825d']
+];
+const skinSource=new Map([
+ ['254,223,177',2],['248,212,159',2],['255,241,215',3],['255,249,232',3],
+ ['234,203,157',2],['230,171,131',1],['215,155,110',1],['255,229,183',2],
+ ['183,123,89',0],['150,94,75',0],['222,167,119',1],['255,228,181',2],
+ ['237,189,142',2],['168,109,80',0],['255,224,174',3],
+ ['224,199,151',2],['167,123,80',0]
+]);
+export function finishCharacterFace(pixels,width,height,appearance,selection){
+  const tone=skinPalette[appearance.skinTone??0],face=appearance.faceStyle??(appearance.gender==='female'?'soft':'classic');
+  const skin=[];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=(y*width+x)*4;
+    if(!pixels[i+3])continue;
+    const shade=skinSource.get(pixels[i]+','+pixels[i+1]+','+pixels[i+2]);
+    if(shade===undefined)continue;
+    if(y<height*.48)skin.push({x,y,i,shade});
+    if(tone)pixels.set([...rgb(tone[shade]),255],i);
+  }
+  if(!skin.length||selection.row>=2||face==='classic')return;
+  const top=Math.min(...skin.map(p=>p.y)),bottom=Math.max(...skin.map(p=>p.y));
+  const chin=skin.filter(p=>p.y>=bottom-2),center=chin.reduce((n,p)=>n+p.x,0)/chin.length;
+  for(const p of skin){
+    if(p.y<top+7)continue;
+    if(face==='soft'&&p.shade===0)pixels.set([...rgb(tone?.[1]??'#dea777'),255],p.i);
+    if(face==='angular'&&p.y>=bottom-2&&Math.abs(p.x-center)>3)pixels.set([...rgb(tone?.[0]??'#b77b59'),255],p.i);
+  }
+}
 export function towerCharacterPose(meta,options={}){
   const {direction='right',back=false,time=0,cycle=0,seated=false,wave=null,fishing=false,fishingAge=0,weapon=false,weaponTier=null,pose={},reduced=false}=options;
   const row=back?(direction==='right'?2:3):(direction==='right'?1:0);
-  let state='idle',frame=reduced?0:Math.floor(time/850)%2;
+  let state='idle',frame=0;
   if(options.reading){state=seated?'sit':'idle';frame=0;}
   else if(options.meditating){state='blink';frame=0;}
   else if(seated){state='sit';frame=reduced?0:Math.floor(time/1200)%2;}
   else if(pose.dodge>0){state='dodge';frame=reduced?1:Math.floor(clamp(pose.dodge/6,0,1)*3);}
-  else if(pose.recoil>1){state='hurt';frame=0;}
+  else if(pose.recoil>1){state='hurt';frame=reduced?0:pose.hurtProgress>.5?1:0;}
+  else if(pose.casting!==null&&pose.casting!==undefined){state='cast';frame=reduced?3:Math.floor(clamp(pose.casting,0,.999)*6);}
   else if(weapon&&['basicAxe','basicPick','copperPick','ironPick','runicPick'].includes(weaponTier)){state='chop';frame=reduced?5:Math.floor(clamp(pose.chop??((time%700)/700),0,.999)*8);}
-  else if(weapon&&pose.attack!==null&&pose.attack!==undefined){state='attack';frame=reduced?3:Math.floor(clamp(pose.attack,0,.999)*6);}
+  else if(weapon&&pose.attack!==null&&pose.attack!==undefined){
+    state='attack';
+    const progress=clamp(pose.attack,0,.999);
+    frame=reduced?3:progress<.28?Math.floor(progress/.14):progress<.48?2+Math.floor((progress-.28)/.1):4+Number(progress>.78);
+  }
   else if(fishing==='casting'){state='cast';frame=reduced?5:Math.floor(clamp(fishingAge/450,0,.999)*6);}
   else if(fishing==='landing'||fishing==='complete'){state='landing';frame=reduced?2:Math.floor(time/150)%4;}
   else if(fishing){state='reel';frame=reduced?0:Math.floor(time/(fishing==='bite'?90:300))%4;}
   else if(wave!==null){state='wave';frame=reduced?1:Math.floor(wave*12)%4;}
   else if(pose.victory){state='victory';frame=reduced?2:Math.floor(time/180)%4;}
-  else if(pose.ready){state='ready';frame=reduced?0:Math.floor(time/650)%2;}
-  else if(cycle){state='walk';frame=reduced?0:Math.floor(time/70)%8;}
+  else if(cycle){state='walk';frame=reduced?0:Math.floor((cycle%2)*4)%8;}
+  else if(pose.ready){state='ready';frame=0;}
   else if(!reduced&&time%3700>3550){state='blink';frame=0;}
   if(!options.reading&&!options.meditating&&options.state&&meta.states[options.state]){state=options.state;frame=options.frame??0;}
   const animation=meta.states[state];frame=clamp(Math.floor(frame),0,animation.frames-1);
@@ -125,6 +177,7 @@ export function tintTowerPixel(r,g,b,a,appearance={}){
 function drawTool(ctx,kind,angle,x,y){
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
   ctx.save();ctx.translate(x,y);ctx.rotate(angle);
+  if(!['basicAxe','basicPick','copperPick','ironPick','runicPick','huntingSpear','breakerSpear'].includes(kind))ctx.scale(.84,.84);
   if(['basicPick','copperPick','ironPick','runicPick'].includes(kind)){
     if(kind==='runicPick'){ctx.shadowColor='#b89cff';ctx.shadowBlur=5;}
     p(-1,-17,2,22,'#3c3440');p(0,-17,1,21,'#bc8b59');
@@ -274,6 +327,22 @@ export function shapeTowerGarment(pixels,source,width,height,appearance,selectio
  const [dark,mid,light]=JACKETS[style]??JACKETS[0];
  const patch=(x,y,color,overLegs=false)=>{x=Math.round(x);y=Math.round(y);if(x<0||x>=width||y<0||y>=height)return;const i=at(x,y),g=source[i]===250?source[i+1]:0;if(source[i+3]&&g!==1&&!(overLegs&&g===2))return;pixels.set([...rgb(color),255],i);};
  if(!armour||armour==='prospectorsGloves'){
+  if(style===3||style===4){
+   const robe=style===4,hem=waist+(robe?18:10);
+   for(let y=waist-5;y<hem;y++){
+    const half=robe?11+(y-waist+5)*.22:10;
+    for(let dx=-Math.ceil(half);dx<=half;dx++){
+     if(!robe&&!back&&Math.abs(dx)<5)continue;
+     const edge=Math.abs(dx)>half-2;
+     patch(cx+dx,y,edge?dark:y>=hem-2?'#c9ac73':(dx+16)%7<2?light:mid,true);
+    }
+   }
+   if(!back)for(let dy=3;dy<17;dy++)patch(cx,top+dy,robe?'#d7c18e':'#a7b58b');
+  }
+  if(style===1){
+   for(const side of [-1,1])for(let dy=0;dy<4;dy++)for(let dx=8;dx<13;dx++)patch(cx+side*dx,top+5+dy,dy===3?'#abc9d1':mid);
+   for(let dx=-9;dx<=9;dx++)patch(cx+dx,waist-2,'#263e50');
+  }
   if(style===5){
    for(const side of [-1,1])for(let dy=0;dy<7;dy++)for(let dx=8;dx<13-dy/3;dx++)patch(cx+side*dx,top+3+dy,dy===0?light:dark);
    for(let dx=-9;dx<=9;dx++)if(Math.abs(dx)>2)patch(cx+dx,waist-1,Math.abs(dx)>7?dark:mid);
@@ -382,7 +451,7 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
   const meta=metadata,cache=new Map(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
-    const key=[selection.state,selection.frame,selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",vest??false].join(':');
+    const key=[selection.state,selection.frame,selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",appearance.hairStyle??'',appearance.faceStyle??'',appearance.skinTone??0,vest??false].join(':');
     if(cache.has(key)){const image=cache.get(key);cache.delete(key);cache.set(key,image);return image;}
     const atlas=vest&&vest!=='prospectorsGloves'?atlases.armour:atlases.normal,pixels=new Uint8ClampedArray(width*height*4),sourcePixels=new Uint8ClampedArray(width*height*4);
     const indices=[0,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0];
@@ -400,6 +469,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
     if(selection.state==='reading')readingTowerFrame(pixels,width,height,appearance,selection);
     if(selection.state==='meditate')meditateTowerFrame(pixels,sourcePixels,width,height,appearance,selection);
+    finishCharacterFace(pixels,width,height,appearance,selection);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');
     const data=typeof ImageData==='function'?new ImageData(pixels,width,height):{data:pixels,width,height};ctx.putImageData(data,0,0);
     cache.set(key,canvas);if(cache.size>384)cache.delete(cache.keys().next().value);return canvas;
@@ -420,10 +490,10 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     }
     const carried=options.sheathed&&!options.weapon?carriedTowerEquipment(meta,x,y,options):null;
     if(carried&&!options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
-    if(options.weapon&&options.back)drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
+    if(options.weapon&&options.back&&selection.state!=='cast')drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
     ctx.drawImage(image,Math.round(x-meta.pivot[0]*meta.scale),Math.round(y-meta.pivot[1]*meta.scale),width*meta.scale,height*meta.scale);
     if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
-    if(options.weapon&&!options.back)drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
+    if(options.weapon&&!options.back&&selection.state!=='cast')drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
     ctx.restore();return selection;
   }
   function head(ctx,appearance={},back=false,blink=false){
