@@ -3142,7 +3142,7 @@ function object(item,highlight=false,time=0,weather=null) {
           const summoning=item.add&&combatNow()<item.add.spawnAt;
           const key=item.addId??'leader',selected=player.inCombat&&hunting.encounter?.combatTarget===key;
           renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':type==='moonbackStag'&&!player.inCombat?'Rare sighting':'',
-            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.heights[type]??34)+8),
+            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(item.room==='brokenRoad'&&type==='wildboar'?36:(moonwood.heights[type]??34))+8),
             action:summoning||player.inCombat&&hunting.encounter?.addsVersion!==1?null:()=>use(item)});
         }
       }
@@ -3259,6 +3259,7 @@ function object(item,highlight=false,time=0,weather=null) {
     part(.23,.36,.30,.17,20,.7,'blue');part(.23,.37,.26,.15,20.7,.5,'cream');
     part(.67,.53,.13,.14,20,3,'cream');
   }else if(type==='bookcase'){
+    if(currentRoom==='library'&&moonwood.drawMapProp(ctx,'bookcase',...point(x+1,y+.5)))return;
     part(.08,.08,1.84,.78,0,3,'wood');part(.10,.08,1.80,.12,3,31,'wood');
     for(const u of [.08,1.78])part(u,.12,.14,.68,3,32,'wood');
     for(const z of [3,16,30]){

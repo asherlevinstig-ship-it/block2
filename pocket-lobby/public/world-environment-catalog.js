@@ -1,6 +1,7 @@
 const asset=name=>'assets/environment/'+name+'.webp';
 export const environmentProfiles={
  courtyard:{asset:'assets/environment/courtyard-valley.png',oak:true,sky:true,leaves:true,motes:'#d8c185',fog:[[.2,.34,.13],[.62,.43,.17],[.79,.81,.12]],falls:[[.80,.646,.034,.122],[.912,.758,.036,.12]],water:[[.70,.90],[.76,.85],[.83,.89],[.90,.88],[1,.95],[1,1],[.70,1]],lights:[[.856,.153],[.83,.255],[.90,.213],[.862,.546],[.923,.498],[.965,.565]]},
+ ashen:{asset:asset('ashen-march'),motes:'#ffb27a',fog:[[.20,.33,.13],[.61,.39,.20],[.83,.47,.14]],lights:[[.892,.109],[.69,.213],[.13,.37]]},
  pond:{asset:asset('pond'),sky:true,leaves:true,motes:'#e4efa0',fog:[[.24,.43,.16],[.66,.36,.18],[.81,.77,.12]],water:[[.17,.38],[.79,.35],[.99,.49],[.82,.84],[.65,1],[.25,1],[.12,.6]],lights:[[.783,.352],[.912,.323],[.928,.355]]},
  forest:{asset:asset('forest'),leaves:true,motes:'#c9efac',fog:[[.27,.45,.13],[.65,.49,.14],[.74,.78,.14]],lights:[[.905,.42],[.817,.403],[.864,.453]]},
  river:{asset:asset('river'),sky:true,leaves:true,motes:'#caedcb',fog:[[.30,.45,.13],[.64,.31,.16],[.74,.77,.14]],falls:[[.858,.297,.025,.116],[.90,.49,.09,.037]],water:[[.16,.4],[.67,.3],[.83,.5],[1,.59],[1,.9],[.62,1],[.28,.92]],lights:[[.14,.248],[.78,.21],[.823,.325],[.967,.303]]},
@@ -29,7 +30,7 @@ export const roomEnvironments={
  logging:{theme:'forest',position:.60,hue:-6},clearing:{theme:'forest',position:.70},wildlifeReserve:{theme:'forest',position:.65,hue:-12},
  grove:{theme:'forest',position:.76,hue:14},shrine:{theme:'forest',position:.65,hue:19},ruins:{theme:'forest',position:.86,hue:12},roots:{theme:'cavern',position:.52,hue:-18},thornwood:{theme:'forest',hue:18,brightness:.65},
  quarry:{theme:'quarry',position:.77},crystaldeep:{theme:'cavern',position:.74},
- cinderwatch:{theme:'watch',position:.3,hue:32,brightness:.7},brokenRoad:{theme:'quarry',position:.64,hue:24,brightness:.65},emberwood:{theme:'forest',position:.76,hue:39,brightness:.61},
+ cinderwatch:{theme:'ashen',position:.35,mobilePosition:.58,brightness:.79},brokenRoad:{theme:'ashen',position:.72,mobilePosition:.81,brightness:.82},emberwood:{theme:'ashen',position:.30,mobilePosition:.27,brightness:.66},
  ambermead:{theme:'watch',position:.52,hue:-10},beaconwatch:{theme:'watch',position:.82},keepersOverlook:{theme:'watch',position:.35,hue:4},waystation:{theme:'watch',position:.18,hue:-14},starfall:{theme:'watch',position:.70,hue:16},
  ...group(['millCellar','depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'],'dungeon'),
  millCellar:{theme:'dungeon',position:.55,hue:-12},depthsGate:{theme:'dungeon',position:.75,hue:-7},

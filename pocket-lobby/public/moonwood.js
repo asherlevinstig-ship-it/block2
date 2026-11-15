@@ -1,4 +1,5 @@
-import {ashenAreas,drawAshenGround} from './ashen-march.js';
+import {drawMapProp} from './map-prop-art.js';
+import {ashenAreas,ashenPropHeights,drawAshenGround,drawAshenProp,drawCinderback} from './ashen-march.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
 import {waystationRoom,waystationArea} from './waystation.js';
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
@@ -45,7 +46,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#303645','#443f56','#a38a77'],authored:[['wildtree',1,2],['wildtree',6,2],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from one of three fishing posts and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',2,0],['wildtree',0,8],['wildrock',2,7],['wildbloom',2,9],['wildbloom',3,3]]}
   };
-  const heights={ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
+  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -185,7 +186,7 @@ export const moonwood=(()=>{
     if(id===wildlifeRoom){drawReserveGround({point,polygon,surface,block,rect});return;}
     polygon([point(-.25,-.3,-7),point(cols+.36,-.3,-8),point(cols+.37,rows+.42,-8),point(-.25,rows+.42,-8)],'#0c18268c');
     block(0,0,cols,rows,-9,9,[ground,'#273244','#202a3c']);
-    if(Object.hasOwn(ashenAreas,id)){drawAshenGround(id,{surface,point,polygon},path);return;}
+    if(Object.hasOwn(ashenAreas,id)){drawAshenGround(id,{surface,point,polygon,block},path);return;}
     if(watchRooms.includes(id)){drawWatchGround(id,{point,polygon,surface,block,rect,path});return;}
     if(willowmereRooms.includes(id)){drawRiverGround(id,{point,polygon,surface,block,rect});return;}
     for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
@@ -261,6 +262,8 @@ export const moonwood=(()=>{
   }
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,canopyOpacity=1,portalOpen=false}){
+    if(Object.hasOwn(ashenPropHeights,item.type)){drawAshenProp(item,time,{point,polygon,rect,surface,block,reduced});return;}
+    if(item.type==='wildboar'&&item.room==='brokenRoad'){drawCinderback(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     if(item.type==='ashenLatch'){
       const [x,y]=point(item.x+.5,item.y+.5);
       block(item.x+.1,item.y+.12,.8,.74,0,10,['#94796d','#4c3940','#654a4a']);
@@ -344,6 +347,11 @@ export const moonwood=(()=>{
       ctx.save();ctx.globalAlpha=reduced?.15:.2+Math.sin(time/500)*.06;surface(x-.3,y-.3,1.6,1.6,.3,'#b9ffe0');ctx.restore();return;
     }
     if(type==='cachePassage'){
+      if(['depthsRest','depthsTreasury'].includes(item.room)&&drawMapProp(ctx,'arch',px,py)){
+        surface(x+.18,y+.17,.64,.65,.3,'#c5a0ee28');
+        rect(px-2,py-17,4,9,'#c5a0ee');rect(px-1,py-15,2,6,'#ffe9b7');
+        return;
+      }
       part(.1,.1,.2,.8,0,27,stone);part(.7,.1,.2,.8,0,27,stone);
       part(.1,.1,.8,.8,27,4,['#c3ad77','#6c5d7a','#8d7b94']);
       surface(x+.32,y+.13,.34,.73,.3,'#3a273f');
@@ -356,6 +364,10 @@ export const moonwood=(()=>{
       if(!found){
         ctx.save();ctx.globalAlpha=reduced ? .18 : .2+Math.sin(time/450)*.06;
         surface(x-.35,y-.35,1.7,1.7,.3,glow);ctx.restore();
+      }
+      if(type==='essenceCache'&&drawMapProp(ctx,found?'openChest':'chest',px,py)){
+        if(!found&&!unsealed){rect(px-10,py-13,20,2,'#a8a1ce');rect(px-1,py-22,2,18,'#a8a1ce');}
+        return;
       }
       part(.08,.1,.84,.75,0,4,['#b39a62','#554561','#88707b']);
       part(.13,.14,.74,.65,4,10,['#645278','#342d4b','#4c3e63']);
@@ -392,6 +404,7 @@ export const moonwood=(()=>{
         polygon([[px-2,py-10],[px+1,py-10],[px+(found?8:-8),py-21],[px+(found?5:-11),py-21]],'#dba765');
         rect(px+(found?4:-12),py-22,8,3,color);
       }else if(type==='submergedCache'||type==='runeCoffer'||type==='gateSupply'||type==='galleryCache'||type==='sideTreasure'){
+        if(type==='sideTreasure'&&drawMapProp(ctx,found?'openChest':'chest',px,py))return;
         part(.12,.22,.76,.59,0,8,['#9d7854','#56454b','#73564d']);
         part(.11,.20,.78,.63,8,found?2:4,found?['#6d6656','#474447','#595252']:['#c39462','#755343','#996c50']);
         rect(px-2,py-9,4,4,found?'#879094':color);
@@ -529,8 +542,7 @@ export const moonwood=(()=>{
       const untilStrike=combat?combat.nextBoarAt-Date.now():Infinity;
       if(untilStrike>=0&&untilStrike<450)surface(x-.08,y-.08,1.16,1.16,.4,'#f2a36b66','#ffc18b');
       const bob=reduced||pose.defeated?0:Math.sin(time/380)*.65;
-      const cinder=item.room==='brokenRoad';
-      const hide=pose.hit?['#d2a08b','#785464','#ac7c7c']:cinder?['#81545a','#403343','#67414a']:['#a78a77','#594451','#7a5963'];
+      const hide=pose.hit?['#d2a08b','#785464','#ac7c7c']:['#a78a77','#594451','#7a5963'];
       const leg=pose.defeated?0:!reduced&&pose.windup>.3?Math.round(Math.sin(time/65)):0;
       for(const [u,v] of [[.18,.24],[.65,.24],[.18,.66],[.65,.66]]){
         part(u,v,.14,.15,0,6+(u>.5?leg:-leg),['#795d58','#3d3543','#56434b']);
@@ -548,7 +560,7 @@ export const moonwood=(()=>{
       else{rect(px+9,py-12-bob,3,3,'#352b3b');rect(px+10,py-12-bob,1,1,pose.windup>.5?'#ffac7e':'#f9d1a0');}
       rect(px+13,py-4-bob,2,5,'#f4d8b3');rect(px+12,py-6-bob,2,3,'#fff0c7');
       rect(px+6,py-3-bob,2,4,'#e8cba9');rect(px+5,py-4-bob,2,2,'#fff0c7');
-      for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,cinder?5:3,cinder&&i%2?'#e39b6e':'#443744');
+      for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
       rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
     }else if(type==='wildtree'||type==='timberTree'){
       drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity);
@@ -636,5 +648,5 @@ export const moonwood=(()=>{
       }
     }
   }
-  return {view,areas,doors,heights,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
+  return {view,areas,doors,heights,drawMapProp,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
 })();
