@@ -4214,7 +4214,8 @@ function draw(time){
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
   if(currentRoom==='outside')for(const lamp of courtyardFurniture.filter(item=>item.type==='streetlamp')){
     const [lx,ly]=point(lamp.x+.5,lamp.y+.5,.5);
-    lobbyLight(lx,ly,24,'#ffc87748',.45);
+    // Street lamps come up as the daylight goes.
+    ctx.save();ctx.globalAlpha*=1-.85*(window.towerDayNight?.for('outside')?.light??0);lobbyLight(lx,ly,24,'#ffc87748',.45);ctx.restore();
   }
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
     const [wx,wy]=point(10.5,3.5);
@@ -4473,7 +4474,7 @@ function draw(time){
   if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
   updateWorldFloats(time);
   for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
-  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(currentRoom==='depthsVault'&&!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom)});}
+  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,now:combatNow(),room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(currentRoom==='depthsVault'&&!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom)});}
 }
 
 

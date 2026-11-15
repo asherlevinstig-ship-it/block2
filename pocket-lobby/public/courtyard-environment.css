@@ -4,14 +4,20 @@ body{background:#07172c}
 body>.shell{position:relative;z-index:1}
 .courtyard-landscape,.courtyard-atmosphere,.courtyard-oak{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .courtyard-landscape,.courtyard-oak{object-fit:cover;object-position:var(--environment-position,72%) 50%;image-rendering:auto;will-change:transform}
-.courtyard-landscape{filter:brightness(var(--environment-brightness,.78)) saturate(.92) hue-rotate(var(--environment-hue,0deg))}
+.courtyard-landscape{filter:brightness(calc(var(--environment-brightness,.78)*var(--day-brightness,1))) saturate(calc(.92*var(--day-saturate,1))) hue-rotate(var(--environment-hue,0deg))}
+/* Day-night cycle: washes blended over the painting. Both are invisible at night and on maps without a cycle. */
+.courtyard-daylight,.courtyard-dusk{position:absolute;inset:0;pointer-events:none;z-index:1}
+.courtyard-daylight{background:linear-gradient(180deg,#8fc6ff 0%,#cfe6ff 42%,#fff1cf 100%);mix-blend-mode:soft-light;opacity:var(--day-light,0)}
+.courtyard-dusk{background:linear-gradient(180deg,#3d2f86 0%,#b84f8f 26%,#ff8a4c 50%,#ffc878 64%,#8a4a6a 100%);mix-blend-mode:overlay;opacity:var(--day-warm,0)}
+.courtyard-dusk::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 18%,#ff9a5c30 46%,#ffd08a26 60%,transparent 82%)}
+.day-phase{margin-left:12px;color:#f3d48f;letter-spacing:.06em;text-transform:uppercase}.day-phase[data-phase="night"]{color:#b9c8ff}.day-phase[hidden]{display:none}
 .courtyard-atmosphere{z-index:1}
 .courtyard-oak{z-index:2;object-fit:fill;object-position:left top;transform-origin:0 80%;filter:brightness(.83)}
 #courtyardEnvironment img[hidden]{display:none}
 #courtyardEnvironment::after{content:"";position:absolute;inset:0;z-index:3;background:linear-gradient(180deg,#03112766,transparent 24%,transparent 78%,#04112677),radial-gradient(ellipse at 46% 56%,#08182b28,transparent 65%)}
 /* Measured clearance prevents Auto controls crossing the power/tool dock. */
 .scene .auto-panel{bottom:var(--auto-dock-clearance,18px);max-height:var(--auto-panel-max,calc(100% - 36px));overflow:auto;overscroll-behavior:contain}
-@media(max-width:700px){.courtyard-landscape{object-position:var(--environment-mobile-position,78%) 50%;filter:brightness(.68) saturate(.9) hue-rotate(var(--environment-hue,0deg))}.courtyard-oak{opacity:.7}}
+@media(max-width:700px){.courtyard-landscape{object-position:var(--environment-mobile-position,78%) 50%;filter:brightness(calc(.68*var(--day-brightness,1))) saturate(calc(.9*var(--day-saturate,1))) hue-rotate(var(--environment-hue,0deg))}.courtyard-oak{opacity:.7}}
 @media(prefers-reduced-motion:reduce){.courtyard-landscape,.courtyard-oak{will-change:auto;transform:none!important}}
 @media(max-width:700px){
  .scene .auto-panel #autoWhere,.scene .auto-panel #autoDecision{display:none}

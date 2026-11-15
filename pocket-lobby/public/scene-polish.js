@@ -18,7 +18,20 @@ const moods={
   outdoor:{ambient:'#e8eefa',edge:'#8a96c6',fight:'#bcc4e2',player:'214,228,255',reach:170,glow:.5,motes:'fireflies'},
   depths:{ambient:'#dcdaf0',edge:'#62629a',fight:'#a9a8cf',player:'255,196,132',reach:135,glow:.65,motes:'embers'}
 };
-const moodFor=s=>/^depths|crystaldeep|quarry|millCellar/.test(s.room)?moods.depths:s.exploring||s.room==='outside'?moods.outdoor:moods.indoor;
+const baseMood=s=>/^depths|crystaldeep|quarry|millCellar/.test(s.room)?moods.depths:s.exploring||s.room==='outside'?moods.outdoor:moods.indoor;
+// Maps with a day-night cycle blend three looks: clear day, the gold of dawn and dusk, and moonlit night.
+const hexRgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const skies={
+  day:{ambient:hexRgb('#fffaf0'),edge:hexRgb('#e6e8f2'),fight:hexRgb('#f0f1f7')},
+  gold:{ambient:hexRgb('#ffd9b0'),edge:hexRgb('#b98aa6'),fight:hexRgb('#dcb8bf')},
+  night:{ambient:hexRgb('#c6d2f4'),edge:hexRgb('#6c7ab6'),fight:hexRgb('#aab4dc')}
+};
+function skyMood(day){
+  const tone=key=>'rgb('+skies.night[key].map((dark,i)=>{const lit=dark+(skies.day[key][i]-dark)*day.light;return Math.round(lit+(skies.gold[key][i]-lit)*day.warm*.75);}).join(',')+')';
+  const dark=1-day.light;
+  return {ambient:tone('ambient'),edge:tone('edge'),fight:tone('fight'),player:day.warm>.3?'255,214,170':'214,228,255',reach:170,lamp:.3*dark,glow:.25+.3*dark,motes:day.light<.35?'fireflies':'pollen'};
+}
+const moodFor=s=>{const day=window.towerDayNight?.for(s.room);return day?skyMood(day):baseMood(s);};
 const seeds=Array.from({length:28},(_,i)=>{const r=n=>{const v=Math.sin(i*127.1+n*311.7)*43758.5453;return v-Math.floor(v);};return [r(1),r(2),r(3),r(4)];});
 const ripples=[];
 let quality=2,live=false,lastRoom='',lastTime=0,slow=0,placed='';
@@ -47,6 +60,7 @@ function render(s){
   const spot=[r.left-p.left,r.top-p.top,r.width,r.height].map(v=>Math.round(v*100)/100).join('|');
   if(spot!==placed){placed=spot;const [l,t,w,h]=spot.split('|');Object.assign(fx.style,{left:l+'px',top:t+'px',width:w+'px',height:h+'px'});}
   const vw=s.view.width,vh=s.view.height,sc=Math.min(W/vw,H/vh),dw=vw*sc,dh=vh*sc,ox=(W-dw)/2,oy=(H-dh)/2;
+  if(s.now)window.towerDayNight?.sync(s.now);
   const mood=moodFor(s),t=s.time;
   // 1. Scene, scaled without the uneven pixels of a fractional nearest-neighbour stretch.
   fctx.setTransform(1,0,0,1,0,0);fctx.globalAlpha=1;fctx.globalCompositeOperation='source-over';fctx.clearRect(0,0,W,H);
@@ -83,7 +97,7 @@ function render(s){
     edge.addColorStop(0,mood.ambient);edge.addColorStop(1,s.inCombat?mood.fight:mood.edge);
     lctx.globalCompositeOperation='multiply';lctx.fillStyle=edge;lctx.fillRect(0,0,W,H);
     const breathe=s.reduced?1:1+Math.sin(t/900)*.025+Math.sin(t/233)*.012;
-    lctx.globalCompositeOperation='color-dodge';glow(lctx,px,py-10*sc,reach*breathe,reach*.72*breathe,mood.player,.3);
+    lctx.globalCompositeOperation='color-dodge';glow(lctx,px,py-10*sc,reach*breathe,reach*.72*breathe,mood.player,mood.lamp??.3);
     lctx.globalCompositeOperation='screen';lctx.imageSmoothingEnabled=true;lctx.globalAlpha=mood.glow;lctx.drawImage(b3,ox,oy,dw,dh);
     lctx.globalAlpha=1;lctx.globalCompositeOperation='destination-in';lctx.drawImage(fx,0,0);
     fctx.globalCompositeOperation='copy';fctx.drawImage(lit,0,0);
