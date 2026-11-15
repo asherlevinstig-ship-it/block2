@@ -51,7 +51,7 @@ export function vaultPhase(encounter){
  if(encounter?.addActor||encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
  const maximum=encounter.brainVersion===2?encounter.brainMaxHealth:240;
  const index=encounter.health>maximum*2/3?1:encounter.health>maximum/3?2:3;
- return index===1?{index,name:'Ironclad',archetype:'armoured',move:'vaultSmash',interval:3500,shellArmor:9,color:'#e6c080',hint:'Build stagger to crack the plating. Heavy hits help; dodge the smash.'}:index===2?{index,name:'Unbound',archetype:'duelist',move:'vaultCleave',interval:2600,shellArmor:0,color:'#ffab89',hint:'Dodge the heavy swings, then counter. Watch for the follow-up lunge.'}:{index,name:'Runic heart',archetype:'caster',move:'vaultBolt',interval:4200,shellArmor:0,color:'#c6a4ff',hint:'Land 3 quick hits during the charged spell to interrupt, or dodge the blast.'};
+ return index===1?{index,name:'Ironclad',archetype:'armoured',move:'vaultSmash',interval:3500,shellArmor:9,color:'#e6c080',hint:'Crack the armour with Faultbreaker, or avoid the smash and strike the exposed core.'}:index===2?{index,name:'Unbound',archetype:'duelist',move:'vaultCleave',interval:2600,shellArmor:0,color:'#ffab89',hint:encounter.brainVersion===2?'Reach the green lane on foot or with Shadowstep before Hunter’s Sweep lands.':'Dodge the heavy swings, then counter.'}:{index,name:'Runic heart',archetype:'caster',move:'vaultBolt',interval:4200,shellArmor:0,color:'#c6a4ff',hint:encounter.brainVersion===2?'Leave the Heart Mark or use Sanctuary to absorb the hit. Heartbolt Volley can be interrupted.':'Interrupt the charged spell or dodge the blast.'};
 }
 export function huntEnemy(encounter){
  if(encounter?.addActor)return {...addKinds[encounter.addActor],room:encounter.arenaRoom,xp:[0,0,0]};
@@ -425,7 +425,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.dodged=result.spatialAvoided||result.timedDodge||random()<attributes.dodge;
     result.automaticDodge=result.timedDodge&&encounter.autoDodgeUntil===encounter.dodgeUntil;
     if(result.timedDodge&&!result.automaticDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration+(build.counterWindow??0);result.counterPercent=Math.round(((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)+build.counter)*100);result.encounter.counterPercent=result.counterPercent;}
-    if(enemy.shellArmor&&enemy.archetype!=='armoured'&&move.opensShell&&(result.timedDodge||result.spatialAvoided)){
+    if(enemy.shellArmor&&(enemy.archetype!=='armoured'||enemy.id==='depthsGuardian')&&move.opensShell&&(result.timedDodge||result.spatialAvoided)){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;
     }

@@ -9,7 +9,7 @@ import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress,pinnedGoalSummary,ironSwordFishTask,ironSwordCatchTask,ironSwordHuntTask} from './upgrade-goals.js';
 import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile,playerMeleeReach} from './hunting.js';
-import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor,ARENA_STEP_COST} from './dungeon-arena.js';
+import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor,safeLaneDistance,ARENA_STEP_COST} from './dungeon-arena.js';
 import {manaReadyAt} from './player-vitals.js';
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
@@ -123,8 +123,12 @@ export function nextCombatTactic(state){
   const at=Math.max(earliest,e.arenaStepAt??0,warning+(e.brainVersion===2?400:0),e.brainAutoStepAt??0),p=arenaPlayer(e),foe=arenaEnemy(e);
   const candidates=[[1,0],[-1,0],[0,1],[0,-1]].map(([x,y])=>({x:p.x+x,y:p.y+y})).filter(n=>dungeonFloor(e.arenaRoom,n.x,n.y)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.adds??[]).some(a=>a.x===n.x&&a.y===n.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8));
   const danger=p=>[{encounter:e,move:enemyAttack(e)},...threats].filter(t=>t.encounter.arenaLockedFor===t.encounter.nextBoarAt&&arenaInDanger(t.encounter,t.move,p)&&!arenaBehindCover(t.encounter,t.move,p)).length;
-  candidates.sort((a,b)=>danger(a)-danger(b));
-  if(candidates[0]&&at<strike&&(e.brainVersion!==2||!arenaInDanger(incomingEncounter,attack,candidates[0])&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST)){offer({...make(at,'move','Moving out of the marked attack area.',90),tile:candidates[0]});}
+  const laneDistance=tile=>attack.shape==='safeLane'?safeLaneDistance(incomingEncounter,tile):0;
+  candidates.sort((a,b)=>danger(a)-danger(b)||laneDistance(a)-laneDistance(b));
+  const tile=candidates[0];
+  const escaping=tile&&(!arenaInDanger(incomingEncounter,attack,tile)||
+   laneDistance(tile)<laneDistance(p)&&at+laneDistance(tile)*1250<strike);
+  if(tile&&at<strike&&(e.brainVersion!==2||escaping&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST)){offer({...make(at,'move','Moving out of the marked attack area.',90),tile});}
  }
  if(e.brainVersion===2){
   const at=Math.max(earliest,e.arenaStepAt??0,e.brainAutoStepAt??0),p=arenaPlayer(e),foe=combatTargetTile(e),reach=playerMeleeReach(state.combatGear?.equippedWeapon);

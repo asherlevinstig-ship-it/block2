@@ -113,13 +113,13 @@ function drawMeleeImpact(ctx,{bx,by,px,py,aim},t,effect,reduced){
   ctx.restore();
 }
 function drawEnemyImpact(ctx,{bx,by,px,py,bgX,bgY,aim},t,effect,reduced){
-  const tint=effect.attackShape==='bolt'?'#d1a1ff':effect.heavy?'#ffac80':'#e6b891';
+  const tint=['bolt','marks'].includes(effect.attackShape)?'#d1a1ff':effect.heavy?'#ffac80':'#e6b891';
   const size=reduced?.48:t;
   ctx.save();ctx.globalAlpha=(1-t)*.85;ctx.strokeStyle=tint;ctx.lineWidth=effect.heavy?2:1;
   if(effect.attackShape==='bolt'){
     const travel=reduced?1:Math.min(1,t*3);const x=bx+(px-bx)*travel,y=by+(py-by)*travel;
     line(ctx,bx,by,x,y);hex(ctx,x,y,5);
-  }else if(effect.attackShape==='ring'){
+  }else if(effect.attackShape==='ring'||effect.attackShape==='marks'){
     const radius=12+size*(effect.heavy?42:28);
     ring(ctx,bgX,bgY,radius);
     if(effect.heavy)ring(ctx,bgX,bgY,Math.max(9,radius-8));

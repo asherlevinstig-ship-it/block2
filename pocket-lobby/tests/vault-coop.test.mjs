@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {arenaBehindCover,arenaMoveEvent} from '../public/dungeon-arena.js';
-import {coopEncounter} from '../public/vault-coop.js';
+import {arenaBehindCover,arenaMoveEvent,dungeonFloor} from '../public/dungeon-arena.js';
+import {coopDanger,coopEncounter,coopMove} from '../public/vault-coop.js';
 import {smartAttacks} from '../public/enemy-brain.js';
 import {normalizeState} from '../server/player-state.mjs';import {protectFishingState,applyGameplayAction} from '../server/gameplay.mjs';import {actVaultParty,advanceVaultParty,publicVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';import {testDatabase} from './db-helper.mjs';import {handlePlayerApi} from '../server/player-api.mjs';import {normalizeMagic} from '../public/essences.js';import {advanceServerCombat} from '../server/activities.mjs';import {boot} from './helpers/game-client.mjs';import {enemyRoleInfo} from '../public/enemy-roles.js';
 function player(name='A'){return normalizeState({avatar:{name,outfit:0,hair:0},location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2,routeChoice:'safe'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword','quickfang'],equippedWeapon:'ironSword'},magic:{picks:['fire','ice','storm'],unlocked:['fire:sword','ice:shield','fire:renewal','storm:sword'],slots:{q:'ice:shield',e:'fire:renewal'}}});}
@@ -182,4 +182,102 @@ test('one player fractures the Guardian while a teammate wards and strikes',()=>
  advanceVaultParty(r,1600);
  assert(r.sanctuary.remaining<30);
  assert.equal(r.members.a.hp+r.members.b.hp,health);
+});
+
+test('the locked Hunter’s Sweep can be crossed on foot or with Shadowstep',()=>{
+ const {r,a,b}=party();
+ a.styleAbilities={learned:['shadowstep']};
+ act(r,a,'a','start',1000);
+ r.hp=Math.floor(r.max*2/3)+1;
+ act(r,a,'a','strike',2000);
+ assert.equal(r.move,'bossHuntSweep');
+ const locked={...r.targetTile},lands=r.landsAt,tile={x:5,y:7};
+ assert(coopDanger(r,a.position));
+ assert(!coopDanger(r,tile));
+ const ap=a.actionPoints.value;
+ assert.throws(()=>act(r,a,'a','shadowstep',lands-600,{tile:{x:1,y:1}}),/reachable/);
+ act(r,a,'a','shadowstep',lands-500,{tile});
+ assert.deepEqual(a.position,tile);
+ assert.deepEqual(r.targetTile,locked);
+ assert.equal(a.actionPoints.value,ap-1);
+ assert(a.styleAbilities.readyAt.shadowstep>lands);
+ assert.throws(()=>act(r,a,'a','shadowstep',lands-400,{tile:{x:5,y:6}}),/recharging/);
+ b.position={x:9,y:7};act(r,b,'b','tick',lands-350);
+ advanceVaultParty(r,lands);
+ assert.equal(r.members.a.hp,100);
+ assert.equal(r.members.b.hp,100);
+});
+
+test('Heart Marks remain on their original tiles and Sanctuary shares protection against their overlap',()=>{
+ const {r,a,b}=party();
+ a.styleAbilities={learned:['sanctuary']};
+ act(r,a,'a','start',1000);
+ r.hp=Math.floor(r.max/3)+1;
+ b.position={x:5,y:6};act(r,b,'b','tick',1800);
+ act(r,a,'a','strike',2000);
+ assert.equal(coopMove(r).shape,'marks');
+ const view=publicVaultParty(r,'a',2000);
+ assert.deepEqual(view.marks,[a.position,b.position]);
+ const lands=r.landsAt;
+ act(r,a,'a','sanctuary',lands-500);
+ const unwarded=structuredClone(r);delete unwarded.sanctuary;
+ b.position={x:8,y:6};act(r,b,'b','tick',lands-400);
+ assert.deepEqual(publicVaultParty(r,'b',lands-400).marks,view.marks);
+ unwarded.members.b.pos={...b.position};
+ advanceVaultParty(r,lands);
+ advanceVaultParty(unwarded,lands);
+ assert.equal(r.members.a.hp-unwarded.members.a.hp,30);
+ assert.equal(r.members.b.hp,100);
+});
+
+test('a two-player Vault can be cleared with starter weapons or a specialised set',()=>{
+ for(const prepared of [false,true]){
+  const r={id:'AAAABBBB',leader:'a',status:'waiting',expiresAt:2000000,members:{},adds:[]};
+  const team=['a','b'].map((id,index)=>{
+   const s=player(id);
+   if(!prepared){
+    s.combatGear.equippedWeapon='trainingSword';
+    Object.assign(s.stats,{strengthXp:0,agilityXp:0,vitalityXp:0});
+   }else s.styleAbilities={learned:index?['sanctuary']:['faultbreaker','shadowstep']};
+   s.position={x:index?7:5,y:5};
+   act(r,s,id,'join',1000);
+   return {id,s,home:{...s.position},m:r.members[id],stepAt:0};
+  });
+  act(r,team[0].s,'a','start',1300);
+  const seen=new Set(),used=new Set();
+  for(let now=1400;now<145000&&r.status==='battle';now+=100){
+   advanceVaultParty(r,now);
+   if(r.status!=='battle')break;
+   seen.add(r.phase);
+   for(const p of team){
+    if(r.status!=='battle'||!p.m.hp)continue;
+    const {id,s,m,home}=p,move=coopMove(r),warning=now>=r.warningAt;
+    const threatening=warning&&coopDanger(r,s.position),remaining=r.landsAt-now;
+    const addThreat=r.adds.some(add=>add.hp>0&&add.landsAt-now<=200&&Math.hypot(s.position.x-add.target.x,s.position.y-add.target.y)<=1.1);
+    const free=ability=>(s.styleAbilities?.readyAt?.[ability]??0)<=now&&!used.has(ability);
+    if(prepared&&id==='a'&&r.phase===1&&free('faultbreaker')){
+     act(r,s,id,'faultbreaker',now);used.add('faultbreaker');
+    }else if(prepared&&id==='b'&&r.phase===3&&move.shape==='marks'&&threatening&&free('sanctuary')){
+     act(r,s,id,'sanctuary',now);used.add('sanctuary');
+    }else if(prepared&&id==='a'&&move.shape==='safeLane'&&threatening&&free('shadowstep')){
+     const tiles=[{x:home.x,y:3},{x:home.x,y:7},{x:home.x-2,y:5},{x:home.x+2,y:5}];
+     const tile=tiles.find(tile=>dungeonFloor('depthsVault',tile.x,tile.y)&&!coopDanger(r,tile));
+     if(tile){act(r,s,id,'shadowstep',now,{tile});used.add('shadowstep');}
+    }else if(m.nextDodgeAt<=now&&(threatening&&remaining<=200||addThreat)){
+     act(r,s,id,'dodge',now);
+    }else if(!warning&&now>=p.stepAt&&(s.position.x!==home.x||s.position.y!==home.y)){
+     const x=s.position.x+Math.sign(home.x-s.position.x);
+     s.position=x!==s.position.x?{x,y:s.position.y}:{x,y:s.position.y+Math.sign(home.y-s.position.y)};
+     act(r,s,id,'tick',now);p.stepAt=now+300;
+    }else if(now>=m.lastStrike+m.attackInterval&&Math.hypot(s.position.x-r.origin.x,s.position.y-r.origin.y)<=1.5){
+     const add=r.adds.find(add=>add.hp>0&&Math.hypot(s.position.x-add.x,s.position.y-add.y)<=1.5);
+     act(r,s,id,'strike',now,{target:add?.id});
+    }
+   }
+  }
+  assert.deepEqual([...seen],[1,2,3]);
+  assert.equal(r.status,'victory',prepared?'established build':'starter weapons');
+  assert(team.every(({m})=>m.hp>0));
+  if(prepared)assert.deepEqual([...used].sort(),['faultbreaker','sanctuary','shadowstep']);
+ }
 });

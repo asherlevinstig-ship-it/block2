@@ -2130,7 +2130,7 @@ function updateDungeonArenaHud(){
   if(e.brainVersion===2){
    const left=Math.max(0,(e.nextBoarAt-combatNow())/1000);
    if(combatNow()<e.brainRecoveryUntil)cue='Enemy recovering · Close in and punish the opening';
-   else if(warn)cue=move.name+' · '+left.toFixed(1)+'s · '+(arenaBehindCover(e,move)?'Cover blocks this spell':arenaInDanger(e,move)?'Move or dodge!':'Clear of this attack');
+   else if(warn)cue=move.name+' · '+left.toFixed(1)+'s · '+(arenaBehindCover(e,move)?'Cover blocks this spell':arenaInDanger(e,move)?move.shape==='safeLane'?'Get to the green lane!':'Move or dodge!':'Clear of this attack');
    else cue=(e.brainCombo?'Follow-up coming · ':'')+'Step '+ARENA_STEP_COST+' stamina · Space: dodge';
   }
  }
@@ -6320,10 +6320,12 @@ let shadowstepTargeting=false,styleAbilityKey='',abilityTransition=false,ability
 let shadowstepPreview={key:'',tiles:[]};
 function shadowstepTargets(){
   const position={x:player.cx,y:player.cy};
-  const encounter=hunting.encounter;
+  const party=window.towerVaultCoop;
+  const shared=vaultCoopState&&party?.view()?.status==='battle'?party.encounter():null;
+  const encounter=shared?{...shared,arenaPlayer:position,adds:party.adds()}:hunting.encounter;
   const key=JSON.stringify([currentRoom,position,encounter?.arenaPlayer,encounter?.arenaEnemy,encounter?.adds,depthsRun?.vaultMechanism,adventure.bridge,adventure.willowbankShortcut,homeFurniture]);
   if(shadowstepPreview.key!==key){
-    const tiles=window.shadowstepTiles({location:currentRoom,position,hunting,depthsRun,adventure,homeFurniture}).filter(tile=>!blocked(tile.x,tile.y));
+    const tiles=window.shadowstepTiles({location:currentRoom,position,hunting:{encounter},depthsRun,adventure,homeFurniture}).filter(tile=>!blocked(tile.x,tile.y));
     shadowstepPreview={key,tiles};
   }
   return shadowstepPreview.tiles;
@@ -6667,7 +6669,7 @@ function setShadowstepTargeting(active){
   refreshStyleAbilityBar();
 }
 function aimShadowstep(){
-  if(editing||vaultCoopState||hunting.encounter&&hunting.encounter.arenaVersion!==1){
+  if(editing||vaultCoopState&&window.towerVaultCoop?.view()?.status!=='battle'||hunting.encounter&&hunting.encounter.arenaVersion!==1){
     showHotbarFeedback('Use Shadowstep while exploring or in a fight with arena movement.');return;
   }
   shadowstepPreview.key='';
@@ -6682,7 +6684,11 @@ async function castStyleAbility(id,body){
   if(abilityTransition||serverActionBusy){showHotbarFeedback('Wait for the current action to finish.');return;}
   const dialog=$('styleAbilityDialog'),room=currentRoom,from={x:player.cx,y:player.cy};
   try{
-    const {state}=await serverGameplay('abilityCast',{id,...body});
+    const result=id==='shadowstep'&&vaultCoopState?
+      await window.towerVaultCoop?.shadowstep(body.tile,showHotbarFeedback):
+      await serverGameplay('abilityCast',{id,...body});
+    if(!result?.state||id==='shadowstep'&&result.state.location!==room)return;
+    const {state}=result;
     if(dialog.open)dialog.close();
     if(id==='bindBeast'){
       setPlayerCombat(false);resetCombatArt();updateCombatPanel();worldLabelKey='';

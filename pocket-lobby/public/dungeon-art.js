@@ -1,6 +1,6 @@
 import {drawDungeonCreature} from './dungeon-creature-art.js';
 import {drawDungeonGuardian} from './dungeon-guardian-art.js';
-import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,isDungeonMob} from './dungeon-arena.js';
+import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,arenaMarkCount,isDungeonMob} from './dungeon-arena.js';
 export const dungeonHeights={depthsSkitter:29,depthsWarden:77,depthsSeer:61,depthsSentinel:76,depthsColossus:93,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
 const stone=['#94aeb3','#35495c','#597484'];
 export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
@@ -68,7 +68,16 @@ export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced
  if(encounter?.arenaVersion!==1||encounter.nextBoarAt-now>move.tell||encounter.nextBoarAt<now)return false;
  const danger=move.shape==='bolt'?'#bc8df7':'#f19a6e',alpha=reduced?.35:.3+Math.sin(now/85)*.07;
  ctx.save();
- for(let y=1;y<9;y++)for(let x=1;x<12;x++)if(dungeonFloor(encounter.arenaRoom,x,y,encounter.vaultMechanism)&&arenaInDanger(encounter,move,{x,y})){
+ for(let y=1;y<9;y++)for(let x=1;x<12;x++){
+  if(!dungeonFloor(encounter.arenaRoom,x,y,encounter.vaultMechanism))continue;
+  if(!arenaInDanger(encounter,move,{x,y})){
+   if(move.shape==='safeLane')surface(x+.05,y+.05,.9,.9,.9,'#5ce6be66','#a6ffe2');
+   continue;
+  }
+  if(move.shape==='marks'&&arenaMarkCount(encounter,move,{x,y})>1){
+   surface(x+.05,y+.05,.9,.9,.9,'#d05affaa','#f3baff');
+   continue;
+  }
   const covered=arenaBehindCover(encounter,move,{x,y});surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+'55',covered?'#93e6c4':danger);
   if(!covered){const [px,py]=point(x+.5,y+.5,1);ctx.globalAlpha=alpha+.35;ctx.fillStyle=danger;ctx.fillRect(px-1,py-3,2,4);ctx.fillRect(px-1,py+3,2,1);ctx.globalAlpha=1;}
  }

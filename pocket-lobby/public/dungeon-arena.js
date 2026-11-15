@@ -52,9 +52,21 @@ export function lockArenaAttack(e,move,enemy){
  return next;
 }
 function lineDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,d=dx*dx+dy*dy,t=d?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/d)):0;return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}
+export function arenaMarkCount(encounter,move,tile){
+ const marks=encounter.arenaMarks??[encounter.arenaTarget??arenaPlayer(encounter)];
+ return marks.filter(mark=>Math.hypot(tile.x-mark.x,tile.y-mark.y)<=move.radius).length;
+}
+export function safeLaneDistance(encounter,tile){
+ const origin=encounter.brainOrigin??arenaEnemy(encounter),target=encounter.arenaTarget??arenaPlayer(encounter);
+ const axis=Math.abs(target.x-origin.x)>=Math.abs(target.y-origin.y)?'y':'x';
+ const offset=target[axis]<=(axis==='y'?5:6)?2:-2;
+ return Math.abs(tile[axis]-target[axis]-offset);
+}
 export function arenaInDanger(e,move,tile=arenaPlayer(e)){
  const enemy=e.brainVersion===2?(e.brainOrigin??arenaEnemy(e)):arenaEnemy(e),target=e.arenaTarget??arenaPlayer(e);
  if(e.brainVersion===2){
+  if(move.shape==='safeLane')return safeLaneDistance(e,tile)>0;
+  if(move.shape==='marks')return arenaMarkCount(e,move,tile)>0;
   const dx=tile.x-enemy.x,dy=tile.y-enemy.y,distance=Math.hypot(dx,dy),heading=Math.atan2(target.y-enemy.y,target.x-enemy.x);
   if(move.shape==='ring'){const center=move.center==='target'?target:enemy;return Math.hypot(tile.x-center.x,tile.y-center.y)<=move.radius;}
   if(move.shape==='arc'){const angle=Math.atan2(dy,dx),delta=Math.atan2(Math.sin(angle-heading),Math.cos(angle-heading));return distance<=(move.reach??1.8)&&Math.abs(delta)<=(move.angle??1.2);}

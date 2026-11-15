@@ -25,8 +25,10 @@ export const smartAttacks={
  bossCleave:{name:'Twinblade Cleave',tell:850,recovery:500,shape:'arc',reach:2.2,angle:1.55,damage:0},
  bossDelayed:{name:'Held Overhead',tell:1500,recovery:1000,shape:'ring',center:'target',radius:1.5,damage:5,cooldown:5000},
  bossLunge:{name:'Chained Lunge',tell:1000,recovery:700,shape:'lane',reach:6,width:.8,damage:3,cooldown:4000},
+ bossHuntSweep:{name:'Hunter’s Sweep',tell:2200,recovery:1500,shape:'safeLane',damage:9,cooldown:6500},
  bossFan:{name:'Heartbolt Volley',tell:1500,recovery:800,shape:'bolt',reach:8,width:.5,fan:[-.42,0,.42],damage:3,blockable:true},
  bossErupt:{name:'Runic Detonation',tell:1600,recovery:1050,shape:'ring',center:'target',radius:1.55,damage:6,cooldown:5000},
+ bossHeartMarks:{name:'Heart Marks',tell:1850,recovery:1100,shape:'marks',center:'target',radius:1.5,damage:8,cooldown:6000},
  bossPulse:{name:'Heart Pulse',tell:1100,recovery:650,shape:'ring',radius:2.4,damage:0,cooldown:4000}
 };
 for(const [id,move] of Object.entries(smartAttacks))Object.assign(move,{id,opensShell:move.opensShell===true});
@@ -39,7 +41,7 @@ export function brainAttackIds(enemy){
  if(enemy.id==='treasuryGuardian')return ['wardenSweep','ironhideSlam','wardenThrow','wardenRush'];
  if(enemy.id==='cacheGuardian')return ['seerBolt','seerFan','seerConduit','seerRepulse'];
  if(enemy.id==='depthsBoar')return ['skitterBite','skitterPounce','skitterRake'];
- if(enemy.id==='depthsGuardian')return enemy.index===2?['bossCleave','bossDelayed','bossLunge']:enemy.index===3?['bossFan','bossErupt','bossPulse']:['bossIronSweep','bossIronSmash','bossHarpoon'];
+ if(enemy.id==='depthsGuardian')return enemy.index===2?['bossHuntSweep','bossCleave','bossLunge']:enemy.index===3?['bossHeartMarks','bossFan','bossPulse']:['bossIronSweep','bossIronSmash','bossHarpoon'];
  if(enemy.archetype==='caster')return ['seerBolt','seerFan','seerBurst','seerRepulse'];
  if(enemy.archetype==='duelist')return ['sentinelSlash','sentinelLunge','sentinelDelayed','sentinelSweep'];
  return ['wardenSweep','wardenStomp','wardenThrow','wardenRush'];
@@ -49,6 +51,8 @@ export function chooseBrainAttack(e,enemy,now){
  const repeated=history.length>=2&&history.at(-1).dx===history.at(-2).dx&&history.at(-1).dy===history.at(-2).dy;
  const available=brainAttackIds(enemy).filter(id=>now>=(e.brainCooldowns?.[id]??0));
  const ids=available.length?available:brainAttackIds(enemy);
+ const signature=enemy.index===2?'bossHuntSweep':enemy.index===3?'bossHeartMarks':null;
+ if(enemy.id==='depthsGuardian'&&signature&&available.includes(signature))return signature;
  if(enemy.id==='sealGuardian'){
   if(distance<=2.4&&(e.brainAttackCount??0)===0&&ids.includes('sentinelSlash'))return 'sentinelSlash';
   if(distance<=2.5&&recent.at(-1)==='sentinelSlash'&&ids.includes('sentinelSweep'))return 'sentinelSweep';

@@ -11,6 +11,35 @@ test('Elite strength and previews agree with the live scaled encounter and boss 
  for(const [id,hp] of [['cacheGuardian',315],['sealGuardian',368],['depthsGuardian',420]]){const base=huntEnemies[id],s=fighter(base.room);assert.equal(s.hunting.encounter.health,hp);assert.equal(smartProfile(base).health,hp);assert.equal(huntEnemy(s.hunting.encounter).health,hp);assert(huntEnemy(s.hunting.encounter).damage>base.damage);}
  const e=fighter('depthsVault').hunting.encounter;for(const [hp,index] of [[281,1],[280,2],[141,2],[140,3]])assert.equal(vaultPhase({...e,health:hp}).index,index);
 });
+test('solo Guardian warnings permit walking out of Hunter’s Sweep or warding a Heart Mark',()=>{
+ const s=fighter('depthsVault');
+ s.characterRules.combat.enabled=false;
+ s.styleAbilities={learned:['shadowstep','sanctuary']};
+ const random=()=>.99;
+ const phaseAttack=(id,health,at)=>{
+  const e=s.hunting.encounter,tile={x:5,y:5};
+  Object.assign(e,{health,brainMove:id,arenaPlayer:tile,arenaEnemy:{x:6,y:5},nextBoarAt:at,
+   arenaLockedFor:0,brainNextThinkAt:at+1,nextPlayerAt:at+1,stamina:100,staminaAt:at-3000});
+  s.position={...tile};
+  advanceServerCombat(s,at-smartAttacks[id].tell,random);
+ };
+ const input=(name,body,now)=>applyGameplayAction(s,name,body,now,random);
+ const hp=s.health;
+ phaseAttack('bossHuntSweep',250,6000);
+ const cast=structuredClone(s);
+ applyGameplayAction(cast,'abilityCast',{id:'shadowstep',tile:{x:5,y:7}},4600,random);
+ assert.equal(advanceServerCombat(cast,6000,random).find(e=>e.move==='Hunter’s Sweep').spatialAvoided,true);
+ for(const [y,at] of [[6,4400],[7,4700]])input('combat',{combatId:s.combatId,input:'move',tile:{x:5,y}},at);
+ assert.equal(advanceServerCombat(s,6000,random).find(e=>e.move==='Hunter’s Sweep').spatialAvoided,true);
+ assert.equal(s.health,hp);
+ phaseAttack('bossHeartMarks',120,10000);
+ const unwarded=structuredClone(s);
+ input('abilityCast',{id:'sanctuary'},9100);
+ const hit=advanceServerCombat(s,10000,random).find(e=>e.move==='Heart Marks');
+ const bareHit=advanceServerCombat(unwarded,10000,random).find(e=>e.move==='Heart Marks');
+ assert(hit.warded>0&&hit.warded<=30);
+ assert.equal(bareHit.taken-hit.taken,hit.warded);
+});
 test('attack selection responds to range, blocked spells and repeated evasive movement',()=>{
  const s=fighter('depthsGallery'),e=s.hunting.encounter,enemy=huntEnemy(e);
  const distant=chooseBrainAttack({...e,arenaPlayer:{x:2,y:5}},enemy,5000);assert(['lane','bolt'].includes(smartAttacks[distant].shape));
@@ -49,6 +78,11 @@ test('there is no free melee safe annulus outside a heavy attack',()=>{
 test('Auto melee takes real Elite damage and cannot trivialize the Vault; a prepared magic build helps',()=>{
  for(const room of ['depthsCache','depthsTrial']){const {s,events}=sample(room);assert(s.health<100);assert(events.some(e=>e.taken>0));assert(new Set(events.map(e=>e.move).filter(Boolean)).size>=3);assert.equal(s.hunting.encounter,null);}
  const bare=sample('depthsVault'),prepared=sample('depthsVault',true);assert.equal(bare.events.at(-1).outcome,'defeat');assert.equal(prepared.events.at(-1).outcome,'victory');assert(prepared.s.health>bare.s.health);assert(prepared.events.some(e=>e.power));assert(prepared.events.some(e=>e.phaseChange));
+ const starter=normalizeState({location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2},combatGear:{ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'},characterRules:{combat:{enabled:true,dodge:true,q:false,e:false,fleeBelow:0}}});
+ applyGameplayAction(starter,'fight',{},1000,()=>.5);
+ const starterEvents=advanceServerCombat(starter,91000,()=>.5);
+ assert.equal(starterEvents.at(-1).outcome,'defeat');
+ assert(starterEvents.some(event=>event.taken>0));
 });
 test('online polling and offline catch-up replay the same AI choices, damage, positions and rewards',()=>{
  for(const room of ['depthsCache','depthsVault']){const online=fighter(room,true),offline=structuredClone(online),events=[];

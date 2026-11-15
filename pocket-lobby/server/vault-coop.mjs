@@ -9,6 +9,8 @@ import {validVaultMechanism,vaultMechanisms} from '../public/vault-mechanisms.js
 import {dungeonFloor} from '../public/dungeon-arena.js';
 import {vaultCoopRules,coopPhase,coopMove,coopDanger,coopEncounter,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
 import {physicalPlating} from '../public/enemy-roles.js';
+import {arenaMarkCount} from '../public/dungeon-arena.js';
+import {shadowstepTiles} from '../public/shadowstep-tiles.js';
 import {combatBuild} from '../public/combat-builds.js';
 import {huntingAttributes,weaponStagger,weaponProfile,armourSelection,armourProfile,playerMeleeReach,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsSpoils} from '../public/depths.js';
@@ -29,6 +31,8 @@ function plan(r,at,pause=0){
  const forced=players.find(([id])=>id===r.taunt&&at<r.tauntUntil),target=forced??players.sort((a,b)=>b[1].threat-a[1].threat)[0];
  r.target=target[0];r.targetTile={...target[1].pos};r.origin??={x:6,y:5};r.move=detail.moves[(r.attacks??0)%detail.moves.length];
  const move=coopMove(r);r.warningAt=at+pause+600;r.landsAt=r.warningAt+move.tell;r.phase=phase;r.castHits=0;
+ if(move.shape==='marks')r.marks=players.map(([,m])=>({...m.pos}));
+ else delete r.marks;
 }
 function hurt(r,m,amount,move,at){
  m.hp=Math.min(m.hp,playerMaxHealth(m,at));if(m.hp<=0||m.left)return;
@@ -51,8 +55,15 @@ export function advanceVaultParty(r,now){
   const due=Math.min(r.landsAt,r.burn?.nextAt??Infinity,...(r.adds??[]).filter(a=>a.hp>0).map(a=>a.landsAt));if(due>end)break;
   if(due===r.burn?.nextAt){const burn=r.burn,damage=Math.min(r.hp,burn.damage);r.hp-=damage;const source=r.members[burn.source];if(source){source.damage+=damage;source.threat+=damage;}if(burn.nextAt+1000<=burn.until)burn.nextAt+=1000;else delete r.burn;phaseChange(r,due);continue;}
   if(due===r.landsAt){
-   const move=coopMove(r);for(const [,m] of living(r))if(coopDanger(r,m.pos))hurt(r,m,Math.max(5,Math.round((30+move.damage-m.armour-mealArmour(m,due))*(due<(r.weakenedUntil??0)?.75:1))),move.name,due);
-   r.lastAttack={at:due,move:move.name,shape:move.shape,center:move.center,origin:{...r.origin},target:{...r.targetTile}};r.weakenedUntil=0;
+   const move=coopMove(r),encounter=coopEncounter(r),focused=r.members[r.target];
+   if(r.phase===1&&move.opensShell&&focused&&(!coopDanger(r,focused.pos)||focused.dodgeUntil>=due&&focused.dodgeUntil-due<=350)){
+    r.exposedUntil=due+move.recovery+450;
+   }
+   for(const [,m] of living(r))if(coopDanger(r,m.pos)){
+    const overlap=move.shape==='marks'?Math.max(0,arenaMarkCount(encounter,move,m.pos)-1)*8:0;
+    hurt(r,m,Math.max(5,Math.round((30+move.damage+overlap-m.armour-mealArmour(m,due))*(due<(r.weakenedUntil??0)?.75:1))),move.name,due);
+   }
+   r.lastAttack={at:due,move:move.name,shape:move.shape,center:move.center,origin:{...r.origin},target:{...r.targetTile},...(r.marks?{marks:r.marks}: {})};r.weakenedUntil=0;
    r.attacks=(r.attacks??0)+1;plan(r,due,move.recovery);
   }else{
    for(const add of r.adds??[]){if(add.hp<=0||add.landsAt!==due)continue;for(const [,m] of living(r))if(Math.hypot(m.pos.x-add.target.x,m.pos.y-add.target.y)<=1.1)hurt(r,m,Math.max(4,add.kind==='wisp'?14-m.armour-mealArmour(m,due):10-m.armour-mealArmour(m,due)),add.kind==='wisp'?'Wisp Bolt':'Hatchling Bite',due);
@@ -68,7 +79,7 @@ function phaseChange(r,now){
  if(r.hp<=0){r.hp=0;r.status='victory';r.victoryAt=now;r.adds=[];return;}
  const phase=coopPhase(r);if(phase===r.phase)return;delete r.lastAttack;
  r.attacks=0;r.exposedUntil=0;r.stagger=0;
- if(now>=r.warningAt&&now<r.landsAt)r.phase=phase;
+ if(now>=r.warningAt&&now<r.landsAt){r.phase=phase;r.attacks=-1;}
  else plan(r,now);
  const kind=phase===2?'skitter':'wisp',count=phase===3&&Object.keys(r.members).length>1?2:1;
  for(let i=0;i<count;i++)r.adds.push({id:'phase'+phase+'-'+i,kind,name:kind==='wisp'?'Rune Wisp':'Mire Hatchling',hp:kind==='wisp'?40:45,max:kind==='wisp'?40:45,x:i?8:4,y:i?4:7,target:{...r.targetTile},landsAt:now+4200});
@@ -78,7 +89,7 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  s.health=0;s.location='home';s.position={x:5,y:7};s.depthsRun=null;s.hunting.recoveryUntil=now+boarRules.recovery;delete s.vaultCoop;
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
- const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
+ const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,marks:r.marks,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,
   targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,castAt:m.castAt??0})),self:self?{id:self.id,hp:self.hp,nextStrikeAt:self.lastStrike+self.attackInterval,damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
@@ -122,7 +133,23 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='tick')return {text:m.lastFeedback??'Watch the marked attack.'};
  if(r.status!=='battle'||m.hp<=0)throw invalid('This co-op battle is not active.');
- if(!['strike','power','dodge','taunt','sanctuary','faultbreaker'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(!['strike','power','dodge','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(kind==='shadowstep'){
+  const abilities=normalizeStyleAbilities(s.styleAbilities);
+  if(!abilities.learned.includes(kind))throw invalid('Learn Shadowstep before using it.');
+  if((abilities.readyAt[kind]??0)>now)throw invalid('Shadowstep is still recharging.');
+  const encounter={...coopEncounter(r),arenaPlayer:m.pos,adds:r.adds.filter(add=>add.hp>0)};
+  const tile=shadowstepTiles({...s,hunting:{encounter}}).find(p=>p.x===body.tile?.x&&p.y===body.tile?.y);
+  if(!tile)throw invalid('Choose a reachable floor tile up to four steps away.');
+  requireActionPoint(s);
+  s.position=m.pos={x:tile.x,y:tile.y};
+  abilities.readyAt[kind]=now+abilityMastery(s,kind).cooldown;
+  abilities.lastBlinkAt=now;
+  s.styleAbilities=abilities;
+  awardAbilityUse(s,kind,body.operation);
+  spendActionPoint(s,now);
+  return {text:'Shadowstep · 1 AP'};
+ }
  if(kind==='faultbreaker'){
   const abilities=normalizeStyleAbilities(s.styleAbilities);
   if(!abilities.learned.includes('faultbreaker'))throw invalid('Learn Faultbreaker before using it.');
