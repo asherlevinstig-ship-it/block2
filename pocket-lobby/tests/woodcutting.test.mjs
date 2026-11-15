@@ -79,3 +79,18 @@ test('early stop gives only completed cuts and work plans reject missing tools o
   const full=worker();full.woodcutting.timber=999999;startPlan(full,{kind:'woodcutting',hours:1},0);settlePlan(full,120000);
   assert.equal(full.woodcutting.timber,1000000);assert.equal(full.report.timber,1);assert.equal(full.report.reason,'inventory-full');
 });
+
+test('expanded and retired Willowbank tree records load without resetting timber or XP',()=>{
+ const trees={
+  'willowbank:2,11':{cuts:1,regrowsAt:0},
+  'willowbank:12,3':{cuts:2,regrowsAt:0},
+  'willowbank:10,14':{cuts:3,regrowsAt:30000},
+  'willowbank:4,15':{cuts:1,regrowsAt:0}
+ };
+ const saved={axeOwned:true,equipped:true,xp:80,timber:8,trees};
+ assert.deepEqual(normalizeWoodcutting(saved),saved);
+ assert.deepEqual(normalizeState({location:'willowbank',woodcutting:saved}).woodcutting,saved);
+ for(const key of ['willowbank:18,3','willowbank:4,16','willowbank:04,15','logging:4,15']){
+  assert.throws(()=>normalizeWoodcutting({trees:{[key]:{cuts:1,regrowsAt:0}}}),/Invalid timber tree location/);
+ }
+});

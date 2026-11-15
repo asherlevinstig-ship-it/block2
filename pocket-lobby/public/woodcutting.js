@@ -1,8 +1,15 @@
+import {willowbankView} from './region-catalog.js';
 import {skillLevel,MAX_SKILL_XP} from './skill-curve.js';
 export const woodRules={price:4,xp:10,offlineInterval:60000};
 export const timberTreeRules={cuts:3,regrowMs:30000,fallMs:1050};
 const firstTreeKey='logging:6,5';
-const treeKeyPattern=/^(ambermead|thornwood|beaconwatch|starfall|reedwater|willowbank|millbrook|logging|clearing|trail|grove|creek|shrine|ruins|roots|pond):(?:[0-9]|1[01]),[0-9]$/;
+const treeKeyPattern=/^(ambermead|thornwood|beaconwatch|starfall|reedwater|millbrook|logging|clearing|trail|grove|creek|shrine|ruins|roots|pond):(?:[0-9]|1[01]),[0-9]$/;
+
+function validTimberKey(key){
+  if(treeKeyPattern.test(key))return true;
+  const willowbank=/^willowbank:(0|[1-9]\d?),(0|[1-9]\d?)$/.exec(key);
+  return willowbank!==null&&Number(willowbank[1])<willowbankView.cols&&Number(willowbank[2])<willowbankView.rows;
+}
 
 export function isTimberTree(item){
   return ['wildtree','timberTree','riverWillow','riverCypress','watchOak','watchPine'].includes(item?.type);
@@ -56,7 +63,7 @@ export function normalizeWoodcutting(input={}){
   if(entries.length>1080)throw new Error('Invalid timber tree progress.');
   for(const [key,tree] of entries){
     const {cuts,regrowsAt}=tree??{};
-    if(!treeKeyPattern.test(key))throw new Error('Invalid timber tree location.');
+    if(!validTimberKey(key))throw new Error('Invalid timber tree location.');
     if(!Number.isInteger(cuts)||cuts<0||cuts>timberTreeRules.cuts||!Number.isSafeInteger(regrowsAt)||regrowsAt<0||(cuts===timberTreeRules.cuts)!==(regrowsAt>0))throw new Error('Invalid timber tree progress.');
     result.trees??={};
     result.trees[key]={cuts,regrowsAt};

@@ -682,6 +682,9 @@
       initializeHudClearance();
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
+        if(!window.towerMillRaidHooks||!window.towerVaultCoopHooks||!window.towerPreparationHooks){
+          script.onerror();return;
+        }
         const {initializeBuildUI}=await import('./combat-build-ui.js');window.towerBuildUI=initializeBuildUI({doc:document,hooks:window.towerBuildHooks});
         const {initializeLibrary}=await import('./library-ui.js');window.towerLibrary=initializeLibrary({cloud:window.playerCloud,hooks:window.towerLibraryHooks});
         const {initializeRobbery}=await import('./robbery-ui.js');window.towerRobbery=initializeRobbery({doc:document,cloud:window.playerCloud,hooks:window.towerRobberyHooks});
