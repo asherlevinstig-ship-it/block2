@@ -6535,11 +6535,17 @@ function refreshStyleAbilityBar(){
       else button.removeAttribute('aria-pressed');
       button.onclick=original?original.onclick:()=>openAbilityWheel(index);
       const cap=document.createElement('kbd');cap.textContent=key;cap.setAttribute('aria-hidden','true');
-      const art=original?.querySelector('img')?.cloneNode()??document.createTextNode('+');
-      button.replaceChildren(art,cap);
+      const face=document.createElement('span');face.className='ability-slot-face';
+      face.setAttribute('aria-hidden','true');
+      const art=original?window.abilityIconElement(document,shortcuts[index],36):document.createTextNode('+');
+      face.append(art,cap);
+      const name=document.createElement('span');name.className='ability-slot-name';
+      name.textContent=original?window.styleAbilities[shortcuts[index]].name:'Empty';
+      name.setAttribute('aria-hidden','true');
+      button.replaceChildren(face,name);
       if(original?.disabled&&original.dataset.cooldown){
         const cooldown=document.createElement('span');cooldown.className='ability-slot-cooldown';
-        cooldown.textContent=original.dataset.cooldown+'s';button.append(cooldown);
+        cooldown.textContent=original.dataset.cooldown+'s';face.append(cooldown);
       }
       if(!button.parentNode)quick.append(button);
     }
