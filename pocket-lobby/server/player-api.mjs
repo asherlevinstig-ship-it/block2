@@ -380,8 +380,8 @@ export async function handlePlayerApi(request,env){
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...playerPacket(row)},409);
     if(path==='/api/player/vault-coop'){
       const result=await writeVaultParty(env.TOWER_DB,{...row,state_json:JSON.stringify(readPlayerState(row,env,verifiedTeacher))},body);if(!result)return json({error:'Your character changed. Refresh the Vault party.',...playerPacket(await read(env.TOWER_DB,id))},409);
-      await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(result.updated.state_json),result.updated.revision,{fresh:true});
-      return json({...playerPacket(result.updated),raid:result.raid,receipt:result.receipt});
+      if(!result.unchanged)await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(result.updated.state_json),result.updated.revision,{fresh:true});
+      return json({...playerPacket(result.updated),raid:result.raid,receipt:result.receipt,unchanged:result.unchanged});
     }
     if(JSON.parse(row.state_json).vaultCoop&&!['/api/player/save','/api/player/presence'].includes(path)&&!path.startsWith('/api/player/learning/'))return json({error:'Leave the co-op Vault party before starting another activity.'},400);
     if(path==='/api/player/mill-raid'){

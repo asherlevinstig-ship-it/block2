@@ -85,22 +85,41 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
   drawDungeonGuardian(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat});
  }
 }
+const warningTiles=new Map();
+function markedArenaTiles(encounter,move){
+ const origin=encounter.brainOrigin??arenaEnemy(encounter),target=encounter.arenaTarget??encounter.arenaPlayer;
+ const key=JSON.stringify([encounter.arenaRoom,encounter.vaultMechanism,encounter.brainVersion,origin,target,encounter.arenaMarks,
+  move.shape,move.center,move.reach,move.width,move.radius,move.angle,move.fan,move.blockable]);
+ if(warningTiles.has(key))return warningTiles.get(key);
+ const tiles=[];
+ for(let y=1;y<9;y++)for(let x=1;x<12;x++){
+  if(!dungeonFloor(encounter.arenaRoom,x,y,encounter.vaultMechanism))continue;
+  const tile={x,y};
+  if(!arenaInDanger(encounter,move,tile)){
+   if(move.shape==='safeLane')tiles.push({...tile,kind:'safe'});
+   continue;
+  }
+  const kind=move.shape==='marks'&&arenaMarkCount(encounter,move,tile)>1?'overlap':
+    arenaBehindCover(encounter,move,tile)?'cover':'danger';
+  tiles.push({...tile,kind});
+ }
+ if(warningTiles.size>=24)warningTiles.delete(warningTiles.keys().next().value);
+ warningTiles.set(key,tiles);
+ return tiles;
+}
+
 export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced}){
  if(encounter?.arenaVersion!==1||encounter.nextBoarAt-now>move.tell||encounter.nextBoarAt<now)return false;
  const imminent=encounter.enemy==='depthsGuardian'&&encounter.nextBoarAt-now<=350;
  const danger=imminent?'#ffceac':move.shape==='bolt'?'#bc8df7':'#f19a6e',alpha=reduced?.35:.3+Math.sin(now/85)*.07;
  ctx.save();
- for(let y=1;y<9;y++)for(let x=1;x<12;x++){
-  if(!dungeonFloor(encounter.arenaRoom,x,y,encounter.vaultMechanism))continue;
-  if(!arenaInDanger(encounter,move,{x,y})){
-   if(move.shape==='safeLane')surface(x+.05,y+.05,.9,.9,.9,'#5ce6be66','#a6ffe2');
-   continue;
-  }
-  if(move.shape==='marks'&&arenaMarkCount(encounter,move,{x,y})>1){
+ for(const {x,y,kind} of markedArenaTiles(encounter,move)){
+  if(kind==='safe'){surface(x+.05,y+.05,.9,.9,.9,'#5ce6be66','#a6ffe2');continue;}
+  if(kind==='overlap'){
    surface(x+.05,y+.05,.9,.9,.9,'#d05affaa','#f3baff');
    continue;
   }
-  const covered=arenaBehindCover(encounter,move,{x,y});surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+(imminent?'99':'55'),covered?'#93e6c4':danger);
+  const covered=kind==='cover';surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+(imminent?'99':'55'),covered?'#93e6c4':danger);
   if(!covered){const [px,py]=point(x+.5,y+.5,1);ctx.globalAlpha=alpha+.35;ctx.fillStyle=danger;ctx.fillRect(px-1,py-3,2,4);ctx.fillRect(px-1,py+3,2,1);ctx.globalAlpha=1;}
  }
  const target=encounter.arenaTarget??encounter.arenaEnemy??{x:6,y:5};

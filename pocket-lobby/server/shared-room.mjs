@@ -53,7 +53,7 @@ export async function handleWorldConnect(request,env){
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
   if(!validRoomTile(room,position.x,position.y,boxes,state.adventure))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
-  const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
+  const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,movementDeltas:url.searchParams.get('deltas')==='1',...(access?{factionId:access.id}:{}),
     abilityCast:signatureCast(state,Date.now()),blink:visibleShadowstep(state,Date.now()),name:state.avatar?.name??'Guest',wantedAt:state.pvp?.wantedAt??0,outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,gender:state.avatar?.gender??'male',hairStyle:state.avatar?.hairStyle,faceStyle:state.avatar?.faceStyle,skinTone:state.avatar?.skinTone??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),mining:miningPose(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
   const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:publicRoomNamespace(room);
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
@@ -75,7 +75,7 @@ export function sharedMoonTrail(state,room,route,now){
 }
 export class SharedRoom{
   constructor(ctx,env){
-    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.fishingSpots=new Map();this.observedBatches=new Map();this.treeSnapshot=null;this.room=null;
+    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.fishingSpots=new Map();this.observedBatches=new Map();this.treeSnapshot=null;this.room=null;this.pendingMoves=new Map();this.moveTimer=null;
     if(ctx.setWebSocketAutoResponse&&globalThis.WebSocketRequestResponsePair)ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}','{"type":"pong"}'));
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
     ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));const spots=await ctx.storage.get('fishingSpots');if(Array.isArray(spots))this.fishingSpots=new Map(spots.filter(([,spot])=>spot.until>Date.now()));if(this.sessions.size)await this.loadTrees(this.sessions.values().next().value?.room);await this.scheduleVeilExpiry();});
@@ -87,9 +87,39 @@ export class SharedRoom{
   }
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
   async loadTrees(room){if(!this.env.TOWER_DB||!forestTrees(room).length)return;this.room=room;this.treeSnapshot=await roomTreeSnapshot(this.env.TOWER_DB,room);}
-  snapshot(){
+  snapshot(recipients=this.sessions.keys(),cancelMoves=true){
+    if(cancelMoves)this.pendingMoves?.clear();
     const now=Date.now(),trails=[...this.sessions.values()].filter(meta=>!(meta.veilUntil>now)&&meta.trail?.until>now).map(meta=>({...meta.trail,player:meta.id,name:meta.name}));
-    const data={type:'snapshot',players:this.peers(),trails,trees:this.treeSnapshot};for(const ws of this.sessions.keys())this.send(ws,data);}
+    const data={type:'snapshot',players:this.peers(),trails,trees:this.treeSnapshot};
+    this.broadcast(recipients,data);}
+  broadcast(recipients,data){
+    const encoded=JSON.stringify(data);
+    for(const ws of recipients){try{ws.send(encoded);}catch{this.sessions.delete(ws);}}
+  }
+  queueMove(meta,now){
+    // A veiled character remains absent until the next authoritative snapshot.
+    if(meta.veilUntil>now)return;
+    this.pendingMoves??=new Map();
+    const {id,x,y,direction,back,seat,reading,activity,meditating}=publicPeer(meta,now);
+    this.pendingMoves.set(id,{id,x,y,direction,back,seat,reading,activity,meditating});
+    if(this.moveTimer)return;
+    const flush=new Promise(resolve=>{
+      this.moveTimer=setTimeout(()=>{
+        this.moveTimer=null;
+        try{this.flushMoves();}finally{resolve();}
+      },50);
+    });
+    this.ctx?.waitUntil?.(flush);
+  }
+  flushMoves(){
+    if(!this.pendingMoves?.size)return;
+    const moves=[...this.pendingMoves.values()];
+    this.pendingMoves.clear();
+    const modern=[],legacy=[];
+    for(const [ws,meta] of this.sessions)(meta.movementDeltas?modern:legacy).push(ws);
+    if(modern.length)this.broadcast(modern,{type:'moves',moves});
+    if(legacy.length)this.snapshot(legacy,false);
+  }
   async scheduleVeilExpiry(){
     const now=Date.now(),expiries=[...this.sessions.values()].map(meta=>meta.veilUntil??0).filter(at=>at>now);
     // One room-level check replaces every socket's heartbeat authentication.
@@ -337,7 +367,7 @@ export class SharedRoom{
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps,meta)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
       if(meta.x!==message.x||meta.y!==message.y){meta.seat=null;meta.meditationRequested=false;meta.reading=null;if(meta.activity==='reading')meta.activity=null;}const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
-      ws.serializeAttachment(meta);this.snapshot();return;
+      ws.serializeAttachment(meta);this.queueMove(meta,now);return;
     }
     if(message?.type==='stand'){meta.seat=null;ws.serializeAttachment(meta);this.snapshot();return;}
     if(message?.type==='sit'){

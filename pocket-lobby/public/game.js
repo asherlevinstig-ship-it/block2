@@ -669,12 +669,28 @@ function updateWorldFloats(time){
   f.node.style.opacity=String(Math.min(1,(1800-age)/500)*(quiet?.55:1));
  }
 }
+function updatePeerPosition(peer,motion,now){
+  if(peer.x!==motion.x||peer.y!==motion.y){
+    const distance=Math.abs(peer.rx-motion.x)+Math.abs(peer.ry-motion.y);
+    if(distance>4){peer.rx=motion.x;peer.ry=motion.y;peer.remoteMove=null;}
+    else peer.remoteMove={x:peer.rx,y:peer.ry,at:now,duration:Math.min(240,Math.max(110,distance*100))};
+  }
+  Object.assign(peer,motion);
+}
+function receiveMoves(moves){
+  const now=performance.now();
+  for(const motion of moves.slice(0,20)){
+    if(!Number.isFinite(motion.x)||!Number.isFinite(motion.y))continue;
+    const peer=remotePeers.get(motion.id);
+    if(peer&&!peer.walk)updatePeerPosition(peer,motion,now);
+  }
+}
 function receivePeers(peers){
   const keep=new Set();
   for(const peer of peers.slice(0,20)){
     if(!peer.id||!Number.isFinite(peer.x)||!Number.isFinite(peer.y))continue;
     keep.add(peer.id);const old=remotePeers.get(peer.id);
-    if(old)Object.assign(old,peer,{walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName});
+    if(old)updatePeerPosition(old,{...peer,walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName},performance.now());
     else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now()});
     const actor=remotePeers.get(peer.id),cast=peer.abilityCast;
     if(peer.blink)beginShadowstep(actor,peer.blink);
@@ -774,7 +790,9 @@ function updateActorNameplates(){
    if(kind==='remote-player-label')plate.node.onclick=()=>window.towerRobbery?.open(key);
    if(kind==='reward-label'){plate.node.onclick=action;plate.node.disabled=!action;}
    if(kind==='enemy-label'){plate.node.onclick=action;plate.node.disabled=!action;plate.node.dataset.target=String(detail==='Target');}
-   plate.node.style.left=Math.round(position.x)+'px';plate.node.style.top=Math.round(position.y)+'px';
+   const leftPx=Math.round(position.x)+'px',topPx=Math.round(position.y)+'px';
+   if(plate.node.style.left!==leftPx)plate.node.style.left=leftPx;
+   if(plate.node.style.top!==topPx)plate.node.style.top=topPx;
   };
   const priority=actor=>actor.id==='self'||actor.enemy||actor.reward?0:Math.abs((remotePeers.get(actor.id)?.rx??player.x)-player.x)+Math.abs((remotePeers.get(actor.id)?.ry??player.y)-player.y)+1;
   for(const actor of crowded?[...renderedActors].sort((a,b)=>priority(a)-priority(b)):renderedActors){
@@ -817,9 +835,23 @@ function setPlayerCombat(active){
   player.inCombat=active===true;
   $('healthHud').hidden=!player.inCombat;
   updateFieldJournal();
-  if(!player.inCombat)combatMoveGoal=null;
+  if(!player.inCombat){combatMoveGoal=null;combatMovePreview=null;combatDodgePreview=-Infinity;}
 }
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null,combatMoveGoal=null;
+let combatMovePreview=null,combatDodgePreview=-Infinity;
+function combatRenderPosition(time){
+  const motion=combatMovePreview;
+  if(!motion||reducedMotion.matches)return player;
+  const progress=Math.min(1,Math.max(0,(time-motion.at)/playerStepMs()));
+  if(progress===1&&!motion.pending){combatMovePreview=null;return player;}
+  const amount=motion.pending?Math.min(.86,progress):progress;
+  return {x:motion.from.x+(motion.to.x-motion.from.x)*amount,y:motion.from.y+(motion.to.y-motion.from.y)*amount};
+}
+function previewDodge(){combatDodgePreview=performance.now();}
+function confirmDodge(){
+  combatArt.dodgeAt=performance.now()-combatDodgePreview<700?combatDodgePreview:performance.now();
+  combatDodgePreview=-Infinity;
+}
 const combatGear=normalizeCombatGear(savedPlayerState?.combatGear);
 const hunting=normalizeHunting(savedPlayerState?.hunting);
 const quest=normalizeQuest(savedPlayerState?.quest);
@@ -1592,7 +1624,10 @@ function combatAction(action){
   if(routineControlled()){note('Use Take control to stop your routine.');return;}
   combatAudio.enable(combatSoundEnabled);
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
-  if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
+  if(window.playerCloud?.gameplay){
+    if(action==='dodge'&&hunting.encounter&&combatNow()>=hunting.encounter.nextDodgeAt&&combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)>=combatDodgeCost(armourSelection(combatGear),currentCombatBuild()))previewDodge();
+    sendServerCombat(action);return;
+  }
   const result=huntingTurn(hunting.encounter,health,playerStats,action,combatNow(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,armourSelection(combatGear),combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments);
   if(!result&&action==='dodge'){
     combatMessage=combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)<combatDodgeCost(armourSelection(combatGear),currentCombatBuild())?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
@@ -2143,6 +2178,7 @@ function drawWildAnimal(animal,time){
  hitboxes.push({item:{type:'wildAnimal',animalId:animal.id},shape:[[x-14,y+5],[x+14,y+5],[x+14,y-height-4],[x-14,y-height-4]]});
 }
 
+function setHudText(node,value){const text=String(value);if(node.textContent!==text)node.textContent=text;}
 function updateDungeonArenaHud(){
  const floorCount=$('dungeonEnemyCount');
  floorCount.hidden=!depthsRun||depthsStageIndex(currentRoom)<0;
@@ -2151,7 +2187,7 @@ function updateDungeonArenaHud(){
   const shared=vaultCoopState&&window.towerVaultCoop?.view();
   const alive=shared?Number(shared.hp>0)+shared.adds.length:(encounter?Number(encounter.health>0):Number(depthsEnemyAvailable(depthsRun,currentRoom)))+adds.length;
   const summoning=adds.filter(add=>add.spawnAt>combatNow()).length;
-  floorCount.textContent='Enemies on this floor · '+alive+(summoning?' · '+summoning+' summoning':'');
+  setHudText(floorCount,'Enemies on this floor · '+alive+(summoning?' · '+summoning+' summoning':''));
   floorCount.title='Counts living enemies in this zone, including reinforcements being summoned. More may arrive during combat.';
  }
 
@@ -2159,25 +2195,25 @@ function updateDungeonArenaHud(){
  panel.hidden=!!vaultCoopState||(currentRoom===deepMiningRoom?!e:!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom));if(panel.hidden)return;
  panel.dataset.adds=String(e?.addsVersion===1);
  const selected=e&&activeAdd(e),targetEnemy=selected?addKinds[selected.kind]:enemy;
- $('dungeonEnemyName').textContent=(selected?'Target · ':enemy.elite?'Elite · ':'')+targetEnemy.name;
+ setHudText($('dungeonEnemyName'),(selected?'Target · ':enemy.elite?'Elite · ':'')+targetEnemy.name);
  const ability=$('dungeonFamiliar'),fox=!!e&&familiarState.equipped==='fox',cooldown=fox?familiarSeconds():0;
- ability.hidden=!fox;ability.disabled=!fox||!!cooldown||!foxTargetReady(e);ability.textContent=cooldown?'Pounce · '+cooldown+'s':'Cinder Pounce';ability.title='Select an add during its attack warning · G';
- const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;$('dungeonPhase').textContent=phase?'Phase '+phase.index+' · '+phase.name:'';
- $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=stamina;$('dungeonStaminaValue').textContent=Math.floor(stamina);
+ ability.hidden=!fox;ability.disabled=!fox||!!cooldown||!foxTargetReady(e);setHudText(ability,cooldown?'Pounce · '+cooldown+'s':'Cinder Pounce');ability.title='Select an add during its attack warning · G';
+ const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;setHudText($('dungeonPhase'),phase?'Phase '+phase.index+' · '+phase.name:'');
+ $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=Math.floor(stamina);setHudText($('dungeonStaminaValue'),Math.floor(stamina));
  $('dungeonStagger').hidden=!e;
  if(e){
   const now=combatNow(),profile=staggerProfile(enemy);
   const stunned=now<(e.staggerUntil??0),weak=now<(e.staggerWeakUntil??0);
   const remaining=stunned?(e.staggerUntil-now)/profile.stun:(e.staggerWeakUntil-now)/profile.opening;
-  $('dungeonStaggerLabel').textContent=stunned?'Staggered':weak?'Weak spot':'Stagger';
+  setHudText($('dungeonStaggerLabel'),stunned?'Staggered':weak?'Weak spot':'Stagger');
   $('dungeonStaggerBar').max=weak?100:profile.limit;
   $('dungeonStaggerBar').value=weak?Math.min(100,100*remaining):e.stagger??0;
  }
  $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
- $('dungeonEnemyHealth').textContent=(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health;
+ setHudText($('dungeonEnemyHealth'),(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health);
  $('dungeonEnemyBar').max=targetEnemy.health;$('dungeonEnemyBar').value=selected?.health??e?.health??enemy.health;
  const role=enemyRoleInfo(e,combatNow(),enemy.id),pack=e?.adds?.filter(a=>a.spawnAt<=combatNow()).length>=2;
- $('dungeonWeakness').hidden=!role&&!pack;$('dungeonWeakness').textContent=(role?.status??'')+(pack?' · PACK · Fire / Storm Blade splash nearby reinforcements':'');$('dungeonWeakness').title=role?.hint??'';
+ $('dungeonWeakness').hidden=!role&&!pack;setHudText($('dungeonWeakness'),(role?.status??'')+(pack?' · PACK · Fire / Storm Blade splash nearby reinforcements':''));$('dungeonWeakness').title=role?.hint??'';
  const targets=$('dungeonTargets');targets.hidden=!e?.adds?.length;
  const targetKey=e?.adds?.length?JSON.stringify([e.combatTarget,e.health,e.adds.map(a=>[a.id,a.health,a.spawnAt<=combatNow()])]):'';
  if(targets.dataset.key!==targetKey){targets.dataset.key=targetKey;const focused=document.activeElement?.dataset.target;targets.replaceChildren();
@@ -2212,15 +2248,18 @@ function updateDungeonArenaHud(){
   else if(now<(e.exposedUntil??0))cue='Shell exposed · Strike now';
  }
  const targetHint=combatTargetHint();
- $('dungeonArenaCue').textContent=targetHint?cue+' · '+targetHint:cue;panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
+ setHudText($('dungeonArenaCue'),targetHint?cue+' · '+targetHint:cue);panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
 $('dungeonDodge').onclick=()=>combatAction('dodge');
 $('dungeonFamiliar').onclick=()=>useFamiliar();
 $('dungeonFlee').onclick=()=>combatAction('flee');
 
+let lastDungeonHudAt=-Infinity,lastDungeonHudRoom='',lastDungeonHudCombat=false;
 function updateCombatMoment(time){
-  updateDungeonArenaHud();
+  if(time-lastDungeonHudAt>=50||lastDungeonHudRoom!==currentRoom||lastDungeonHudCombat!==player.inCombat){
+    updateDungeonArenaHud();lastDungeonHudAt=time;lastDungeonHudRoom=currentRoom;lastDungeonHudCombat=player.inCombat;
+  }
   if(player.inCombat&&hunting.encounter?.arenaVersion===1&&combatMoveGoal&&!step&&!route.length&&!activityBusy&&!serverActionBusy&&combatNow()>=(hunting.encounter.arenaStepAt??0)&&(hunting.encounter.brainVersion!==2||combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)>=ARENA_STEP_COST)){
     const p=arenaPlayer(hunting.encounter);
     if(p.x===combatMoveGoal.x&&p.y===combatMoveGoal.y)combatMoveGoal=null;
@@ -2230,7 +2269,8 @@ function updateCombatMoment(time){
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,vitals:playerVitals,stats:playerStats,combatGear,magic:magicState,characterRules});
     const due=hunting.encounter?Math.min(addDueAt(hunting.encounter),hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,hunting.encounter.brainVersion===2?hunting.encounter.brainNextThinkAt:Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
-    if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
+    const untilImpact=(hunting.encounter?.nextBoarAt??Infinity)-combatNow();
+    if(player.inCombat&&!pendingCombatInputs.length&&combatNow()>=due&&time>=nextCombatPoll&&(untilImpact<=0||untilImpact>250))sendServerCombat();
     if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
     }
@@ -3805,7 +3845,12 @@ function positionWorldLabels(p){
     if(action)worldLabelBounds.push({left,right:left+width,top,bottom:top+height});
   }
 }
-function updateWorldLabels(){
+let lastWorldLabelCheck=-Infinity;
+function updateWorldLabels(time){
+  if(Number.isFinite(time)){
+    if(worldLabelKey&&time-lastWorldLabelCheck<100){positionWorldLabels(canvasBounds());return;}
+    lastWorldLabelCheck=time;
+  }
   const fallen=window.playerCloud?.initial?.styleAbilities?.fallen;
   const raiseReady=fallen?.room===currentRoom&&fallen.until>combatNow()&&!hunting.encounter&&!activeRaised(window.playerCloud.initial,combatNow())&&(window.playerCloud.initial.styleAbilities.readyAt.raiseFallen??0)<=combatNow();
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
@@ -4166,8 +4211,14 @@ function draw(time){
       if(reducedMotion.matches){peer.rx=peer.x;peer.ry=peer.y;}
       continue;
     }
-    const amount=reducedMotion.matches?1:Math.min(1,Math.max(0,time-peer.lastFrame)/90);
-    peer.rx+=(peer.x-peer.rx)*amount;peer.ry+=(peer.y-peer.ry)*amount;peer.lastFrame=time;
+    const motion=peer.remoteMove;
+    if(motion&&!reducedMotion.matches){
+      const amount=Math.min(1,Math.max(0,(time-motion.at)/motion.duration));
+      peer.rx=motion.x+(peer.x-motion.x)*amount;
+      peer.ry=motion.y+(peer.y-motion.y)*amount;
+      if(amount===1)peer.remoteMove=null;
+    }else{peer.rx=peer.x;peer.ry=peer.y;peer.remoteMove=null;}
+    peer.lastFrame=time;
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
   const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
@@ -4191,20 +4242,21 @@ function draw(time){
   let playerBody=null,guardianOverlap=false,playerHearts=null;
   const drawPlayer = ()=>{
     if(homeBedRest&&atHome())return;
-    const seat=player.seat;
-    const [x,y]=seat?seatAnchor(seat):point(player.x+.5,player.y+.5,0);
+    const seat=player.seat,visual=combatRenderPosition(time);
+    const [x,y]=seat?seatAnchor(seat):point(visual.x+.5,visual.y+.5,0);
     if(moonwood.has(currentRoom)&&lanternLit){
       const glow=ctx.createRadialGradient(x,y-8,3,x,y-8,34);
       glow.addColorStop(0,'#ffe5aa60');glow.addColorStop(1,'#ffe5aa00');
       ctx.fillStyle=glow;ctx.fillRect(x-34,y-42,68,68);
     }
     if(!seat){
-      surface(player.x+.17,player.y+.23,.71,.61,.2,'#43324452');
-      surface(player.x+.27,player.y+.34,.50,.38,.3,'#43324462');
+      surface(visual.x+.17,visual.y+.23,.71,.61,.2,'#43324452');
+      surface(visual.x+.27,visual.y+.34,.50,.38,.3,'#43324462');
     }
-    const cycle=characterWalkCycle(player,player.x,player.y,!!step||autoServerWalking);
+    const cycle=characterWalkCycle(player,visual.x,visual.y,!!step||autoServerWalking||!!combatMovePreview?.pending);
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    const pose=playerCombatPose({time,now:combatNow(),health,maxHealth:maxHealth(),encounter:player.inCombat?hunting.encounter:window.towerVaultCoop?.encounter(),events:combatArt,reduced:reducedMotion.matches});
+    const events=time-combatDodgePreview<430?{...combatArt,dodgeAt:combatDodgePreview}:combatArt;
+    const pose=playerCombatPose({time,now:combatNow(),health,maxHealth:maxHealth(),encounter:player.inCombat?hunting.encounter:window.towerVaultCoop?.encounter(),events,reduced:reducedMotion.matches});
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
     const chopping=woodSession??(autoChop?automatic:null);
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
@@ -4265,7 +4317,8 @@ function draw(time){
   };
   const depth=item=>item.type==='remotePlayer'?(item.peer.seat?depth(item.peer.seat)+.001:item.x+item.y+1):item.x+item.y+dimensions(item).reduce((a,b)=>a+b,0)-.55;
   items.sort((a,b)=>depth(a)-depth(b));
-  const playerDepth=player.seat?depth(player.seat)+.001:player.x+player.y+1;
+  const visual=combatRenderPosition(time);
+  const playerDepth=player.seat?depth(player.seat)+.001:visual.x+visual.y+1;
   let drawn=false;hitboxes=[];
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
@@ -4342,7 +4395,7 @@ function draw(time){
   if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawWoodEffects(time);
   if(enemy)drawCombatOverlayFx({ctx,width,height,renderScale:worldRenderScale,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
-  updateWorldLabels();
+  updateWorldLabels(time);
   drawHudMiniMap();
   updateActorNameplates();
   if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
@@ -5686,7 +5739,7 @@ function advanceAnimation(time){
     step={from,to,started:time};
   }
   if(step){
-    const {from,to,started}=step,progress=Math.min(1,(time-started)/playerStepMs());
+    const {from,to,started}=step,progress=Math.min(1,(time-started)/(step.duration??playerStepMs()));
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
@@ -6990,11 +7043,19 @@ async function serverTravel(action){
 }
 async function sendServerCombat(input,slot){
   if(activityBusy){
-    if(input&&pendingCombatInputs.length<3&&!pendingCombatInputs.some(queued=>queued.input===input&&queued.slot===slot))pendingCombatInputs.push({input,slot});
+    if(input==='dodge'){
+      if(!pendingCombatInputs.some(queued=>queued.input==='dodge'))pendingCombatInputs.unshift({input,slot});
+    }else if(input&&pendingCombatInputs.length<3&&!pendingCombatInputs.some(queued=>queued.input===input&&queued.slot===slot))pendingCombatInputs.push({input,slot});
     return;
   }
   if(serverActionBusy||!player.inCombat)return;
   activityBusy=true;
+  if(input==='move'&&!reducedMotion.matches){
+    const {x,y}=combatRenderPosition(performance.now());
+    combatMovePreview={from:{x,y},to:slot,at:performance.now(),pending:true};
+    faceCombatTarget(slot);
+  }
+  let moveAccepted=false;
   try{
     const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input,...(input==='move'?{tile:slot}:{slot}),reviewing:!document.hidden});
     const receipt=packet.state.combatReceipt;
@@ -7006,11 +7067,30 @@ async function sendServerCombat(input,slot){
       }
     }
     applyServerGameplay(packet.state);
+    if(input==='dodge'){
+      if(receipt?.events.some(event=>event.dodgeStarted))confirmDodge();
+      else combatDodgePreview=-Infinity;
+    }
+    if(input==='move'&&hunting.encounter){
+      const accepted=arenaPlayer(hunting.encounter);
+      moveAccepted=accepted.x===slot.x&&accepted.y===slot.y;
+      if(moveAccepted&&combatMovePreview){
+        const time=performance.now(),{x,y}=combatRenderPosition(time);
+        route=[];
+        const duration=Math.max(24,playerStepMs()-(time-combatMovePreview.at));
+        step={from:{x,y},to:accepted,started:time,duration};
+      }
+    }
     if(input==='target')faceCombatTarget(combatTargetTile(hunting.encounter));
     setPlayerCombat(!!hunting.encounter);updatePlayerStats();updateCombatPanel();
     nextCombatPoll=performance.now()+80;
   }catch(error){nextCombatPoll=performance.now()+1000;note(error.message);}
   finally{
+    if(input==='move'&&!moveAccepted)combatMoveGoal=null;
+    if(input==='move'&&combatMovePreview){
+      const time=performance.now(),{x,y}=combatRenderPosition(time);
+      combatMovePreview=moveAccepted?null:{from:{x,y},to:{x:player.x,y:player.y},at:time,pending:false};
+    }
     activityBusy=false;
     if(!player.inCombat)savePlayerState();
     const queued=pendingCombatInputs.shift();
@@ -9485,7 +9565,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onWaystation:receiveWaystation,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onGift:gift=>{
+    },onPeers:receivePeers,onMoves:receiveMoves,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrailCamp:receiveTrailCamp,onWaystation:receiveWaystation,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onGift:gift=>{
       if(!gift?.id)return;
       showTransaction('Gift from '+gift.from,[{icon:'✦',text:'+'+gift.quantity+' × '+gift.label}]);
       window.playerCloud.refreshGift?.();
@@ -9602,7 +9682,7 @@ window.towerVaultCoopHooks={
  enableSound:()=>combatAudio.enable(combatSoundEnabled),counterSound:()=>combatAudio.play('counter'),
  strike:tile=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();},
  cast:(tile,kind)=>{faceCombatTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},
- dodge:()=>{combatArt.dodgeAt=performance.now();},
+ previewDodge,dodge:confirmDodge,
  victory:()=>{combatArt.victoryAt=performance.now();},
  peer:cue=>{
   const peer=remotePeers.get(cue.id);

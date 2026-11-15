@@ -282,7 +282,20 @@ export async function writeVaultParty(db,row,body,now=Date.now(),random=Math.ran
  for(let retry=0;retry<5;retry++){
   const {row:record,raid}=await readVaultParty(db,party,row.player_id,now),s=JSON.parse(row.state_json);if(now>=raid.expiresAt&&body.kind!=='leave'&&!(body.kind==='claim'&&raid.status==='victory'))throw invalid('This party has expired. Leave it and start a new expedition.');
   if(s.vaultCoop&&s.vaultCoop.id!==party)throw invalid('Leave your current party first.');
+  const member=raid.members[row.player_id],readOnlyCandidate=body.kind==='tick'&&!!member?.peerId;
+  const beforeRaid=readOnlyCandidate?JSON.stringify(raid):null;
+  const beforeState=readOnlyCandidate?JSON.stringify(s):null;
+  const lastAt=member?.lastAt,lastSeen=s.routineLastSeen;
   const receipt=actVaultParty(raid,s,row.player_id,{...body,kind:create?'join':body.kind},now,random);
+  if(readOnlyCandidate){
+   member.lastAt=lastAt;
+   s.routineLastSeen=lastSeen;
+   if(JSON.stringify(raid)===beforeRaid&&JSON.stringify(s)===beforeState){
+    return {updated:row,raid:publicVaultParty(raid,row.player_id,now),receipt,unchanged:true};
+   }
+   member.lastAt=now;
+   s.routineLastSeen=now;
+  }
   if(raid.members[row.player_id])raid.members[row.player_id].peerId??=(await tokenHash('public:'+row.player_id)).slice(0,24);raid.closed=Object.values(raid.members).every(m=>m.left||m.claimed||m.defeatLogged);
   const result=await db.batch([
    db.prepare('UPDATE tower_vault_parties SET state_json=?,version=version+1,last_operation=? WHERE party_id=? AND version=? AND EXISTS(SELECT 1 FROM tower_players WHERE player_id=? AND revision=?)').bind(JSON.stringify(raid),operation,party,record.version,row.player_id,row.revision),

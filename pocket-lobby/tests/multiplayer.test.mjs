@@ -2,17 +2,20 @@ import {sharedMoonTrail} from '../server/shared-room.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRoomConnection} from '../public/multiplayer.js';
-import {publicPeer,handleWorldConnect} from '../server/shared-room.mjs';
+import {SharedRoom,publicPeer,handleWorldConnect} from '../server/shared-room.mjs';
 import {testDatabase} from './db-helper.mjs';
 import {tokenHash,GUEST_COOKIE} from '../server/identity.mjs';
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 test('room client filters itself, sends movement/chat and cancels stale joins',async()=>{
  const sockets=[];class Socket{constructor(url){this.url=url;this.readyState=1;this.sent=[];sockets.push(this);}send(raw){this.sent.push(JSON.parse(raw));}close(){this.readyState=3;}message(data){this.onmessage({data:JSON.stringify(data)});}}
- let local={x:5,y:7,direction:'left',back:false,seat:null,profileKey:'initial'},peers=[],chat=[],status;
- const room=createRoomConnection({getLocal:()=>local,flush:async()=>{},onPeers:p=>peers=p,onChat:m=>chat.push(m),onHistory:()=>{},onStatus:s=>status=s,onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket,origin:'https://tower.test'});
+ let local={x:5,y:7,direction:'left',back:false,seat:null,profileKey:'initial'},peers=[],moves=[],chat=[],status;
+ const room=createRoomConnection({getLocal:()=>local,flush:async()=>{},onPeers:p=>peers=p,onMoves:p=>moves=p,onChat:m=>chat.push(m),onHistory:()=>{},onStatus:s=>status=s,onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket,origin:'https://tower.test'});
  try{
   await room.join('hub');assert(sockets[0].url.startsWith('wss://tower.test/api/world/connect?room=hub'));
   const ws=sockets[0];ws.message({type:'welcome',selfId:'me',players:[{id:'me'},{id:'other'}],chat:[]});assert.deepEqual(peers,[{id:'other'}]);assert.equal(status,'2 / 20 in room');
+  assert(new URL(ws.url).searchParams.has('deltas'));
+  ws.message({type:'moves',moves:[{id:'me',x:6},{id:'other',x:7}]});
+  assert.deepEqual(moves,[{id:'other',x:7}]);
   local.x=6;await delay(145);assert(ws.sent.some(m=>m.type==='move'&&m.x===6));
   assert(room.sendChat('Hello'));assert.deepEqual(ws.sent.at(-1),{type:'chat',text:'Hello'});room.wave();assert.equal(ws.sent.at(-1).type,'wave');
   ws.message({type:'chat',message:{text:'Hi',name:'Other'}});assert.equal(chat[0].text,'Hi');
@@ -21,6 +24,27 @@ test('room client filters itself, sends movement/chat and cancels stale joins',a
  let resume;const pending=new Promise(resolve=>resume=resolve);
  const stale=createRoomConnection({getLocal:()=>local,flush:()=>pending,onPeers:()=>{},onChat:()=>{},onHistory:()=>{},onStatus:()=>{},onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket});
  const joining=stale.join('hub');stale.disconnect();resume();await joining;assert.equal(sockets.length,1);
+});
+test('movement updates coalesce and keep older clients in sync without exposing hidden players',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const makeSocket=()=>({messages:[],send(raw){this.messages.push(JSON.parse(raw));}});
+ const modern=makeSocket(),legacy=makeSocket(),now=Date.now();
+ const player={id:'visible',playerId:'a',x:4,y:7,room:'hub',movementDeltas:true};
+ const hidden={id:'hidden',playerId:'b',x:6,y:7,room:'hub',veilUntil:now+10000};
+ const room=Object.create(SharedRoom.prototype);
+ room.sessions=new Map([[modern,player],[legacy,hidden]]);room.autoPeers=new Map();
+ room.queueMove(player,now);player.x=5;room.queueMove(player,now);
+ room.queueMove(hidden,now);
+ t.mock.timers.tick(50);
+ assert.equal(modern.messages.length,1);
+ assert.equal(modern.messages[0].type,'moves');
+ assert.deepEqual(modern.messages[0].moves.map(move=>[move.id,move.x]),[['visible',5]]);
+ assert.equal(legacy.messages[0].type,'snapshot');
+ assert.deepEqual(legacy.messages[0].players.map(peer=>peer.id),['visible']);
+ room.queueMove(player,now);
+ room.sessions.delete(modern);room.snapshot();
+ t.mock.timers.tick(50);
+ assert.equal(legacy.messages.length,2,'a full snapshot supersedes pending movement');
 });
 test('room ownership comes from the cookie and never exposes private metadata',async()=>{
  const {db,sql}=testDatabase(),names=[],profiles=[];

@@ -43,7 +43,7 @@ function render(s){
   if(r.width<8||r.height<8)return false;
   const dpr=Math.min(window.devicePixelRatio||1,quality>1?2:1);
   const W=Math.round(r.width*dpr),H=Math.round(r.height*dpr);
-  size(fx,W,H);size(lit,W,H);
+  size(fx,W,H);if(quality>1)size(lit,W,H);
   const spot=[r.left-p.left,r.top-p.top,r.width,r.height].map(v=>Math.round(v*100)/100).join('|');
   if(spot!==placed){placed=spot;const [l,t,w,h]=spot.split('|');Object.assign(fx.style,{left:l+'px',top:t+'px',width:w+'px',height:h+'px'});}
   const vw=s.view.width,vh=s.view.height,sc=Math.min(W/vw,H/vh),dw=vw*sc,dh=vh*sc,ox=(W-dw)/2,oy=(H-dh)/2;
@@ -66,35 +66,43 @@ function render(s){
     fctx.imageSmoothingEnabled=true;fctx.imageSmoothingQuality='high';
     fctx.drawImage(up,ox,oy,dw,dh);
   }
-  // 2. Bright pass: multiplying the picture by itself keeps only lamps, windows, brass and magic.
-  const bw=Math.ceil(vw/2),bh=Math.ceil(vh/2);
-  size(b1,bw,bh);size(b2,Math.ceil(bw/4),Math.ceil(bh/4));size(b3,Math.ceil(bw/2),Math.ceil(bh/2));
-  b1c.globalCompositeOperation='source-over';b1c.fillStyle='#000';b1c.fillRect(0,0,bw,bh);b1c.imageSmoothingEnabled=true;b1c.drawImage(game,0,0,bw,bh);
-  b1c.globalCompositeOperation='multiply';b1c.drawImage(b1,0,0);b1c.drawImage(b1,0,0);
-  b2c.imageSmoothingEnabled=true;b2c.drawImage(b1,0,0,b2.width,b2.height);
-  b3c.imageSmoothingEnabled=true;b3c.drawImage(b2,0,0,b3.width,b3.height);
-  // 3. Lighting on an opaque copy, so translucent art keeps its own alpha and blacks are never lifted:
-  //    multiply for ambient and rim, dodge for the player's light, screen for glow from bright pixels.
-  const cx=vw/2,cy=vh/2-4,px=ox+((s.px-(s.camX??cx))*s.zoom+cx)*sc,py=oy+((s.py-(s.camY??cy))*s.zoom+cy)*sc,reach=mood.reach*sc*s.zoom;
-  lctx.setTransform(1,0,0,1,0,0);lctx.globalAlpha=1;lctx.globalCompositeOperation='source-over';
-  lctx.fillStyle='#000';lctx.fillRect(0,0,W,H);lctx.drawImage(fx,0,0);
-  const edge=lctx.createRadialGradient(W/2,H*.52,Math.min(dw,dh)*.2,W/2,H*.52,Math.max(dw,dh)*.6);
-  // In a fight the rim stays brighter, so telegraphs at the edge of an arena keep their colour.
-  edge.addColorStop(0,mood.ambient);edge.addColorStop(1,s.inCombat?mood.fight:mood.edge);
-  lctx.globalCompositeOperation='multiply';lctx.fillStyle=edge;lctx.fillRect(0,0,W,H);
-  const breathe=s.reduced?1:1+Math.sin(t/900)*.025+Math.sin(t/233)*.012;
-  lctx.globalCompositeOperation='color-dodge';glow(lctx,px,py-10*sc,reach*breathe,reach*.72*breathe,mood.player,.3);
-  lctx.globalCompositeOperation='screen';lctx.imageSmoothingEnabled=true;lctx.globalAlpha=mood.glow;lctx.drawImage(b3,ox,oy,dw,dh);
-  lctx.globalAlpha=1;lctx.globalCompositeOperation='destination-in';lctx.drawImage(fx,0,0);
-  fctx.globalCompositeOperation='copy';fctx.drawImage(lit,0,0);
-  // Closer than 1x a room can run past the canvas: dissolve the cut instead of showing a straight edge.
-  if(s.zoom>1){
-    const f=Math.round(dh*.09);
-    fctx.globalCompositeOperation='destination-out';
-    for(const [x0,y0,x1,y1,rx,ry,rw,rh] of [[0,oy,0,oy+f,ox,oy,dw,f],[0,oy+dh,0,oy+dh-f,ox,oy+dh-f,dw,f],[ox,0,ox+f,0,ox,oy,f,dh],[ox+dw,0,ox+dw-f,0,ox+dw-f,oy,f,dh]]){
-      const g=fctx.createLinearGradient(x0,y0,x1,y1);g.addColorStop(0,'#000');g.addColorStop(1,'#0000');
-      fctx.fillStyle=g;fctx.fillRect(rx,ry,rw,rh);
+  if(quality>1){
+    const bw=Math.ceil(vw/2),bh=Math.ceil(vh/2);
+    size(b1,bw,bh);size(b2,Math.ceil(bw/4),Math.ceil(bh/4));size(b3,Math.ceil(bw/2),Math.ceil(bh/2));
+    b1c.globalCompositeOperation='source-over';b1c.fillStyle='#000';b1c.fillRect(0,0,bw,bh);b1c.imageSmoothingEnabled=true;b1c.drawImage(game,0,0,bw,bh);
+    b1c.globalCompositeOperation='multiply';b1c.drawImage(b1,0,0);b1c.drawImage(b1,0,0);
+    b2c.imageSmoothingEnabled=true;b2c.drawImage(b1,0,0,b2.width,b2.height);
+    b3c.imageSmoothingEnabled=true;b3c.drawImage(b2,0,0,b3.width,b3.height);
+    // 3. Lighting on an opaque copy, so translucent art keeps its own alpha and blacks are never lifted:
+    //    multiply for ambient and rim, dodge for the player's light, screen for glow from bright pixels.
+    const cx=vw/2,cy=vh/2-4,px=ox+((s.px-(s.camX??cx))*s.zoom+cx)*sc,py=oy+((s.py-(s.camY??cy))*s.zoom+cy)*sc,reach=mood.reach*sc*s.zoom;
+    lctx.setTransform(1,0,0,1,0,0);lctx.globalAlpha=1;lctx.globalCompositeOperation='source-over';
+    lctx.fillStyle='#000';lctx.fillRect(0,0,W,H);lctx.drawImage(fx,0,0);
+    const edge=lctx.createRadialGradient(W/2,H*.52,Math.min(dw,dh)*.2,W/2,H*.52,Math.max(dw,dh)*.6);
+    // In a fight the rim stays brighter, so telegraphs at the edge of an arena keep their colour.
+    edge.addColorStop(0,mood.ambient);edge.addColorStop(1,s.inCombat?mood.fight:mood.edge);
+    lctx.globalCompositeOperation='multiply';lctx.fillStyle=edge;lctx.fillRect(0,0,W,H);
+    const breathe=s.reduced?1:1+Math.sin(t/900)*.025+Math.sin(t/233)*.012;
+    lctx.globalCompositeOperation='color-dodge';glow(lctx,px,py-10*sc,reach*breathe,reach*.72*breathe,mood.player,.3);
+    lctx.globalCompositeOperation='screen';lctx.imageSmoothingEnabled=true;lctx.globalAlpha=mood.glow;lctx.drawImage(b3,ox,oy,dw,dh);
+    lctx.globalAlpha=1;lctx.globalCompositeOperation='destination-in';lctx.drawImage(fx,0,0);
+    fctx.globalCompositeOperation='copy';fctx.drawImage(lit,0,0);
+    // Closer than 1x a room can run past the canvas: dissolve the cut instead of showing a straight edge.
+    if(s.zoom>1){
+      const f=Math.round(dh*.09);
+      fctx.globalCompositeOperation='destination-out';
+      for(const [x0,y0,x1,y1,rx,ry,rw,rh] of [[0,oy,0,oy+f,ox,oy,dw,f],[0,oy+dh,0,oy+dh-f,ox,oy+dh-f,dw,f],[ox,0,ox+f,0,ox,oy,f,dh],[ox+dw,0,ox+dw-f,0,ox+dw-f,oy,f,dh]]){
+        const g=fctx.createLinearGradient(x0,y0,x1,y1);g.addColorStop(0,'#000');g.addColorStop(1,'#0000');
+        fctx.fillStyle=g;fctx.fillRect(rx,ry,rw,rh);
+      }
     }
+  }else{
+    // Keep a lightweight tint on slower devices. No extra scene-sized copies.
+    fctx.globalCompositeOperation='source-atop';
+    const edge=fctx.createRadialGradient(W/2,H*.52,Math.min(dw,dh)*.2,W/2,H*.52,Math.max(dw,dh)*.6);
+    edge.addColorStop(0,'#19244908');
+    edge.addColorStop(1,s.inCombat?'#151b3a2c':'#171c493e');
+    fctx.fillStyle=edge;fctx.fillRect(0,0,W,H);
   }
   // 4. Air: dust indoors, fireflies outside, embers below ground.
   if(!s.reduced){
@@ -143,7 +151,11 @@ function frame(s){
     }
     // Step down, then switch off, on devices that cannot keep up.
     const gap=s.time-lastTime;lastTime=s.time;
-    if(!document.hidden&&gap<400){slow=gap>42?slow+1:Math.max(0,slow-.5);if(slow>150){quality--;slow=0;sync();}}
+    if(!document.hidden&&gap<400){
+      const limits=quality>1?{gap:25,frames:14}:{gap:45,frames:120};
+      slow=gap>limits.gap?slow+1:Math.max(0,slow-.2);
+      if(slow>limits.frames){quality--;slow=0;size(up,1,1);size(lit,1,1);sync();}
+    }
   }catch(error){quality=0;off();sync();console.warn('Scene polish switched off:',error);}
 }
 function setEnabled(value){

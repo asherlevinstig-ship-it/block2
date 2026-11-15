@@ -18,7 +18,7 @@ export function initializeVaultCoop(api){
   if(popups.length>32)popups.shift();
  }
  function accept(result){
-  if(result.state)api.apply(result.state);if(result.raid){const old=raid;raid=result.raid;if(old?.hp>raid.hp)popups.push({at:performance.now(),text:'−'+(old.hp-raid.hp),x:raid.origin?.x??6,y:raid.origin?.y??5});
+  if(result.state&&!result.unchanged)api.apply(result.state);if(result.raid){const old=raid;raid=result.raid;if(old?.hp>raid.hp)popups.push({at:performance.now(),text:'−'+(old.hp-raid.hp),x:raid.origin?.x??6,y:raid.origin?.y??5});
    const reaction=raid.enemyReaction;
    if(reaction&&reaction.id!==old?.enemyReaction?.id)api.enemyReaction?.(reaction);
    if(raid.lastAttack&&raid.lastAttack.at!==old?.lastAttack?.at)attackFx={...raid.lastAttack,time:performance.now(),attackShape:raid.lastAttack.shape,attackTile:raid.lastAttack.target};
@@ -104,7 +104,7 @@ export function initializeVaultCoop(api){
   const canDodge=(raid.self?.nextDodgeAt??0)<=now;
   panel.dataset.danger=String(danger);
   impact.hidden=!warning;
-  if(warning)impact.value=Math.max(0,Math.min(1,1-ms/move.tell));
+  if(warning){const fill=Math.round(Math.max(0,Math.min(1,1-ms/move.tell))*40)/40;if(impact.value!==fill)impact.value=fill;}
   const prompt=vaultWarningPrompt(move,ms,{danger,covered,canDodge});
   const message=warning?move.name+' · '+(ms/1000).toFixed(1)+'s · '+prompt:'Next '+move.name+' · Prepare your next move';
   if($('coopWarning').textContent!==message)$('coopWarning').textContent=message;
@@ -143,7 +143,7 @@ export function initializeVaultCoop(api){
  $('coopCreate').onclick=()=>send('create');$('coopJoin').onclick=async()=>{const code=$('coopCode').value.trim().toUpperCase();if(!/^[A-F0-9]{8}$/.test(code)){$('coopJoinError').textContent='Enter the eight-character party code.';return;}raid={id:code,members:[],adds:[]};await send('join');};
  $('coopSpillway').onclick=()=>send('mechanism','spillway');
  $('coopScreen').onclick=()=>send('mechanism','screen');
- $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};const dodge=()=>{api.enableSound?.();return send('dodge');};$('coopDodge').onclick=dodge;$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
+ $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};const dodge=()=>{api.enableSound?.();if(raid?.status==='battle'&&(raid.self?.nextDodgeAt??0)<=api.now())api.previewDodge?.();return send('dodge');};$('coopDodge').onclick=dodge;$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
  $('coopStrike').onclick=()=>{api.enableSound?.();autoAttack=!autoAttack;if(autoAttack)send('strike');else render();};
  document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();dodge();}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});
  const timer=setInterval(async()=>{

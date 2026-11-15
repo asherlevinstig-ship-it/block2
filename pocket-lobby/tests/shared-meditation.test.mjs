@@ -36,6 +36,7 @@ test('meditation reaches every observer, survives room hibernation and clears on
  assert.equal(restored.peers().find(p=>p.id==='owner').meditating,true);
  await send({type:'meditate',active:false});assert.equal(observer.sent.at(-1).players.find(p=>p.id==='owner').meditating,false);
  await send({type:'meditate',active:true});await send({type:'move',x:6,y:7,direction:'right'});
+ room.flushMoves();
  assert.equal(observer.sent.at(-1).players.find(p=>p.id==='owner').meditating,false);
  await send({type:'meditate',active:'true'});assert.equal(room.peers().find(p=>p.id==='owner').meditating,false);
  room.webSocketClose(owner);assert(!observer.sent.at(-1).players.some(p=>p.id==='owner'));

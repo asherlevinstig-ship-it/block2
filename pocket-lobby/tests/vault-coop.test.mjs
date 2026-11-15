@@ -79,7 +79,11 @@ test('weapon cooldowns, proximity, zero AP and retreat are enforced',()=>{
 test('two database writers contribute to the same health pool without losing a strike',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());for(const id of ['a','b']){const s=player(id);sql.prepare('INSERT INTO tower_players(player_id,state_json,revision,last_request,updated_at) VALUES(?,?,1,?,?)').run(id,JSON.stringify(s),'init',1000);}
  const row=id=>sql.prepare('SELECT * FROM tower_players WHERE player_id=?').get(id);let result=await writeVaultParty(db,row('a'),{kind:'create',operation:'create'},1000);const code=result.raid.id;await writeVaultParty(db,row('b'),{kind:'join',id:code,operation:'join'},1000);await writeVaultParty(db,row('a'),{kind:'start',id:code,operation:'start'},1000);
- const before=(await readVaultParty(db,code,'a')).raid.hp;await Promise.all(['a','b'].map(id=>writeVaultParty(db,row(id),{kind:'strike',id:code,operation:'hit-'+id},2000)));const r=(await readVaultParty(db,code,'a')).raid;assert.equal(before-r.hp,r.members.a.damage+r.members.b.damage);assert(r.members.a.damage>0&&r.members.b.damage>0);for(const id of ['a','b'])assert.equal(JSON.parse(row(id).state_json).actionPoints.value,99);
+ const initial=(await readVaultParty(db,code,'a'));const playerVersion=row('a').revision;
+ const idle=await writeVaultParty(db,row('a'),{kind:'tick',id:code,operation:'idle-poll'},1200);
+ assert.equal(idle.unchanged,true);assert.equal(row('a').revision,playerVersion);
+ assert.equal((await readVaultParty(db,code,'a')).row.version,initial.row.version);
+ const before=initial.raid.hp;await Promise.all(['a','b'].map(id=>writeVaultParty(db,row(id),{kind:'strike',id:code,operation:'hit-'+id},2000)));const r=(await readVaultParty(db,code,'a')).raid;assert.equal(before-r.hp,r.members.a.damage+r.members.b.damage);assert(r.members.a.damage>0&&r.members.b.damage>0);for(const id of ['a','b'])assert.equal(JSON.parse(row(id).state_json).actionPoints.value,99);
 });
 test('API retries do not duplicate party rewards or charges, and party mode blocks other paid activities',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const base='https://tower.test',session=await handlePlayerApi(new Request(base+'/api/player/session',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:'{}'}),{TOWER_DB:db});let p=await session.json();const cookie=session.headers.get('set-cookie').split(';')[0];sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(player()),p.characterKey);

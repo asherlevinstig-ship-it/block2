@@ -1,5 +1,5 @@
 import {socialRooms} from './shared-world.js';
-export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onWaystation=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onRobbery=()=>{},onPvp=()=>{},onPvpWitness=()=>{},onPvpWanted=()=>{},onGift=()=>{},onFishTogether=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
+export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onMoves,onTrees=()=>{},onRaid=()=>{},onTrailCamp=()=>{},onWaystation=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onRobbery=()=>{},onPvp=()=>{},onPvpWitness=()=>{},onPvpWanted=()=>{},onGift=()=>{},onFishTogether=()=>{},onAutoDisconnected=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
   let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',lastMeditating=false,profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
   function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);onFishTogether({session:null});}
@@ -12,7 +12,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
       if(getLocal().room&&getLocal().room!==next){await join(getLocal().room);return;}
       await checkRoom(next);if(current!==generation)return;
       if(getLocal().room&&getLocal().room!==next){await join(getLocal().room);return;}
-      const url=new URL('/api/world/connect',origin);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('room',next);
+      const url=new URL('/api/world/connect',origin);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('room',next);if(onMoves)url.searchParams.set('deltas','1');
       socket=new WebSocketImpl(url.href);const ws=socket;
       ws.onmessage=event=>{
         if(current!==generation)return;
@@ -29,6 +29,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
           onPeers(players.filter(peer=>peer.id!==selfId));onStatus(next==='home'?'Private home':players.length+' / 20 in room');
           if(data.trees)onTrees(data.trees);
         }
+        if(data.type==='moves'&&Array.isArray(data.moves))onMoves?.(data.moves.filter(peer=>peer.id!==selfId));
         if(data.type==='snapshot')onTrails(Array.isArray(data.trails)?data.trails:[]);
         if(data.type==='millRaid')onRaid(data.raid,data.cue);
         if(data.type==='waystation')onWaystation(data.board);
