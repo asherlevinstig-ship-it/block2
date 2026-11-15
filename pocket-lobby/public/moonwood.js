@@ -1,3 +1,4 @@
+import {drawWildBoar} from './wild-boar-art.js';
 import {drawMapProp} from './map-prop-art.js';
 import {ashenAreas,ashenPropHeights,drawAshenGround,drawAshenProp,drawCinderback} from './ashen-march.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
@@ -263,6 +264,7 @@ export const moonwood=(()=>{
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,canopyOpacity=1,portalOpen=false}){
     if(Object.hasOwn(ashenPropHeights,item.type)){drawAshenProp(item,time,{point,polygon,rect,surface,block,reduced});return;}
+    if(item.type==='wildboar'&&item.room==='clearing'&&!item.trackedPrey){drawWildBoar(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     if(item.type==='wildboar'&&item.room==='brokenRoad'){drawCinderback(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     if(item.type==='ashenLatch'){
       const [x,y]=point(item.x+.5,item.y+.5);

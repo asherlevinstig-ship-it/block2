@@ -71,7 +71,7 @@ export function boarCombatPose({time,now,encounter,events,reduced=false,defeated
   const interrupted=time-events.enemyInterruptAt>=0&&time-events.enemyInterruptAt<550;
   const windup=encounter&&!staggered?clamp(1-(encounter.nextBoarAt-now)/(enemyAttack(encounter).shape==='bolt'?enemyAttack(encounter).tell:Math.min(850,enemyAttack(encounter).tell))):0;
   return {
-    windup:interrupted?0:windup,staggered,braced,guardBroken,interrupted,
+    windup:interrupted?0:windup,attackAge:Number.isFinite(events.boarAttackAt)?time-events.boarAttackAt:null,staggered,braced,guardBroken,interrupted,
     charge:staggered?0:reduced?0:pulse(time-events.boarAttackAt,340)*8,
     recoil:reduced?0:staggered?Math.sin(time/90)*2:pulse(hitAge,braced?180:260)*(braced?.6:5),
     squash:staggered?.82:reduced?1:defeated?1-death*.6:1-windup*.1,
