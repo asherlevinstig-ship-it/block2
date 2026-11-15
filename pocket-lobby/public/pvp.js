@@ -1,4 +1,4 @@
-export const pvpRooms=new Set(['trail','grove','creek','roots','pond','logging','clearing','ruins','reedwater','willowbank','millbrook','ambermead','thornwood','beaconwatch','waystation','keepersOverlook','quarry']);
+export const pvpRooms=new Set(['trail','grove','creek','roots','pond','logging','clearing','ruins','reedwater','willowbank','millbrook','ambermead','thornwood','beaconwatch','waystation','keepersOverlook','quarry','brokenRoad','emberwood']);
 
 export const bountyGold=75;
 export const witnessRange=4;

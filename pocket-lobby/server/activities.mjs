@@ -35,7 +35,7 @@ import {castEssencePower} from './essences.mjs';
 import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
-import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
+import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,huntRespawnField,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 import {bloodPriceRules,activePreyTrail,preyTrail,ambushPrey,ambushPosition,styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
@@ -186,7 +186,7 @@ function result(state,event,now,random=Math.random){
           event.clothingDrop=rewards.clothing=veilCloakId;
         }
       }else if(enemy.id==='millCustodian'&&state.combatId)state.adventure.millCellarCleared=true;
-      else state.hunting[enemy.id==='crystalGuardian'?'crystalRespawnAt':enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
+      else state.hunting[huntRespawnField(enemy)]=now+enemy.respawn;
       const before=state.huntingLoot[enemy.loot]??0;
       state.huntingLoot[enemy.loot]=Math.min(1000000,before+1);
       if(state.huntingLoot[enemy.loot]>before)rewards.loot={[enemy.loot]:state.huntingLoot[enemy.loot]-before};
@@ -204,6 +204,8 @@ function result(state,event,now,random=Math.random){
       else{state.depthsRun=null;move(state,'ruins');}}
     }else if(enemy.id==='crystalGuardian')move(state,'quarry',{x:9,y:1});
     else if(enemy.id==='millCustodian')move(state,'millbrook',{x:6,y:2});
+    else if(enemy.id==='cinderback')move(state,'cinderwatch',{x:10,y:4});
+    else if(enemy.id==='ashback')move(state,'cinderwatch',{x:10,y:8});
     else if(enemy.id==='thornBoar')move(state,'ambermead',{x:10,y:2});
     else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});

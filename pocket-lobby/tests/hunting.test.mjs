@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {counterMultiplier,armourSelection,armourProfile,staggerProfile,weaponStagger,boarRules,huntingTurn,dungeonEnemyPreview,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,stonebackVest,moonwellCharm} from '../public/hunting.js';
+import {counterMultiplier,armourSelection,armourProfile,staggerProfile,weaponStagger,boarRules,huntingTurn,dungeonEnemyPreview,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,huntRespawnField,enemyAttack,enemyStatusEffects,stonebackVest,moonwellCharm} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -79,7 +79,7 @@ function gameHarness(){
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({essencesPaused:false,armourSelection,armourProfile,currentCombatBuild:()=>({id:'adventurer',weaponDamage:1,interval:1,armor:0,stagger:1,counter:0,dodge:0,spell:1,mana:10}),
     ...miningRules,...bedRules,autoJourney:null,homeBedRest:null,homeFurniture:[],ownedFurniture:{bed:1},atHome:()=>context.currentRoom==='home',...dungeonLootUI,recordCombatFx,counterMultiplier,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,staggerProfile,weaponStagger,boarRules,dungeonEnemyPreview,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
-    huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,combatDodgeCost,stonebackVest,moonwellCharm,
+    huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,huntRespawnField,enemyAttack,enemyStatusEffects,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
     window:{},vaultCoopState:null,wardrobe:normalizeState({}).wardrobe,characterRules:normalizeCharacterRules(),activityBusy:false,serverActionBusy:false,meals:{},magicState:null,firstUpgrade:{},tradeCatalog:{boar:{name:'Boar Meat'},stonebackShell:{name:'Shell Fragment'},moonwellShard:depthsRules.moonwellShard},history:{fishCaught:false,boarDefeated:false},adventure:{discovered:[]},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,

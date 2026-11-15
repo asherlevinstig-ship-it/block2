@@ -23,7 +23,7 @@ import {familiarFishingTime,familiarBond} from '../public/familiars.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {watchAction} from './watch-expedition.mjs';
 import {keeperFlags,keeperSites} from '../public/lantern-keepers.js';
-import {watchFlags,willowbankFlags,willowbankLatch,willowbankNook} from '../public/region-catalog.js';
+import {ashenFlags,ashenLatch,cinderBrazier,watchFlags,willowbankFlags,willowbankLatch,willowbankNook} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation,moonfinPool} from '../public/region-catalog.js';
 import {trailCamp,besideTrailCamp} from '../public/trail-camp.js';
@@ -71,7 +71,7 @@ function location(state,rooms){
   if(!rooms.includes(state.location))throw new Error('Travel to the right location for this action.');
 }
 
-const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
+const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','cinderRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
   if(libraryAction(state,action,body,now))return;
@@ -120,6 +120,18 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(scouted===site)awardAbilityUse(state,'scoutAhead',body.id);
     if(body.id==='keeperMarker')state.adventure.keeperMarkerRead=true;
     if(body.id==='keeperCrate'&&state.adventure.keeperMarkerRead)state.adventure.keeperRouteFound=true;
+    return;
+  }
+  if(action==='ashenLatch'||action==='cinderRest'){
+    const latch=action==='ashenLatch', room=latch?'emberwood':'cinderwatch';
+    const site=latch?ashenLatch:cinderBrazier,p=state.position;
+    location(state,[room]);available(state);
+    if(!p||!validRoomTile(room,p.x,p.y,roomBoxes(room),state.adventure)||Math.abs(p.x-site.x)+Math.abs(p.y-site.y)!==1)throw new Error('Walk beside the '+(latch?'latch':'brazier')+' first.');
+    if(latch)state.adventure.ashenShortcut=true;
+    else{
+      if(state.health>=playerMaxHealth(state,now))throw new Error('Your hearts are already full.');
+      state.hunting.recoveryUntil=now+15000;
+    }
     return;
   }
   if(action==='willowbankExplore'){
@@ -456,7 +468,7 @@ export function protectFishingState(previous,next){
   if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;
   next.familiars=previous.familiars;
   if(previous.styleAbilities)next.styleAbilities=previous.styleAbilities;else delete next.styleAbilities;
-  next.adventure={...next.adventure};for(const key of [...keeperFlags,...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
+  next.adventure={...next.adventure};for(const key of [...keeperFlags,...ashenFlags,...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;

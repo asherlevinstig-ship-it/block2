@@ -1,3 +1,4 @@
+import {ashenAreas,drawAshenGround} from './ashen-march.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
 import {waystationRoom,waystationArea} from './waystation.js';
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
@@ -26,7 +27,7 @@ export const moonwood=(()=>{
     quarry:{number:'21',name:'Coppervein Quarry',description:'Collect a free pickaxe from the miner. Mine copper to train, then unlock iron at Mining 3. Sell ore at the Trading Post.',badge:'MINING',floor:'Open quarry',center:[5,5],palette:['#45515b','#69757a','#b7a17e'],authored:[['woodcutter',quarryMiner.x,quarryMiner.y],...oreDeposits.filter(node=>depositRoom(node)==='quarry').map(node=>['oreDeposit',node.x,node.y]),['wildrock',1,1],['wildrock',10,8],['pillar',10,5]]},
     millCellar:cellarArea,
     [wildlifeRoom]:wildlifeArea,
-    ...willowmereAreas,...watchAreas,[waystationRoom]:waystationArea,[overlookRoom]:overlookArea,
+    ...ashenAreas,...willowmereAreas,...watchAreas,[waystationRoom]:waystationArea,[overlookRoom]:overlookArea,
     depthsGate:{number:'D1',name:'Flooded Gate',description:'Broken walkways surround a flooded gate. A Mire Skitter darts between the stones. Pull the sluice lever to reach the far passage.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['depthsSkitter',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4],['submergedCache',10,6]]},
     depthsGallery:{number:'D2',name:'Shell Gallery',description:'Roots split this ancient hall. A stone Shell Warden guards the passage. Escape its slam, then strike its exposed core. A shell chime reveals a secret cache.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['galleryCrack',2,7],['runeCoffer',2,8],['cachePassage',10,4]]},
     depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Rune Channeler protects 50 gold. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['depthsSeer',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
@@ -44,7 +45,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#303645','#443f56','#a38a77'],authored:[['wildtree',1,2],['wildtree',6,2],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from one of three fishing posts and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',2,0],['wildtree',0,8],['wildrock',2,7],['wildbloom',2,9],['wildbloom',3,3]]}
   };
-  const heights={keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
+  const heights={ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -57,6 +58,10 @@ export const moonwood=(()=>{
     doors[a].push({to:b,side:'wild',tile:{x:ax,y:ay},inside:{x:inx,y:iny},arrival:{x:outx,y:outy},label,gate});
     doors[b].push({to:a,side:'wild',tile:{x:bx,y:by},inside:{x:outx,y:outy},arrival:{x:inx,y:iny},label:backLabel,gate});
   }
+  connect('beaconwatch','cinderwatch',[7,0,7,1,'BEACONWATCH'],[0,5,1,5,'CINDERWATCH CAMP']);
+  connect('cinderwatch','brokenRoad',[11,4,10,4,'CINDERWATCH CAMP'],[0,5,1,5,'BROKEN ROAD']);
+  connect('cinderwatch','emberwood',[10,9,10,8,'CINDERWATCH CAMP'],[0,7,1,7,'EMBERWOOD']);
+  connect('brokenRoad','emberwood',[11,7,10,7,'BROKEN ROAD'],[11,7,10,7,'EMBERWOOD'],'ashenShortcut');
   connect(waystationRoom,overlookRoom,[11,3,10,3,'WAYSTATION'],[0,5,1,5,'KEEPERS’ OVERLOOK'],'keeperRouteFound');
   connect('beaconwatch',waystationRoom,[11,4,10,4,'BEACONWATCH'],[0,6,1,6,'WAYSTATION']);
   connect('millbrook','ambermead',[6,0,6,1,'MILLBROOK'],[0,5,1,5,'AMBER ROAD']);
@@ -180,6 +185,7 @@ export const moonwood=(()=>{
     if(id===wildlifeRoom){drawReserveGround({point,polygon,surface,block,rect});return;}
     polygon([point(-.25,-.3,-7),point(cols+.36,-.3,-8),point(cols+.37,rows+.42,-8),point(-.25,rows+.42,-8)],'#0c18268c');
     block(0,0,cols,rows,-9,9,[ground,'#273244','#202a3c']);
+    if(Object.hasOwn(ashenAreas,id)){drawAshenGround(id,{surface,point,polygon},path);return;}
     if(watchRooms.includes(id)){drawWatchGround(id,{point,polygon,surface,block,rect,path});return;}
     if(willowmereRooms.includes(id)){drawRiverGround(id,{point,polygon,surface,block,rect});return;}
     for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
@@ -255,6 +261,13 @@ export const moonwood=(()=>{
   }
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,canopyOpacity=1,portalOpen=false}){
+    if(item.type==='ashenLatch'){
+      const [x,y]=point(item.x+.5,item.y+.5);
+      block(item.x+.1,item.y+.12,.8,.74,0,10,['#94796d','#4c3940','#654a4a']);
+      rect(x-2,y-22,4,13,'#af735c');
+      rect(x-4,y-24,8,4,progress.ashenShortcut?'#a0d49b':'#ffc584');
+      return;
+    }
     if(Object.hasOwn(galleryLightSites,item.type)){
       const {x,y,type}=item,[px,py]=point(x+.5,y+.5);
       const light=depthsRun?.galleryLight,lit=!light?.claimed&&galleryLightReceiver(light)===type;
@@ -483,7 +496,8 @@ export const moonwood=(()=>{
       const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
       const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
       const gilded=item.cacheGuardian===true||item.archetype==='armoured';
-      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
+      const ashen=item.room==='emberwood';
+      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:ashen?['#a68489','#392d41','#624d63']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
       for(const [u,v] of [[.13,.22],[.13,.48],[.13,.73],[.69,.22],[.69,.48],[.69,.73]]){
         part(u,v,.19,.10,flipped?6:0,flipped?5:4,['#687b77','#263948','#41545b']);
       }
@@ -504,6 +518,10 @@ export const moonwood=(()=>{
           polygon([[px,py-31],[px+4,py-25],[px,py-20],[px-4,py-25]],'#a9edec');
           rect(px-10,py-24,2,7,'#e5c77e');rect(px+8,py-24,2,7,'#e5c77e');
         }
+        if(ashen){
+          polygon([[px-8,py-22],[px-1,py-19],[px+5,py-21],[px+2,py-16],[px-4,py-16]],'#e39a81');
+          rect(px-1,py-19,2,2,'#ffe0a1');
+        }
         rect(px-3,py-17,2,5,'#455a60');
         rect(px-8,py-12,5,1,'#91a5a0');
       }
@@ -511,7 +529,8 @@ export const moonwood=(()=>{
       const untilStrike=combat?combat.nextBoarAt-Date.now():Infinity;
       if(untilStrike>=0&&untilStrike<450)surface(x-.08,y-.08,1.16,1.16,.4,'#f2a36b66','#ffc18b');
       const bob=reduced||pose.defeated?0:Math.sin(time/380)*.65;
-      const hide=pose.hit?['#d2a08b','#785464','#ac7c7c']:['#a78a77','#594451','#7a5963'];
+      const cinder=item.room==='brokenRoad';
+      const hide=pose.hit?['#d2a08b','#785464','#ac7c7c']:cinder?['#81545a','#403343','#67414a']:['#a78a77','#594451','#7a5963'];
       const leg=pose.defeated?0:!reduced&&pose.windup>.3?Math.round(Math.sin(time/65)):0;
       for(const [u,v] of [[.18,.24],[.65,.24],[.18,.66],[.65,.66]]){
         part(u,v,.14,.15,0,6+(u>.5?leg:-leg),['#795d58','#3d3543','#56434b']);
@@ -529,7 +548,7 @@ export const moonwood=(()=>{
       else{rect(px+9,py-12-bob,3,3,'#352b3b');rect(px+10,py-12-bob,1,1,pose.windup>.5?'#ffac7e':'#f9d1a0');}
       rect(px+13,py-4-bob,2,5,'#f4d8b3');rect(px+12,py-6-bob,2,3,'#fff0c7');
       rect(px+6,py-3-bob,2,4,'#e8cba9');rect(px+5,py-4-bob,2,2,'#fff0c7');
-      for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
+      for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,cinder?5:3,cinder&&i%2?'#e39b6e':'#443744');
       rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
     }else if(type==='wildtree'||type==='timberTree'){
       drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity);

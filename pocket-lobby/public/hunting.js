@@ -42,6 +42,8 @@ export const huntEnemies={
   millCustodian:{id:'millCustodian',name:'Clockwork Custodian',room:'millCellar',prop:'cellarCustodian',archetype:'armoured',move:'wardenSlam',health:110,firstAttack:2400,interval:3400,damage:14,shellArmor:3,exposureMs:2000,loot:'stonebackShell',lootName:'Salvaged plating',sellPrice:45,xp:[22,18,25],masteryXp:15,tactic:'CLOCKWORK CUSTODIAN · Leave the marked slam, move behind a pillar to block thrown cogs, then punish its recovery.'},
   moonbackStag:{id:'moonbackStag',name:'Moonback Stag',room:'grove',prop:'moonbackStag',move:'moonrush',health:132,firstAttack:2700,interval:3100,damage:17,loot:'deer',lootName:'Forest deer',sellPrice:24,xp:[35,30,35],masteryXp:20,tactic:'MOONRUSH · Watch the bright lane. Dodge just before the charge lands, then counter.'},
   thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
+  cinderback:{...boar,id:'cinderback',room:'brokenRoad',name:'Cinderback',health:155,damage:21,firstAttack:1850,interval:2300,respawn:60000,xp:[42,30,42],masteryXp:22,tactic:'CINDERBACK · Watch for the charge and dodge late to counter.'},
+  ashback:{...beetle,id:'ashback',room:'emberwood',name:'Ashback',health:132,damage:20,shellArmor:6,respawn:60000,xp:[37,27,37],masteryXp:20,tactic:'ASHBACK · Dodge the slam and strike while its shell is open.'},
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Mire Skitter',prop:'depthsSkitter',move:'skitterPounce',tactic:'MIRE SKITTER · It darts before pouncing. Step out of the marked lane; close in to strike.',health:100,damage:12,xp:[30,20,30],masteryXp:20},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Shell Warden',prop:'depthsWarden',move:'wardenSlam',tactic:'SHELL WARDEN · Leave the marked slam area, then punish its open core.',health:150,damage:20,xp:[45,35,45],masteryXp:30},
   cacheGuardian:{...beetle,id:'cacheGuardian',prop:'depthsSeer',room:'depthsCache',name:'Rune Channeler',elite:true,archetype:'caster',tactic:'RUNE CHANNELER · Defeat its Rune Wisp to break the ward. Interrupt charged bolts with 3 fast hits or Storm; leave the purple detonation ring.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
@@ -79,7 +81,9 @@ export function transitionVaultPhase(event,before,now){
  }
  event.phaseChange={index:next.index,name:next.name,hint:next.hint,color:next.color};return event;
 }
-export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='crystalGuardian'?hunting.crystalRespawnAt??0:enemy?.id==='millCustodian'?0:enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
+const respawnFields={crystalGuardian:'crystalRespawnAt',thornBoar:'thornRespawnAt',beetle:'beetleRespawnAt',cinderback:'cinderbackRespawnAt',ashback:'ashbackRespawnAt'};
+export const huntRespawnField=enemy=>respawnFields[enemy?.id]??'respawnAt';
+export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='millCustodian'?0:hunting[huntRespawnField(enemy)]??0;
 
 const enemyMoves={
   moonrush:{id:'moonrush',name:'Moonrush',tell:1550,damage:4,shape:'lane',opensShell:false},
@@ -254,6 +258,8 @@ export function normalizeHunting(input={}){
   const result={respawnAt:time(input.respawnAt),recoveryUntil:time(input.recoveryUntil),encounter:null};
   if(input.crystalRespawnAt!==undefined)result.crystalRespawnAt=time(input.crystalRespawnAt);
   if(input.thornRespawnAt!==undefined)result.thornRespawnAt=time(input.thornRespawnAt);
+  if(input.cinderbackRespawnAt!==undefined)result.cinderbackRespawnAt=time(input.cinderbackRespawnAt);
+  if(input.ashbackRespawnAt!==undefined)result.ashbackRespawnAt=time(input.ashbackRespawnAt);
   if(input.beetleRespawnAt!==undefined)result.beetleRespawnAt=time(input.beetleRespawnAt);
   if(input.moonbackSighting!==undefined)result.moonbackSighting=time(input.moonbackSighting);
   if(input.encounter){
