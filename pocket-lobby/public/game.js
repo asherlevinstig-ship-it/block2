@@ -7,6 +7,14 @@ const standardView={width:480,height:310,cols:10,rows:10,originX:240,originY:94}
 const hubView={width:720,height:465,cols:18,rows:16,originX:342,originY:115};
 const courtyardView={width:600,height:388,cols:14,rows:12,originX:282,originY:108};
 let view=standardView;
+// The sprite atlas is drawn at half size in world units. Keep two backing
+// pixels per unit so the map retains the atlas detail at normal zoom.
+const worldRenderScale=2;
+function resizeWorldCanvas(){
+  canvas.width=view.width*worldRenderScale;
+  canvas.height=view.height*worldRenderScale;
+}
+resizeWorldCanvas();
 const point = (x,y,z=0) => [view.originX+(x-y)*18,view.originY+(x+y)*9-z];
 const tileKey = (x,y) => x+','+y;
 const shades = {
@@ -4082,7 +4090,7 @@ function draw(time){
   const stagVictory=victory&&combatReports.at(-1)?.enemy==='moonbackStag'&&combatReports.at(-1)?.room===currentRoom;
   const trackedVictory=victory&&currentRoom==='clearing'&&combatReports.at(-1)?.enemy==='dusktusk';
   const enemy=trackedVictory?huntEnemies.dusktusk:roomEnemy()??(stagVictory?huntEnemies.moonbackStag:null);
-  ctx.setTransform(1,0,0,1,0,0);
+  ctx.setTransform(worldRenderScale,0,0,worldRenderScale,0,0);
   ctx.clearRect(0,0,width,height);
   const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
   ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);updateCamera(time,centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-camX,-camY);
@@ -4333,7 +4341,7 @@ function draw(time){
   if(moonSightActive(familiarState,currentRoom,combatNow()))drawMoonSight(time);
   if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawWoodEffects(time);
-  if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
+  if(enemy)drawCombatOverlayFx({ctx,width,height,renderScale:worldRenderScale,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels();
   drawHudMiniMap();
   updateActorNameplates();
@@ -9012,8 +9020,9 @@ function drawAvatarPreview(time){
   }
   const preview=$('avatarPreview'), target=preview.getContext('2d');
   target.clearRect(0,0,preview.width,preview.height);
+  target.save();target.scale(2,2);
   target.fillStyle='#1717258f';target.fillRect(20,54,16,2);
-  sprite(target,28,54,draft,{time});
+  sprite(target,28,54,draft,{time});target.restore();
 }
 function updateAvatarPreview(){
   $('avatarGender').value=draft.gender??'male';
@@ -9191,8 +9200,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   const nextView=next===wildlifeRoom?wildlifeView:next==='willowbank'?willowbankView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
   if(view!==nextView){
     view=nextView;
-    canvas.width=view.width;
-    canvas.height=view.height;
+    resizeWorldCanvas();
     setZoom(1);
   }
   if($('merchantDialog').open)$('merchantDialog').close();

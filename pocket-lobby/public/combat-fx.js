@@ -322,8 +322,8 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
   }
 }
 
-export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,health,reduced,enemy}){
-  ctx.save();ctx.setTransform(1,0,0,1,0,0);
+export function drawCombatOverlayFx({ctx,width,height,renderScale=1,time,now,events,encounter,health,reduced,enemy}){
+  ctx.save();ctx.setTransform(renderScale,0,0,renderScale,0,0);
   if(encounter&&health<=20){
     ctx.strokeStyle='#dc7a8566';ctx.lineWidth=5;ctx.strokeRect(2,2,width-4,height-4);
   }

@@ -50,11 +50,21 @@ function render(s){
   const mood=moodFor(s),t=s.time;
   // 1. Scene, scaled without the uneven pixels of a fractional nearest-neighbour stretch.
   fctx.setTransform(1,0,0,1,0,0);fctx.globalAlpha=1;fctx.globalCompositeOperation='source-over';fctx.clearRect(0,0,W,H);
-  const k=Math.max(1,Math.min(4,Math.ceil(sc-.01)));
-  if(Math.abs(sc-k)<.01){fctx.imageSmoothingEnabled=false;fctx.drawImage(game,ox,oy,dw,dh);}
-  else{
-    size(up,vw*k,vh*k);uctx.imageSmoothingEnabled=false;uctx.clearRect(0,0,up.width,up.height);uctx.drawImage(game,0,0,up.width,up.height);
-    fctx.imageSmoothingEnabled=true;fctx.imageSmoothingQuality='high';fctx.drawImage(up,ox,oy,dw,dh);
+  const displayScale=dw/game.width;
+  const integerScale=Math.round(displayScale);
+  const exact=integerScale>=1&&Math.abs(displayScale-integerScale)<.01;
+  if(displayScale<=1||exact||quality===1){
+    fctx.imageSmoothingEnabled=!exact;
+    fctx.imageSmoothingQuality='high';
+    fctx.drawImage(game,ox,oy,dw,dh);
+  }else{
+    // Enlarge the backing pixels first, so filtering only softens the edges.
+    const k=Math.min(2,Math.ceil(displayScale));
+    size(up,game.width*k,game.height*k);uctx.imageSmoothingEnabled=false;
+    uctx.clearRect(0,0,up.width,up.height);
+    uctx.drawImage(game,0,0,up.width,up.height);
+    fctx.imageSmoothingEnabled=true;fctx.imageSmoothingQuality='high';
+    fctx.drawImage(up,ox,oy,dw,dh);
   }
   // 2. Bright pass: multiplying the picture by itself keeps only lamps, windows, brass and magic.
   const bw=Math.ceil(vw/2),bh=Math.ceil(vh/2);
