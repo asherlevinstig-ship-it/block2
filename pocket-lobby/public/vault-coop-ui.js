@@ -20,11 +20,11 @@ export function initializeVaultCoop(api){
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
   render();
  }
- async function send(kind,slot){
+ async function send(kind,slot,feedback){
   if(['strike','dodge','power','taunt','sanctuary','faultbreaker'].includes(kind)&&raid?.status!=='battle')return;
-  if(busy)return;busy=true;
+  if(busy){feedback?.('Wait for the current Vault action to finish.');return;}busy=true;
   try{const result=await api.change({kind,id:raid?.id??api.state().party,slot,mechanism:kind==="mechanism"?slot:undefined,target:selected,ally:$('coopAlly').value});accept(result);if(dialog.open)dialog.close();const tile=raid?.adds.find(a=>a.id===selected)??raid?.origin;if(kind==='strike')api.strike(tile);if(kind==='power')api.cast(tile);if(kind==='dodge')api.dodge();}
-  catch(error){$('coopFeedback').textContent=error.message;$('coopJoinError').textContent=error.message;if((error.status===402||/closer|mana|Action Point/i.test(error.message))&&kind==='strike')autoAttack=false;}
+  catch(error){feedback?.(error.message);$('coopFeedback').textContent=error.message;$('coopJoinError').textContent=error.message;if((error.status===402||/closer|mana|Action Point/i.test(error.message))&&kind==='strike')autoAttack=false;}
   finally{busy=false;render();}
  }
  function render(){
@@ -88,5 +88,5 @@ export function initializeVaultCoop(api){
   if(attackFx&&time-attackFx.time<350){const age=Math.max(0,time-attackFx.time),center=attackFx.center==='target'?attackFx.target:attackFx.origin,[x,y]=point(center.x+.5,center.y+.5,1);ctx.save();ctx.globalAlpha=1-age/350;ctx.strokeStyle=raid.phase===3?'#d5b3ff':'#ffe0a4';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(x,y,12+age/5,6+age/10,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
   popups=popups.filter(p=>time-p.at<1100);for(const p of popups){const [x,y]=point(p.x+.5,p.y+.5,85+(time-p.at)/35);ctx.save();ctx.globalAlpha=Math.max(0,1-(time-p.at)/1100);if(p.perk){const [fx,fy]=point(p.x+.5,p.y+.5,20);ctx.strokeStyle=p.perk==='luck'?'#ffe49a':'#f48ca9';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(fx,fy,reduced?15:8+(time-p.at)/40,reduced?8:4+(time-p.at)/80,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=p.perk==='vampire'?'#ff9db5':'#ffddaa';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(p.text,x,y);ctx.restore();}
  }
- return {active,render,draw,view:()=>raid,lastAttack:()=>attackFx,targetPosition:()=>raid?.adds.find(a=>a.id===selected)??raid?.origin,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:id=>{selected=id;lastKey='';render();},power:slot=>send('power',slot),sanctuary:()=>send('sanctuary'),faultbreaker:()=>send('faultbreaker'),dispose:()=>clearInterval(timer)};
+ return {active,render,draw,view:()=>raid,lastAttack:()=>attackFx,targetPosition:()=>raid?.adds.find(a=>a.id===selected)??raid?.origin,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:id=>{selected=id;lastKey='';render();},power:slot=>send('power',slot),sanctuary:feedback=>send('sanctuary',undefined,feedback),faultbreaker:feedback=>send('faultbreaker',undefined,feedback),dispose:()=>clearInterval(timer)};
 }

@@ -178,5 +178,21 @@ export function initializeRobbery({doc=document,cloud,hooks}){
  $('robberyPrompt').textContent=breakingIn?'Choose a nearby player in the Grand Lobby.':'Choose a player within one tile.';
 $('giftPanel').hidden=theft;$('wantedPanel').hidden=theft;$('robberyTitle').textContent=breakingIn?'Lockbreaker':theft?'Pickpocket':'Nearby players';selected=id??null;requestId++;$('pvpPowerInfo').textContent='';renderWitnesses();$('pvpStatus').textContent='';renderPvp();quote=null;$('giftStatus').textContent='';list();$('robberyChance').textContent='—';$('robberyTarget').textContent='Choose a player';$('robberyResult').textContent='';$('robberySteal').disabled=true;if(!dialog.open){$('robberyDisclosure').open=theft;dialog.showModal();}if(id)inspect(id);}
  $('nearbyPlayers').onclick=()=>open();
- return {open,openPower(power){if(power==='lockbreaker'){open(null,{theft:true,breakIn:true});}else if(theftPowers.includes(power)){open(null,{theft:true});$('robberyTechnique').value=power;renderTechniques();}else{open();$('pvpPowerInfo').textContent=styleAbilities[power]?.description??'';}},witness(incident){if(incident?.id){witnessed.set(incident.id,incident);renderWitnesses();}}};
+ function openPower(power,feedback){
+  if(busy){feedback?.('Wait for the current player interaction to finish.');return;}
+  const theft=theftPowers.includes(power),breakIn=power==='lockbreaker',state=cloud.initial;
+  if(breakIn&&state.location!=='hub'){feedback?.('Use Lockbreaker in the Grand Lobby.');return;}
+  if(!theft&&!breakIn&&!pvpRooms.has(state.location)){feedback?.('Use '+styleAbilities[power].name+' in an outdoor PvP area.');return;}
+  if(power==='shadowPursuit'){
+   if((state.pvp?.lastOpponent?.until??0)<=Date.now()){feedback?.('Shadow Pursuit needs a recent PvP opponent.');return;}
+   open();changePvp({kind:'strike',power});return;
+  }
+  const local=hooks.local(),reach=theft||breakIn?robberyRules.reach:1;
+  const targets=hooks.peers().filter(peer=>(theft||breakIn||!peer.auto)&&Math.abs(peer.x-local.x)+Math.abs(peer.y-local.y)<=reach);
+  if(!targets.length){feedback?.('Move closer to a player to use '+styleAbilities[power].name+'.');return;}
+  open(null,{theft:theft||breakIn,breakIn});
+  if(theft){$('robberyTechnique').value=power;renderTechniques();}
+  $('robberyPrompt').textContent='Choose a nearby player for '+styleAbilities[power].name+'.';
+ }
+ return {open,openPower,witness(incident){if(incident?.id){witnessed.set(incident.id,incident);renderWitnesses();}}};
 }

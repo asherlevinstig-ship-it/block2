@@ -1501,14 +1501,14 @@ function updateDepthsDecisionVitals(){
   $('depthsDecisionAp').textContent=ap===Infinity?'Unlimited':ap;
   $('depthsDecisionApHint').textContent=ap===0?'Answer a question to earn 1 AP before travelling.':ap===1?'Entering uses your last AP. Attacks and abilities also cost AP.':'';
 }
-function startMonsterEncounter(enemy,standGround=false,ambush=false){
+function startMonsterEncounter(enemy,standGround=false,ambush=false,feedback=note){
   combatAudio.enable(combatSoundEnabled);
-  if(currentRoom!==enemy.room||unavailable())return;
+  if(currentRoom!==enemy.room||unavailable()){if(ambush)feedback('Finish your current activity before using Ambush.');return;}
   const index=depthsStageIndex(currentRoom);
   if(index>=0&&!depthsEnemyAvailable(depthsRun,currentRoom))return;
-  if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
-  if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
-  if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
+  if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){feedback('Your stats do not meet this weapon’s requirements.');return;}
+  if(!combatGear.equippedWeapon){feedback('Equip your Training Sword in Inventory before hunting.');return;}
+  if(health<=0){feedback('Return to the Tower and rest to restore your hearts.');return;}
   if(index<0&&enemy.id!=='dusktusk'&&enemy.moonbackId===undefined&&combatNow()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
   stopForCombat();resetCombatArt();
   const site=enemy.id==='dusktusk'?window.preyTrail.site:enemy.moonbackId===undefined?{x:6,y:5}:moonbackSite(currentRoom);
@@ -1529,7 +1529,7 @@ function startMonsterEncounter(enemy,standGround=false,ambush=false){
         openWatchDialog('Auto would retreat immediately',
           error.message.replace('Choose whether to fight: ','')+' Fight anyway turns off automatic retreat for this encounter. You can still press F to flee.',
           'Fight anyway',()=>startMonsterEncounter(enemy,true));
-      }else note(error.message);
+      }else feedback(error.message);
     });return;
   }
   hunting.encounter=createHunt(combatNow(),enemy.health,enemy.id);
@@ -3799,7 +3799,7 @@ function updateWorldLabels(){
   }
   if(currentRoom===waystationRoom){
     const fire=roomFurniture().find(item=>item.type==='waystationFire');
-    if(fire&&hearthBoard?.incoming.length&&atHearth(player))add('Meal invitation',...point(fire.x+.5,fire.y+.5,31),'npc',openHearth);
+    if(fire&&hearthBoard?.incoming.length&&atHearth(player))add('Meal invitation',...point(fire.x+.5,fire.y+.5,31),'npc',()=>openHearth());
     const sign=roomFurniture().find(item=>item.type==='waystationSign');
     add('Restoration sign',...point(sign.x+.5,sign.y+.5,42),'npc',()=>use(sign));
     for(const [site,project] of Object.entries(waystationSites)){
@@ -4232,7 +4232,8 @@ function pointer(e){
   const worldHit=crowdedRoom()&&hit?.item.type==='remotePlayer'
     ?hitboxes.findLast(h=>h.item.type!=='remotePlayer'&&inShape(x,y,h.shape)):null;
   const item=worldHit?.item??(crowdedRoom()&&(door||shoalHit)&&hit?.item.type==='remotePlayer'?null:hit?.item);
-  return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:item??null,shoalHit};
+  const floor=inRoom(gx,gy)?{x:gx,y:gy}:null;
+  return {tile:shadowstepTargeting?floor:door?.tile??floor,door,item:item??null,shoalHit};
 }
 let homeNavigationLearned=load('movement-learned',false);
 function note(message,duration=3000){
@@ -6217,8 +6218,8 @@ window.towerApplyHearth=state=>{
   if(health!==prior){if(health>prior)hearthFxAt=performance.now();updatePlayerStats();}
   if(previousMeals!==JSON.stringify(meals))updateInventory();
 };
-function openHearth(){
-  if(!atHearth(player)&&!(currentRoom===moonwood.trailCamp.room&&Math.abs(player.cx-moonwood.trailCamp.x)+Math.abs(player.cy-moonwood.trailCamp.y)===1)){note('Stand beside the Waystation or Moonwell trail campfire.');return;}
+function openHearth(feedback=note){
+  if(!atHearth(player)&&!(currentRoom===moonwood.trailCamp.room&&Math.abs(player.cx-moonwood.trailCamp.x)+Math.abs(player.cy-moonwood.trailCamp.y)===1)){feedback('Stand beside the Waystation or Moonwell trail campfire.');return;}
   const dialog=$('hearthDialog');$('hearthStatus').textContent='';
   if(!dialog.open)dialog.showModal();
   renderHearth();refreshHearth();
@@ -6306,13 +6307,14 @@ function ambushReady(){
   state?.styleAbilities?.learned?.includes('ambush')&&(state.styleAbilities.readyAt.ambush??0)<=combatNow()&&
   (enemy.id==='dusktusk'||combatNow()>=huntRespawnAt(hunting,enemy))&&window.ambushPosition?.({x:player.cx,y:player.cy},site);
 }
-function openAppraisalMarket(){
- if(currentRoom!=='market'){note('Visit the Trading Post and choose a listing to appraise.');return;}
+function openAppraisalMarket(feedback=note){
+ if(currentRoom!=='market'){feedback('Visit the Trading Post and choose a listing to appraise.');return;}
  window.towerOpenMarketStalls?.();
 }
-function useAmbush(){
- if(!ambushReady()){note('Approach the back of a wild boar with Ambush ready.');return;}
- startMonsterEncounter(roomEnemy(),false,true);
+function useAmbush(feedback=note){
+ if(!ambushReady()){feedback('Approach the back of a wild boar with Ambush ready.');return;}
+ if(!combatGear.equippedWeapon){feedback('Equip a weapon to use Ambush.');return;}
+ startMonsterEncounter(roomEnemy(),false,true,feedback);
 }
 let shadowstepTargeting=false,styleAbilityKey='',abilityTransition=false,abilityBursts=[];
 let shadowstepPreview={key:'',tiles:[]};
@@ -6448,9 +6450,15 @@ function openAbilityWheel(slot=null){
 document.addEventListener('keydown',event=>{
   if(event.defaultPrevented||event.repeat||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||
     !window.playerCloud?.initial||event.target.closest?.('input,textarea,select,[contenteditable]')||document.querySelector('dialog[open]'))return;
-  if(/^Digit[1-4]$/.test(event.code)){
-    const slot=$('styleAbilityBar')?.querySelector('[data-shortcut="'+event.code.slice(-1)+'"]');
-    if(slot&&!slot.disabled){event.preventDefault();slot.click();}
+  const number=/^[1-4]$/.test(event.key)?event.key:/^Numpad[1-4]$/.test(event.code)?event.code.at(-1):null;
+  if(number){
+    const state=window.playerCloud.initial,learned=state.styleAbilities?.learned??[];
+    if(!learned.length)return;
+    event.preventDefault();
+    const index=Number(number)-1;
+    const id=abilitySetShortcuts(readAbilitySets(learned),learned)[index];
+    if(id)activateHotbarAbility(id);
+    else showHotbarFeedback('Slot '+number+' is empty. Open the ability wheel with R to assign a power.');
     return;
   }
   if(!['KeyR','BracketLeft','BracketRight'].includes(event.code))return;
@@ -6463,13 +6471,57 @@ document.addEventListener('keydown',event=>{
 });
 const contextualCombatAbilities=new Set(['faultbreaker','bloodPrice','bindBeast','sanctuary']);
 let hotbarFeedbackTimer;
-function showHotbarFeedback(bar,message){
+function showHotbarFeedback(message,duration=3000){
+  const bar=$('styleAbilityBar');
+  if(bar.hidden)return;
   const feedback=bar.querySelector('.ability-hotbar-feedback')??document.createElement('div');
   feedback.className='ability-hotbar-feedback';feedback.setAttribute('role','status');
   if(!feedback.parentNode)bar.append(feedback);
   feedback.textContent=message;
   clearTimeout(hotbarFeedbackTimer);
-  hotbarFeedbackTimer=setTimeout(()=>{feedback.textContent='';},3000);
+  if(duration)hotbarFeedbackTimer=setTimeout(()=>{feedback.textContent='';},duration);
+}
+function abilityCooldownSeconds(state,id){
+  return Math.max(0,Math.ceil(((state.styleAbilities?.readyAt?.[id]??0)-combatNow())/1000));
+}
+async function activateHotbarAbility(id){
+  const state=window.playerCloud.initial,ability=window.styleAbilities[id];
+  if(!ability||!state.styleAbilities?.learned?.includes(id))return;
+  if(shadowstepTargeting){
+    setShadowstepTargeting(false);
+    if(id==='shadowstep'){showHotbarFeedback('Shadowstep cancelled.');return;}
+  }
+  const teacherMenu=$('styleAbilityBar').querySelector('.teacher-abilities[open]');
+  if(teacherMenu){
+    if(teacherMenu.contains(document.activeElement))canvas.focus({preventScroll:true});
+    teacherMenu.open=false;
+  }
+  if(routineControlled()){showHotbarFeedback('Take control from Auto Mode to use abilities.');return;}
+  if(abilityTransition||serverActionBusy){showHotbarFeedback('Wait for the current action to finish.');return;}
+  const seconds=abilityCooldownSeconds(state,id);
+  if(ability.passive){showHotbarFeedback(id==='packTactics'?'Pack Tactics triggers on a perfect dodge with your familiar equipped.':'Bloodlust triggers when you defeat a player or creature.');return;}
+  if(seconds){showHotbarFeedback(ability.name+' is recharging · '+seconds+'s left.');return;}
+  const block=hotbarAbilityBlock(id,state);
+  if(block){showHotbarFeedback(block);return;}
+  if((ability.cost??1)>0&&needsLearningPoints()){showHotbarFeedback('Out of Action Points. Answer a question to earn 1 AP.');window.towerLearning?.open();return;}
+  try{
+    if(id==='waypoint'){
+      if(unavailable()||depthsRun||!['home','hub','outside',...Object.keys(waypoints)].includes(currentRoom)){
+        showHotbarFeedback('Use Waypoint from a safe travel area outside combat.');return;
+      }
+      openStyleAbilities('waypoint');
+    }
+    else if(id==='shadowstep')aimShadowstep();
+    else if(id==='shareHearth')openHearth(showHotbarFeedback);
+    else if(id==='ambush')useAmbush(showHotbarFeedback);
+    else if(id==='appraise')openAppraisalMarket(showHotbarFeedback);
+    else if((id==='faultbreaker'||id==='sanctuary')&&vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'){
+      await window.towerVaultCoop[id](showHotbarFeedback);
+    }else if(['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id)){
+      window.towerRobbery?.openPower(id,showHotbarFeedback);
+    }else await castStyleAbility(id,{});
+  }catch(error){showHotbarFeedback(error.message);}
+  refreshStyleAbilityBar();
 }
 function hotbarAbilityBlock(id,state){
   if(!contextualCombatAbilities.has(id))return '';
@@ -6484,7 +6536,7 @@ function refreshStyleAbilityBar(){
   const config=readAbilitySets(learned);
   const shortcuts=abilitySetShortcuts(config,learned);
   const visible=teacher?learned:shortcuts.filter(Boolean);
-  const seconds=visible.map(id=>Math.max(0,Math.ceil(((state.styleAbilities.readyAt?.[id]??0)-combatNow())/1000)));
+  const seconds=visible.map(id=>abilityCooldownSeconds(state,id));
   const blocks=visible.map(id=>hotbarAbilityBlock(id,state)),outOfPoints=needsLearningPoints();
   const nextKey=JSON.stringify([teacher,learned,config.active,shortcuts,visible,offers,seconds,blocks,outOfPoints,shadowstepTargeting,routineControlled(),ambushReady(),state.styleAbilities?.patientCastReady,state.styleAbilities?.bloodlustUntil>combatNow(),state.styleAbilities?.raised?.until>combatNow()]);
   if(nextKey===styleAbilityKey)return;
@@ -6517,28 +6569,10 @@ function refreshStyleAbilityBar(){
     button.type='button';button.dataset.ability=id;
     const label=(id==='ambush'&&ambushReady()?'Ambush ready':id==='patientCast'&&state.styleAbilities?.patientCastReady?'Patient Cast armed':id==='raiseFallen'&&activeRaised(state,combatNow())?'Undead ally · '+Math.ceil((state.styleAbilities.raised.until-combatNow())/1000)+'s':ability.name)+(id==='bloodlust'?' · '+(state.styleAbilities.bloodlustUntil>combatNow()?'Active':'Passive'):seconds[index]?' · '+seconds[index]+'s':'');
     if(button.textContent!==label)button.replaceChildren(window.abilityIconElement(document,id,24),document.createTextNode(label));
-    button.disabled=(id!=='bloodlust'&&seconds[index]>0)||routineControlled();
-    button.dataset.readiness=contextual&&!button.disabled?(reason?'blocked':'ready'):'';
+    button.dataset.readiness=contextual&&!seconds[index]&&!routineControlled()?(reason?'blocked':'ready'):'';
     button.dataset.reason=contextual?reason:'';
     if(id==='shadowstep')button.setAttribute('aria-pressed',String(shadowstepTargeting));
-    button.onclick=()=>{
-      if(contextual){
-        const block=hotbarAbilityBlock(id,window.playerCloud.initial);
-        if(block){showHotbarFeedback(bar,block);return;}
-        if(needsLearningPoints()){window.towerLearning?.open();return;}
-      }
-      if(controls){controls.open=false;controls.querySelector('summary').focus();}
-      if(id==='waypoint')openStyleAbilities('waypoint');
-      else if(id==='shadowstep')aimShadowstep();
-      else if(id==='shareHearth')openHearth();
-      else if(id==='ambush')useAmbush();
-      else if(id==='appraise')openAppraisalMarket();
-      else if(id==='faultbreaker'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.faultbreaker();else castStyleAbility(id,{});}
-      else if(id==='sanctuary'){if(vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle')window.towerVaultCoop.sanctuary();else castStyleAbility(id,{});}
-      else if(id==='bloodlust'||id==='packTactics')openStyleAbilities();
-      else if(['deathmark','siphon','shadowPursuit','lightFingers','cutpurse','lockbreaker'].includes(id))window.towerRobbery?.openPower(id);
-      else castStyleAbility(id,{});
-    };
+    button.onclick=()=>activateHotbarAbility(id);
     button.dataset.cooldown=seconds[index]||'';
     actions.set(id,button);
     if(choices&&!button.parentNode)choices.append(button);
@@ -6559,7 +6593,6 @@ function refreshStyleAbilityBar(){
       const detail=original?.dataset.reason||cue;
       button.setAttribute('aria-label',key+' · '+(original?.textContent??'Assign ability')+(detail?' · '+detail:''));
       button.title=key+' · '+(original?original.textContent+' — '+original.title:'Assign an ability');
-      button.disabled=original?.disabled??false;
       button.dataset.readiness=readiness??'';
       button.classList.toggle('empty-slot',!original);
       if(original?.hasAttribute('aria-pressed'))button.setAttribute('aria-pressed',original.getAttribute('aria-pressed'));
@@ -6574,7 +6607,7 @@ function refreshStyleAbilityBar(){
       name.textContent=original?window.styleAbilities[shortcuts[index]].name:'Empty';
       name.setAttribute('aria-hidden','true');
       button.replaceChildren(face,name);
-      if(original?.disabled&&original.dataset.cooldown){
+      if(original?.dataset.cooldown){
         const cooldown=document.createElement('span');cooldown.className='ability-slot-cooldown';
         cooldown.textContent=original.dataset.cooldown+'s';face.append(cooldown);
       }else if(cue){
@@ -6627,20 +6660,26 @@ function openStyleAbilities(mode){
   }
   if(!dialog.open)dialog.showModal();
 }
-function aimShadowstep(){
-  if(abilityTransition||serverActionBusy||editing)return;
-  shadowstepTargeting=!shadowstepTargeting;
-  if(shadowstepTargeting){
-    shadowstepPreview.key='';
-    if(!shadowstepTargets().length){shadowstepTargeting=false;note('No reachable Shadowstep tiles here.');return;}
-    route=[];step=null;interaction=null;target=null;
-    player.x=player.cx;player.y=player.cy;
-  }
-  note(shadowstepTargeting?'Shadowstep · Select a floor tile within four steps. Esc cancels.':'Shadowstep cancelled.');
+function setShadowstepTargeting(active){
+  shadowstepTargeting=active;
+  canvas.style.cursor=active?'crosshair':'';
+  if(!active)showHotbarFeedback('');
   refreshStyleAbilityBar();
 }
+function aimShadowstep(){
+  if(editing||vaultCoopState||hunting.encounter&&hunting.encounter.arenaVersion!==1){
+    showHotbarFeedback('Use Shadowstep while exploring or in a fight with arena movement.');return;
+  }
+  shadowstepPreview.key='';
+  if(!shadowstepTargets().length){showHotbarFeedback('No reachable Shadowstep tiles here.');return;}
+  route=[];step=null;interaction=null;target=null;
+  player.x=player.cx;player.y=player.cy;
+  setShadowstepTargeting(true);
+  canvas.focus({preventScroll:true});
+  showHotbarFeedback('Shadowstep · Click or tap a glowing purple floor tile. Esc cancels.',0);
+}
 async function castStyleAbility(id,body){
-  if(abilityTransition||serverActionBusy)return;
+  if(abilityTransition||serverActionBusy){showHotbarFeedback('Wait for the current action to finish.');return;}
   const dialog=$('styleAbilityDialog'),room=currentRoom,from={x:player.cx,y:player.cy};
   try{
     const {state}=await serverGameplay('abilityCast',{id,...body});
@@ -6700,7 +6739,7 @@ async function castStyleAbility(id,body){
     note(window.styleAbilities[id].name+' · 1 AP');
   }catch(error){
     if(dialog.open)$('styleAbilityStatus').textContent=error.message;
-    else note(error.message);
+    else showHotbarFeedback(error.message);
   }
   refreshStyleAbilityBar();
 }
@@ -8640,7 +8679,7 @@ $('resetRoom').onclick=()=>{
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
-  canvas.style.cursor=p.item||p.door||p.shoalHit?'pointer':'crosshair';
+  canvas.style.cursor=shadowstepTargeting?(shadowstepTargets().some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):p.item||p.door||p.shoalHit?'pointer':'crosshair';
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
@@ -8648,10 +8687,10 @@ canvas.addEventListener('click',e=>{
   const {tile,item,door,shoalHit}=pointer(e);
   if(shadowstepTargeting){
     if(!tile||!shadowstepTargets().some(target=>target.x===tile.x&&target.y===tile.y)){
-      note('Choose a highlighted tile. Esc cancels.');
+      showHotbarFeedback('Choose a glowing purple tile within reach. Esc cancels.',0);
       return;
     }
-    shadowstepTargeting=false;castStyleAbility('shadowstep',{tile:{x:tile.x,y:tile.y}});
+    setShadowstepTargeting(false);castStyleAbility('shadowstep',{tile:{x:tile.x,y:tile.y}});
     return;
   }
   if(!editing&&item?.type==='remotePlayer'){window.towerRobbery?.open(item.peer.id);return;}
@@ -8668,7 +8707,7 @@ function waveHello(){
   note(avatar.name+' waves hello!');
 }
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&shadowstepTargeting){shadowstepTargeting=false;refreshStyleAbilityBar();}
+  if(e.key==='Escape'&&shadowstepTargeting){setShadowstepTargeting(false);showHotbarFeedback('Shadowstep cancelled.');}
 });
 canvas.addEventListener('keydown',e=>{
   if(e.code==='Space'&&woodSession){e.preventDefault();return;}
@@ -8685,6 +8724,7 @@ canvas.addEventListener('keydown',e=>{
   }
   if(!editing&&delta){
     e.preventDefault();
+    if(shadowstepTargeting)return;
     const p=startPosition();walkTo({x:p.x+delta[0],y:p.y+delta[1]});
   }
 });
@@ -8900,7 +8940,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   }
   if(currentRoom!==next)willowbankFlock(0,null);
   if(next!==currentRoom&&$('venueLicenceDialog')?.open)$('venueLicenceDialog').close();
-  shadowstepTargeting=false;
+  if(shadowstepTargeting)setShadowstepTargeting(false);
   if(next!==currentRoom&&$('hearthDialog')?.open)$('hearthDialog').close();
   currentRoom=next;refreshShopLicence();selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);

@@ -26,8 +26,8 @@ export function drawShadowstepTargets(ctx,point,tiles,hover,time,reduced){
   const active=hover?.x===x&&hover?.y===y;
   const corners=[point(x,y,.3),point(x+1,y,.3),point(x+1,y+1,.3),point(x,y+1,.3)];
   ctx.beginPath();ctx.moveTo(...corners[0]);for(const corner of corners.slice(1))ctx.lineTo(...corner);ctx.closePath();
-  ctx.fillStyle=active?'#ae72ff69':'#9363ea29';ctx.fill();
-  ctx.strokeStyle=active?'#f4dfff':'#b187ec99';ctx.lineWidth=active?1.4:.65;ctx.stroke();
+  ctx.fillStyle=active?'#ae72ff99':'#9363ea55';ctx.fill();
+  ctx.strokeStyle=active?'#f4dfff':'#c29cffd9';ctx.lineWidth=active?1.6:1;ctx.stroke();
   if(active){
    const [px,py]=point(x+.5,y+.5,2);
    const bob=reduced?0:Math.sin(time/120)*2;
