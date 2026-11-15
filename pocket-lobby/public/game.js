@@ -281,9 +281,11 @@ function drawWoodEffects(time){
 }
 
 function timberCanopyOpacity(item){
-  if(!woodlandReadabilityRooms.has(currentRoom))return 1;
+  const prey=dusktuskVisible()?window.preyTrail.site:null;
+  if(!woodlandReadabilityRooms.has(currentRoom)&&!prey)return 1;
   const [x,y]=point(item.x+.5,item.y+.5);
   const covers=([px,py])=>Math.abs(px-x)<30&&py<y&&py>y-(item.type==='watchPine'?66:55);
+  if(prey&&covers(point(prey.x+.5,prey.y+.5,12)))return .22;
   const overlapsActor=actor=>{
     const [px,py]=point((actor.rx??actor.x)+.5,(actor.ry??actor.y)+.5);
     return covers([px,py-20]);
@@ -3044,10 +3046,6 @@ function dimensions(item) {
   if(item.type==='fountain')return [2,2];
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
-function wildBoarArtHeight(item){
-  if(item.type!=='wildboar'||item.trackedPrey)return null;
-  return item.room==='clearing'?34:item.room==='brokenRoad'?36:null;
-}
 function object(item,highlight=false,time=0,weather=null) {
   if(Object.hasOwn(keeperSites,item.type)){drawKeeperClue(item,worldDrawing);return;}
   if(['waystationFire','waystationSupplies','waystationAwning','waystationSign'].includes(item.type)){
@@ -3157,7 +3155,7 @@ function object(item,highlight=false,time=0,weather=null) {
           const summoning=item.add&&combatNow()<item.add.spawnAt;
           const key=item.addId??'leader',selected=player.inCombat&&hunting.encounter?.combatTarget===key;
           renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':type==='moonbackStag'&&!player.inCombat?'Rare sighting':'',
-            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(wildBoarArtHeight(item)??moonwood.heights[type]??34)+8),
+            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.boarArtHeight(item)??moonwood.heights[type]??34)+8),
             action:summoning||player.inCombat&&hunting.encounter?.addsVersion!==1?null:()=>use(item)});
         }
       }
@@ -4289,7 +4287,7 @@ function draw(time){
     if(travelers.delivery)items.push({type:'waystationDelivery',x:8,y:5});
   }
   if(enemy&&victory){
-    const monster=trackedVictory?{...window.preyTrail.site,type:'wildboar'}:stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
+    const monster=trackedVictory?{...window.preyTrail.site,type:'wildboar',trackedPrey:true}:stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
     if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
   }
   if(ghost)items.push(ghost);
@@ -4420,7 +4418,7 @@ function draw(time){
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{dungeonRewardChest:36,armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
-    const height=(wildBoarArtHeight(item)??(isTimberTree(item)&&timberCanopyOpacity(item)<1?20:['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h));
+    const height=(moonwood.boarArtHeight(item)??(isTimberTree(item)&&timberCanopyOpacity(item)<1?20:['millRaidMob','millRaidMerchant'].includes(item.type)?55:item.type==='millRaidBarricade'?22:isTimberTree(item)&&treeState(item).regrowsAt?6:h));
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
   }

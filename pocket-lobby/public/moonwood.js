@@ -1,4 +1,4 @@
-import {drawWildBoar} from './wild-boar-art.js';
+import {drawWildBoar,boarArtHeight} from './wild-boar-art.js';
 import {drawMapProp} from './map-prop-art.js';
 import {ashenAreas,ashenPropHeights,drawAshenGround,drawAshenProp,drawCinderback} from './ashen-march.js';
 import {overlookRoom,overlookArea} from './lantern-keepers.js';
@@ -264,7 +264,6 @@ export const moonwood=(()=>{
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,canopyOpacity=1,portalOpen=false}){
     if(Object.hasOwn(ashenPropHeights,item.type)){drawAshenProp(item,time,{point,polygon,rect,surface,block,reduced});return;}
-    if(item.type==='wildboar'&&item.room==='clearing'&&!item.trackedPrey){drawWildBoar(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     if(item.type==='wildboar'&&item.room==='brokenRoad'){drawCinderback(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     if(item.type==='ashenLatch'){
       const [x,y]=point(item.x+.5,item.y+.5);
@@ -541,29 +540,7 @@ export const moonwood=(()=>{
         rect(px-8,py-12,5,1,'#91a5a0');
       }
     }else if(type==='wildboar'){
-      const untilStrike=combat?combat.nextBoarAt-Date.now():Infinity;
-      if(untilStrike>=0&&untilStrike<450)surface(x-.08,y-.08,1.16,1.16,.4,'#f2a36b66','#ffc18b');
-      const bob=reduced||pose.defeated?0:Math.sin(time/380)*.65;
-      const hide=pose.hit?['#d2a08b','#785464','#ac7c7c']:['#a78a77','#594451','#7a5963'];
-      const leg=pose.defeated?0:!reduced&&pose.windup>.3?Math.round(Math.sin(time/65)):0;
-      for(const [u,v] of [[.18,.24],[.65,.24],[.18,.66],[.65,.66]]){
-        part(u,v,.14,.15,0,6+(u>.5?leg:-leg),['#795d58','#3d3543','#56434b']);
-        part(u-.015,v-.015,.17,.18,0,2,['#49404a','#2b2938','#3b3141']);
-      }
-      part(.09,.16,.69,.66,5+bob,10,hide);
-      part(.19,.2,.48,.45,15+bob,3,[hide[0],'#6d4c58','#91676a']);
-      part(.57,.5,.37,.38,6+bob,10,hide);
-      part(.8,.69,.25,.24,6+bob,5,['#bf9b87','#7e5f66','#a87b79']);
-      rect(px+11,py-4-bob,2,1,'#654352');rect(px+14,py-3-bob,2,1,'#654352');
-      const ear=!reduced&&!pose.defeated&&time%2900>2500?1:0;
-      rect(px+1,py-18-bob-ear,4,5,'#503642');rect(px+2,py-17-bob-ear,2,3,'#bb827e');
-      rect(px+7,py-16-bob+ear,3,4,'#503642');rect(px+8,py-15-bob+ear,1,2,'#bb827e');
-      if(pose.defeated){rect(px+9,py-10-bob,3,1,'#3c303f');}
-      else{rect(px+9,py-12-bob,3,3,'#352b3b');rect(px+10,py-12-bob,1,1,pose.windup>.5?'#ffac7e':'#f9d1a0');}
-      rect(px+13,py-4-bob,2,5,'#f4d8b3');rect(px+12,py-6-bob,2,3,'#fff0c7');
-      rect(px+6,py-3-bob,2,4,'#e8cba9');rect(px+5,py-4-bob,2,2,'#fff0c7');
-      for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
-      rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
+      drawWildBoar(item,time,{point,polygon,rect,surface,reduced,pose});
     }else if(type==='wildtree'||type==='timberTree'){
       drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity);
     }else if(type==='wildrock'){
@@ -655,5 +632,5 @@ export const moonwood=(()=>{
       }
     }
   }
-  return {view,areas,doors,heights,drawMapProp,drawDungeonSideAtmosphere,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
+  return {view,areas,doors,heights,boarArtHeight,drawMapProp,drawDungeonSideAtmosphere,layouts,has,blocked,open,drawGround,drawProp,drawWater,trailCamp,trailCampPhase};
 })();
