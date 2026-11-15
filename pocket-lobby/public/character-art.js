@@ -395,6 +395,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
       pixels[target]=color?color[0]:r;pixels[target+1]=color?color[1]:g;pixels[target+2]=color?color[2]:b;pixels[target+3]=atlas.data[source+3];
     }
     shapeCharacterIdentity(pixels,sourcePixels,width,height,appearance,selection);
+    tailorTowerFrame(pixels,sourcePixels,width,height,appearance,selection,vest);
     shapeTowerGarment(pixels,sourcePixels,width,height,appearance,selection,vest);
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
     if(selection.state==='reading')readingTowerFrame(pixels,width,height,appearance,selection);
