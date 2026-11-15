@@ -406,6 +406,12 @@ export function shapeTowerGarment(pixels,source,width,height,appearance,selectio
  const [dark,mid,light]=JACKETS[style]??JACKETS[0];
  const patch=(x,y,color,overLegs=false)=>{x=Math.round(x);y=Math.round(y);if(x<0||x>=width||y<0||y>=height)return;const i=at(x,y),g=source[i]===250?source[i+1]:0;if(source[i+3]&&g!==1&&!(overLegs&&g===2))return;pixels.set([...rgb(color),255],i);};
  if(!armour||armour==='prospectorsGloves'){
+  if((style??0)===0){
+   for(const [x,y] of body){
+    if(y>top+8&&y<waist-2&&Math.abs(x-cx)>8&&source[at(x,y+1)+1]!==1)patch(x,y,light);
+    if(back&&y===waist-4&&Math.abs(x-cx)<9)patch(x,y,dark);
+   }
+  }
   if(style===3||style===4){
    const robe=style===4,hem=waist+(robe?18:10);
    for(let y=waist-5;y<hem;y++){
@@ -516,13 +522,70 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
       const band=(y-top)%6;
       put(x,y,plate?(Math.abs(x-cx)<2?'#bed0d8':band===0?'#d0dbe1':x<cx?'#617892':'#91a9bc'):((x+y)%9<2?'#c4a577':x<cx?'#674b3d':'#997453'));
     }
-    if(plate){
-      // Broad pauldrons are short and anchored to the upper chest.
-      for(const side of [-1,1])for(let dy=0;dy<6;dy++)for(let dx=0;dx<7-dy/2;dx++){
-        const x=Math.round((side<0?left:right)+side*dx),y=top+dy;
-        if(x<0||x>=width||y>=height)continue;const i=at(x,y);if(source[i+3]&&source[i]!==250&&!metal.has(source[i]+','+source[i+1]+','+source[i+2]))continue;
-        put(x,y,dy===0?'#d7e2e6':dx>4?'#40536f':'#91a9bc');
+    const back=selection.row>=2,scoutSide=back?1:-1;
+    const paintGear=(x,y,color,overLegs=false)=>{
+      if(x<0||x>=width||y<0||y>=height)return;
+      const i=at(x,y),group=source[i]===250?source[i+1]:0;
+      if(source[i+3]&&group!==1&&!(overLegs&&group===2)&&!metal.has(source[i]+','+source[i+1]+','+source[i+2]))return;
+      if(!source[i+3]&&pixels[i+3]&&hood)return;
+      put(x,y,color);
+    };
+    // Keep one shoulder free on the leather set. Plate has stepped metal rims on both.
+    for(const side of [-1,1]){
+      if(leather&&side!==scoutSide)continue;
+      const edge=side<0?left:right,rows=plate?11:9,extension=plate?13:12;
+      const tones=plate?['#2d3b51','#d6e2eb','#849eb4','#586e8c']:['#3a3033','#d5b28a','#a57d55','#785440'];
+      for(let dy=0;dy<rows;dy++){
+        const taper=plate?Math.floor(Math.max(0,dy-5)*.7):Math.max(0,dy-3);
+        const reach=extension-Math.max(0,2-dy)-taper;
+        for(let dx=-3;dx<reach;dx++){
+          const rim=dx===reach-1||dy===rows-1;
+          paintGear(edge+side*dx,top+2+dy+Math.floor(dx/6),tones[rim?0:dy<2?1:dy<6?2:3]);
+        }
       }
+    }
+
+    if(legs.length){
+      const waist=Math.min(...legs.map(p=>p[1])),hemLength=plate?12:8;
+      for(let dy=-2;dy<=hemLength;dy++){
+        const half=plate?13-Math.floor(Math.max(0,dy-4)/3):10;
+        const far=leather&&dy>2?half+Math.min(4,dy-2):half;
+        for(let dx=-far;dx<=far;dx++){
+          if(leather&&(dx*scoutSide<-half||dy>3&&dx*scoutSide<2))continue;
+          if(plate&&dy>8&&Math.abs(dx)<2)continue;
+          const edge=Math.abs(dx)>far-2;
+          const color=plate
+            ?edge?(dy<3?'#a9bed0':dy%4===2?'#748aa2':'#445878'):dy>=11?'#c9a871':dx<0?'#243753':'#344c70'
+            :edge?'#4b3d35':dy===8?'#c2a074':'#796349';
+          paintGear(cx+dx,waist+dy,color,true);
+        }
+      }
+      if(leather){
+        for(let y=top+3;y<waist-1;y++){
+          const x=cx+scoutSide*(6-Math.floor((y-top)*.66));
+          for(let dx=0;dx<3;dx++)paintGear(x+dx,y,dx===0?'#d2b58a':'#4c4037');
+        }
+      }
+      // Guard the boot cuffs and lower legs using the mask of each moving foot.
+      for(let x=0;x<width;x++){
+        let cuff=waist;
+        while(cuff<height&&(source[at(x,cuff)]!==250||source[at(x,cuff)+1]!==3))cuff++;
+        if(cuff===height)continue;
+        const greave=plate?6:3;
+        for(let dy=-greave;dy<=2;dy++){
+          const y=cuff+dy,i=at(x,y);
+          if(y<0||y>=height||source[i]!==250||source[i+1]!== (dy<0?2:3))continue;
+          put(x,y,plate?(dy===-greave?'#c2d2dd':dy===0?'#415572':'#7890aa'):
+            dy===-greave?'#c7a67c':'#685141');
+        }
+      }
+    }
+    if(plate&&back){
+      for(const [dx,dy] of [[-2,0],[0,0],[2,0],[-2,1],[-1,1],[0,1],[1,1],[2,1],[-1,2],[0,2],[1,2],[0,3]]){
+        paintGear(cx+dx,top+7+dy,'#e1c48b');
+      }
+    }
+    if(plate){
       if(selection.row<2)for(let y=top+5;y<Math.min(bottom,top+13);y++)for(let x=cx-2;x<=cx+2;x++)put(x,y,y<top+8?'#d8ba77':'#324b70');
     }
   }
