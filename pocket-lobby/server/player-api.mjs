@@ -535,7 +535,7 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);
-        state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}});
+        state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair,gender:state.avatar.gender},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required',actionPoints:{value:0,at:Date.now(),active:false}});
         {
           const [saved]=await env.TOWER_DB.batch([
             env.TOWER_DB.prepare('UPDATE tower_players SET state_json=?,revision=revision+1,last_request=?,updated_at=? WHERE player_id=? AND revision=? RETURNING *').bind(JSON.stringify(state),body.operation,Date.now(),id,row.revision),

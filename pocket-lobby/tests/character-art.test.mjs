@@ -1,8 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {uniqueTowerOutfit,tailorTowerFrame,readingTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {shapeCharacterIdentity,uniqueTowerOutfit,tailorTowerFrame,readingTowerFrame,meditateTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {normalizeState} from '../server/player-state.mjs';
 const root=new URL('../public/art/',import.meta.url),meta=JSON.parse(fs.readFileSync(new URL('tower-adventurer.json',root),'utf8'));
+
+test('female character choice survives saves and older characters retain their appearance',()=>{
+ const old=normalizeState({});
+ assert.equal(old.avatar.gender,undefined);
+ const female=normalizeState({...old,avatar:{...old.avatar,gender:'female'}});
+ assert.equal(normalizeState(JSON.parse(JSON.stringify(female))).avatar.gender,'female');
+ assert.throws(()=>normalizeState({...old,avatar:{...old.avatar,gender:'invalid'}}),/gender/);
+});
+
+test('female hair follows the source head and leaves legacy frames untouched',()=>{
+ const source=new Uint8ClampedArray(80*100*4),at=(x,y)=>(y*80+x)*4;
+ for(let y=12;y<20;y++)for(let x=30;x<49;x++)source.set([250,4,1,255],at(x,y));
+ const male=source.slice(),female=source.slice();
+ shapeCharacterIdentity(male,source,80,100,{}, {row:0});
+ shapeCharacterIdentity(female,source,80,100,{gender:'female',hair:2},{row:0});
+ assert.deepEqual(male,source);
+ assert.equal(female[at(30,24)+3],255);
+ assert.equal(female[at(40,24)+3],0);
+});
 
 test('meditation uses closed eyes in every facing, stable breathing frames and a still reduced-motion pose',()=>{
  for(const [direction,back] of [['left',false],['right',false],['right',true],['left',true]]){

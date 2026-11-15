@@ -5,6 +5,35 @@ const HAIR=[['#463025','#704832','#b27d51'],['#242735','#383848','#696b7e'],['#6
 const rgb=hex=>[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
 const PALETTES=[null,JACKETS,TROUSERS,BOOTS,HAIR].map(group=>group?.map(ramp=>ramp.map(rgb)));
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
+export function shapeCharacterIdentity(pixels,source,width,height,appearance,selection){
+  if(appearance.gender!=='female')return;
+  const hair=[];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=(y*width+x)*4;
+    if(source[i]===250&&source[i+1]===4&&source[i+3])hair.push({x,y});
+  }
+  if(!hair.length)return;
+  const left=Math.min(...hair.map(p=>p.x)),right=Math.max(...hair.map(p=>p.x));
+  const top=Math.min(...hair.map(p=>p.y)),bottom=Math.max(...hair.map(p=>p.y));
+  const ramp=HAIR[appearance.hair??0]??HAIR[0],back=selection.row>=2;
+  const put=(x,y,color)=>{if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],(y*width+x)*4);};
+  // Anchor the longer hair to the authored head in every animation frame.
+  for(let y=top+7;y<=bottom+9;y++){
+    const taper=Math.max(0,Math.floor((y-bottom-3)/3));
+    for(const side of [-1,1]){
+      const edge=side<0?left:right;
+      for(let n=0;n<4-taper;n++){
+        const x=edge+(side<0?n:-n),i=(y*width+x)*4;
+        if(!back&&pixels[i+3]&&x>left+2&&x<right-2)continue;
+        put(x,y,n===0?'#292433':ramp[n===2?2:0]);
+      }
+    }
+  }
+  // The back view has a continuous fall of hair across the nape.
+  if(back)for(let y=bottom-2;y<=bottom+5;y++)for(let x=left+2;x<=right-2;x++){
+    put(x,y,(x-left)%5===0?ramp[2]:ramp[1]);
+  }
+}
 export function towerCharacterPose(meta,options={}){
   const {direction='right',back=false,time=0,cycle=0,seated=false,wave=null,fishing=false,fishingAge=0,weapon=false,weaponTier=null,pose={},reduced=false}=options;
   const row=back?(direction==='right'?2:3):(direction==='right'?1:0);
@@ -353,7 +382,7 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
   const meta=metadata,cache=new Map(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
-    const key=[selection.state,selection.frame,selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,vest??false].join(':');
+    const key=[selection.state,selection.frame,selection.row,selection.column,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0,appearance.gender??"male",vest??false].join(':');
     if(cache.has(key)){const image=cache.get(key);cache.delete(key);cache.set(key,image);return image;}
     const atlas=vest&&vest!=='prospectorsGloves'?atlases.armour:atlases.normal,pixels=new Uint8ClampedArray(width*height*4),sourcePixels=new Uint8ClampedArray(width*height*4);
     const indices=[0,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0];
@@ -365,7 +394,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
       const color=r===250&&g>=1&&g<=4?ramps[g][Math.min(2,b)]:null;
       pixels[target]=color?color[0]:r;pixels[target+1]=color?color[1]:g;pixels[target+2]=color?color[2]:b;pixels[target+3]=atlas.data[source+3];
     }
-    tailorTowerFrame(pixels,sourcePixels,width,height,appearance,selection,vest);
+    shapeCharacterIdentity(pixels,sourcePixels,width,height,appearance,selection);
     shapeTowerGarment(pixels,sourcePixels,width,height,appearance,selection,vest);
     uniqueTowerOutfit(pixels,sourcePixels,width,height,appearance,selection,vest);
     if(selection.state==='reading')readingTowerFrame(pixels,width,height,appearance,selection);
