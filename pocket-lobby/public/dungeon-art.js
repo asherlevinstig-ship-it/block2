@@ -154,7 +154,7 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
  if(type==='depthsSkitter'||type==='depthsSeer'){
   drawDungeonCreature(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat});
  }else{
-  drawDungeonGuardian(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat});
+  drawDungeonGuardian(type,time,{ctx,px,py,polygon,rect,reduced,pose,combat,room:item.room});
  }
 }
 const warningTiles=new Map();

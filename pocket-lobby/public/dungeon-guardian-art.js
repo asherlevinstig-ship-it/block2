@@ -237,12 +237,58 @@ function vaultGuardian(draw,cue,hit,phase) {
   }
 }
 
+function drawIronhide(draw,cue,pose){
+  const {poly,pixel,line,limb}=draw;
+  const ink='#2d2330',iron=pose.hit?'#b39783':'#776469',shade='#463742',brass='#d2aa6c';
+  if(pose.defeated){
+    poly([[-31,-2],[-26,-13],[-11,-15],[-4,-8],[6,-12],[22,-11],[30,-2],[23,3],[-24,3]],shade,ink);
+    line([[-24,-9],[-14,-11],[-8,-7]],brass,2);
+    pixel(9,-8,8,3,iron);return;
+  }
+  const swing=cue.gesture==='stomp'||cue.gesture==='overhead';
+  const strike=cue.exposed?0:swing?cue.strength:0;
+  const left=moveHand([-27,-21],[-30,-10],strike);
+  const right=moveHand([27,-22],cue.release?[37,-9]:[29,-70],strike);
+  const gap=cue.exposed?8:0;
+  for(const direction of [-1,1]){
+    const part=(points,fill,edge)=>poly(points.map(([x,y])=>[x*direction,y]),fill,edge);
+    part([[8,-24],[18,-22],[21,-6],[27,-4],[26,2],[7,2],[6,-4]],shade,ink);
+    part([[9,-19],[18,-17],[20,-6],[8,-7]],iron,ink);
+    part([[8,-4],[23,-4],[26,-2],[8,-2]],brass);
+  }
+  poly([[-19,-61],[16,-61],[23,-54],[21,-23],[11,-16],[-13,-16],[-22,-24],[-24,-53]],shade,ink);
+  if(gap){
+    poly([[0,-53],[10,-42],[5,-23],[-4,-20],[-10,-38]],'#b56749',ink);
+    poly([[0,-49],[6,-40],[0,-24],[-5,-37]],'#ffd793','#ff9e62');
+    line([[0,-46],[-2,-37],[1,-28]],'#fff4c7',2);
+  }
+  for(const direction of [-1,1]){
+    const plate=(points,fill,edge)=>poly(points.map(([x,y])=>[direction*(x+gap),y]),fill,edge);
+    plate([[1,-55],[16,-55],[23,-48],[21,-27],[14,-21],[1,-23]],iron,ink);
+    plate([[1,-55],[16,-55],[23,-48],[3,-48]],brass,ink);
+    plate([[2,-46],[5,-46],[5,-26],[2,-24]],brass);
+    for(const y of [-43,-31])pixel(direction*(15+gap)-1,y,3,3,'#e6c694');
+  }
+  poly([[-12,-70],[10,-70],[15,-64],[12,-54],[-11,-54],[-15,-62]],iron,ink);
+  line([[-11,-67],[9,-67],[13,-63]],brass,2);
+  pixel(-8,-63,16,5,ink);
+  pixel(-5,-62,10,2,cue.exposed?'#fff0ae':'#d7a36b');
+  for(const [direction,hand] of [[-1,left],[1,right]]){
+    limb([direction*19,-48],hand,8,shade,ink);
+    const [x,y]=hand;
+    poly([[x-11,y-10],[x+8,y-10],[x+13,y-5],[x+12,y+8],[x-9,y+9],[x-13,y+4]],iron,ink);
+    line([[x-10,y-7],[x+7,y-7],[x+10,y-4]],brass,2);
+    for(const dx of [-6,0,6])pixel(x+dx,y+4,2,3,shade);
+  }
+}
+
 export function drawDungeonGuardian(type,time,options) {
   const {pose,reduced,combat}=options;
   const cue=guardianCue(combat,pose,time,reduced);
   const lean=reduced?0:pose.guardBroken?-7:pose.braced?3:cue.gesture==='rush'?cue.strength*(cue.release?12:7):0;
   const draw=drawing(options,pose.guardBroken?4:pose.braced?1:cue.recovery&&!cue.gesture&&!cue.staggered?2:0,lean);
-  if(type==='depthsWarden'){
+  if(type==='depthsWarden'&&options.room==='depthsTreasury')drawIronhide(draw,cue,pose);
+  else if(type==='depthsWarden'){
     if(pose.defeated){
       // The core goes dark and the shell breaks into a recognisable stone heap.
       const spread=reduced?5:5+(pose.death??0)*13;
