@@ -3415,7 +3415,7 @@ function object(item,highlight=false,time=0,weather=null) {
     const [px,py]=point(x+.5,y+.5,45);
     const glow=ctx.createRadialGradient(px,py,1,px,py,28);
     glow.addColorStop(0,'#ffce8c72');glow.addColorStop(1,'#ffce8c00');
-    ctx.fillStyle=glow;ctx.fillRect(px-28,py-28,56,56);
+    ctx.save();ctx.globalAlpha*=1-.85*(frameHour?.light??0);ctx.fillStyle=glow;ctx.fillRect(px-28,py-28,56,56);ctx.restore();
     part(.25,.25,.5,.5,0,3,'black');
     part(.41,.41,.18,.18,3,9,'trim');
     part(.453,.453,.095,.095,12,29,'black');
@@ -3439,6 +3439,15 @@ function object(item,highlight=false,time=0,weather=null) {
     const [px,py]=point(x+1,y+1,23);
     rect(px-1,py-13,2,14,'#c8e2df');
     rect(px,py-16,1,11,'#edf4de');
+    // At night the basin holds the moon: a pale disc and broken ripples of its light.
+    const moon=frameHour?Math.max(0,1-frameHour.light*2.2):0;
+    if(moon>0){
+      const [mx,my]=point(x+.62,y+1.28,11.8),wobble=reducedMotion.matches?0:Math.round(Math.sin(time/700));
+      ctx.save();ctx.globalAlpha*=moon;
+      rect(mx-3,my-1,6,2,'#f4f8ff');rect(mx-2,my-2,4,4,'#fdfeff');
+      for(let i=0;i<3;i++)rect(mx-5+i*4+wobble,my+3+i,3,1,'#cfe2ff');
+      ctx.restore();
+    }
     const ripple=reducedMotion.matches?0:Math.floor(time/125)%7;
     for(const side of [-1,1]){
       for(let i=0;i<3;i++)rect(px+side*(3+i*3),py-10+i*4+(ripple+i)%3,2,2,'#a9d4db');
@@ -3717,7 +3726,7 @@ function moonfinPoolOpen(){
 function drawMoonwoodDetails(time){
   if(Object.hasOwn(ashenAreas,currentRoom))drawAshenDrift(currentRoom,time,{ctx,point,reduced:reducedMotion.matches});
   moonwood.drawDungeonSideAtmosphere(currentRoom,time,{ctx,point,reduced:reducedMotion.matches});
-  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,drainAt:floodDrainAt,progress:adventure});
+  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,drainAt:floodDrainAt,progress:adventure,hour:frameHour});
   if(currentRoom==='depthsVault'){
     const mechanism=currentVaultMechanism();
     for(const {x,y} of vaultSpillwayTiles){
@@ -4299,13 +4308,60 @@ function drawCombatSelection(){
   }
   ctx.restore();
 }
+// By day the Tower's windows are plain glass reflecting the sky; the baked lamplight shows through again as the light goes.
+function drawCourtyardHours(hour){
+  if(hour.light<=.02)return;
+  ctx.save();ctx.globalAlpha*=Math.min(1,hour.light*1.15);
+  for(const a of [.95,2.42,7.75,9.28]){
+    wall('left',a+.14,a+.96,27,53,'#52708c');
+    wall('left',a+.14,a+.96,39,53,'#7fa4bd');
+    wall('left',a+.18,a+.5,45,51,'#c4dde8');
+    wall('left',a+.49,a+.57,27,53,'#99677a');
+    wall('left',a+.12,a+.98,37,39,'#96687a');
+  }
+  for(const u of [4.26,6.69])wall('left',u+.025,u+.13,32,37,'#8f8a86');
+  ctx.restore();
+}
+// The Entry Room hearth is painted into the wall; this is its moving flame, a rising spark and its breathing light.
+function drawHearthFire(time){
+  const still=reducedMotion.matches,p=(u,z)=>point(u,0,z);
+  const lick=still?0:Math.sin(time/120)*1.6+Math.sin(time/53)*.9,sway=still?0:Math.sin(time/90+2)*1.4;
+  const [gx,gy]=p(8.8,12);
+  ctx.save();ctx.globalAlpha*=.5+(still?0:.25*Math.sin(time/160)+.12*Math.sin(time/61));lobbyLight(gx,gy,44,'#ffb86a40');ctx.restore();
+  wall('right',8.36,9.24,2,24,'#12161f');
+  polygon([p(8.5,1),p(8.62,9+lick),p(8.74,5),p(8.85,14+lick+sway),p(8.97,6),p(9.08,10+sway),p(9.16,1)],'#ff9a3c');
+  polygon([p(8.62,1),p(8.73,6+sway),p(8.83,10+lick),p(8.94,5),p(9.03,1)],'#ffd27a');
+  polygon([p(8.76,1),p(8.83,5+lick*.5),p(8.91,1)],'#fff3cf');
+  if(!still){
+    const rise=(time/1100)%1,[sx,sy]=p(8.7+Math.sin(rise*7)*.15,14+rise*10);
+    ctx.save();ctx.globalAlpha*=1-rise;rect(sx,sy,1,1,'#ffd27a');ctx.restore();
+  }
+}
+// After dark an owl watches from one tree on each forest map, blinking and turning its head now and then.
+function drawNightOwls(time){
+  const dark=frameHour?1-frameHour.light:0;
+  if(dark<.75||!moonwood.has(currentRoom)||player.inCombat)return;
+  const trees=(moonwood.layouts[currentRoom]?.scenery??[]).filter(item=>item.type==='wildtree'&&!(isTimberTree(item)&&treeState(item).regrowsAt));
+  if(!trees.length)return;
+  const tree=trees[[...currentRoom].reduce((sum,c)=>sum+c.charCodeAt(0),0)%trees.length];
+  const still=reducedMotion.matches,turn=still?0:Math.floor(time/6100)%3-1;
+  const blink=!still&&(time%5200<160||(time+1700)%8300<120);
+  const [x,y]=point(tree.x+.5,tree.y+.5,31);
+  ctx.save();ctx.globalAlpha*=(dark-.75)/.25;
+  rect(x-3+turn,y-2,6,5,'#1b2a2e');rect(x-3+turn,y-3,1,1,'#1b2a2e');rect(x+2+turn,y-3,1,1,'#1b2a2e');
+  if(!blink){rect(x-2+turn,y,1,1,'#ffd76a');rect(x+1+turn,y,1,1,'#ffd76a');}
+  ctx.restore();
+}
 // The wind for the frame being drawn, or null indoors and for reduced motion.
 let frameWind=null;
+// Where the day stands on this map (null where there is no day-night cycle).
+let frameHour=null;
 function draw(time){
   const worldNow=combatNow();
   const weather=outdoorWeather(currentRoom,worldNow);
   // One wind per frame for everything that bends: trees, reeds, flags, smoke and gusts.
   frameWind=reducedMotion.matches?null:window.towerWind?.for(currentRoom,worldNow)??null;
+  frameHour=window.towerDayNight?.for(currentRoom,worldNow)??null;
   window.courtyardEnvironment?.update();
   renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
@@ -4319,6 +4375,8 @@ function draw(time){
   ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);updateCamera(time,centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-camX,-camY);
   const layer=currentRoom==='hub'&&!lobbyRoutesOpen()?'hubIntro':currentRoom;
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
+  if(currentRoom==='outside'&&frameHour)drawCourtyardHours(frameHour);
+  if(currentRoom==='home')drawHearthFire(time);
   if(currentRoom==='outside')for(const lamp of courtyardFurniture.filter(item=>item.type==='streetlamp')){
     const [lx,ly]=point(lamp.x+.5,lamp.y+.5,.5);
     // Street lamps come up as the daylight goes.
@@ -4365,7 +4423,7 @@ function draw(time){
   const crossing=wildlifeNow===null?null:willowbankDeer(wildlifeNow);
   if(crossing?.tracks)drawWillowbankTracks({surface});
   drawOutdoorWeather(currentRoom,weather,{ctx,point,surface,rect,reduced:reducedMotion.matches});
-  drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,wind:frameWind,
+  drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,wind:frameWind,hour:frameHour,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
   drawCombatSelection();
@@ -4572,6 +4630,7 @@ function draw(time){
   }
   if(moonSightActive(familiarState,currentRoom,combatNow()))drawMoonSight(time);
   if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
+  drawNightOwls(time);
   drawWoodEffects(time);
   if(enemy)drawCombatOverlayFx({ctx,width,height,renderScale:worldRenderScale,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels(time);

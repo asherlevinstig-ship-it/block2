@@ -18,7 +18,7 @@ import {watchAreas,watchRooms,watchWater,fishingSites,willowmereAreas,willowmere
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
 import {dungeonFloor,dungeonRooms,isDungeonMob} from './dungeon-arena.js';
-import {drawDungeonGround,drawDungeonProp,drawDungeonSideAtmosphere,dungeonHeights} from './dungeon-art.js';
+import {drawDungeonGround,drawDungeonProp,drawDungeonSideAtmosphere,drawDungeonBraziers,dungeonHeights} from './dungeon-art.js';
 import {cellarArea} from './mill-cellar.js';
 import {cellarHeights,drawCellarGround,drawCellarProp,drawCellarAtmosphere} from './mill-cellar-art.js';
 'use strict';
@@ -226,7 +226,37 @@ export const moonwood=(()=>{
       }
     }
   }
-  function drawWater(id,time,{point,surface,block,ctx,reduced,depthsRun,drainAt=0,progress={}}){
+  // Shared finish for every stretch of water: foam that breathes along the banks and a moving sheen in the colour of the sky.
+  function drawWaterLife(id,time,{point,surface,rect,ctx,reduced,depthsRun,hour=null}){
+    if(id===wildlifeRoom||!areas[id])return;
+    if(id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever'))return;
+    const {cols,rows}=id==='willowbank'?willowbankView:view;
+    const wet=(x,y)=>x>=0&&y>=0&&x<cols&&y<rows&&isWater(id,x,y)&&!(willowmereRooms.includes(id)&&riverBridge(id,x,y));
+    const sheen=!hour?null:hour.warm>.3?'#ffb27c':hour.light>.5?'#e2f3ff':'#cdd9ff',t=reduced?0:time;
+    ctx.save();
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      if(!wet(x,y))continue;
+      const breath=.5+.5*Math.sin(t/900+x*1.3+y*.7);
+      ctx.globalAlpha=.22+.3*breath;
+      if(x>0&&!wet(x-1,y))surface(x+.02+breath*.05,y+.05,.05,.9,.45,'#eef8f3');
+      if(x<cols-1&&!wet(x+1,y))surface(x+.93-breath*.05,y+.05,.05,.9,.45,'#eef8f3');
+      if(y>0&&!wet(x,y-1))surface(x+.05,y+.02+breath*.05,.9,.05,.45,'#eef8f3');
+      if(y<rows-1&&!wet(x,y+1))surface(x+.05,y+.93-breath*.05,.9,.05,.45,'#eef8f3');
+      if(!sheen)continue;
+      const drift=(t/2600+x*.31+y*.17)%1;
+      ctx.globalAlpha=(.1+hour.warm*.16)*Math.sin(drift*Math.PI);
+      surface(x+.1+drift*.4,y+.46,.46,.06,.46,sheen);
+      // After dark the odd tile catches a glint of moonlight.
+      if(hour.light<.3&&(x*7+y*3)%5===0&&Math.sin(t/420+x*2+y)>.6){ctx.globalAlpha=.8*(1-hour.light/.3);const [gx,gy]=point(x+.5,y+.5,.5);rect(gx,gy,1,1,'#ffffff');}
+    }
+    ctx.restore();
+  }
+  function drawWater(id,time,tools){
+    if(dungeonRooms.includes(id))drawDungeonBraziers(id,time,tools);
+    drawRoomWater(id,time,tools);
+    drawWaterLife(id,time,tools);
+  }
+  function drawRoomWater(id,time,{point,surface,block,ctx,reduced,depthsRun,drainAt=0,progress={}}){
     if(id==='crystaldeep'){drawCrystalAtmosphere(time,{point,ctx,reduced});return;}
     if(id==='millCellar'){drawCellarAtmosphere(time,{point,ctx,reduced});return;}
     if(id===wildlifeRoom){drawReserveWater(time,{point,surface,reduced});return;}

@@ -98,7 +98,8 @@ function render(s){
     lctx.globalCompositeOperation='multiply';lctx.fillStyle=edge;lctx.fillRect(0,0,W,H);
     const breathe=s.reduced?1:1+Math.sin(t/900)*.025+Math.sin(t/233)*.012;
     lctx.globalCompositeOperation='color-dodge';glow(lctx,px,py-10*sc,reach*breathe,reach*.72*breathe,mood.player,mood.lamp??.3);
-    lctx.globalCompositeOperation='screen';lctx.imageSmoothingEnabled=true;lctx.globalAlpha=mood.glow;lctx.drawImage(b3,ox,oy,dw,dh);
+    lctx.globalCompositeOperation='screen';lctx.imageSmoothingEnabled=true;// Indoors and underground the glow from lamps and fires wavers slightly, like flame.
+    lctx.globalAlpha=mood.glow*(s.reduced||mood.motes==='fireflies'||mood.motes==='pollen'?1:1+.07*Math.sin(t/97)+.05*Math.sin(t/41));lctx.drawImage(b3,ox,oy,dw,dh);
     lctx.globalAlpha=1;lctx.globalCompositeOperation='destination-in';lctx.drawImage(fx,0,0);
     fctx.globalCompositeOperation='copy';fctx.drawImage(lit,0,0);
     // Closer than 1x a room can run past the canvas: dissolve the cut instead of showing a straight edge.

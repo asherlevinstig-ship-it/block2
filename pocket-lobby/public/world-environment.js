@@ -48,6 +48,14 @@ export function initializeWorldEnvironment(doc=document,win=window){
     const [cx,cy]=at(((t*.004*(1+i*.3)+i*.27+seed*.01)%1.3)-.15,.035+i*.032),span=w*(.07+i*.012);
     ctx.save();ctx.translate(cx,cy);ctx.scale(1,.22);const cloud=ctx.createRadialGradient(0,0,0,0,0,span);cloud.addColorStop(0,'rgba(255,255,255,'+(day.light*.16).toFixed(3)+')');cloud.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=cloud;ctx.fillRect(-span,-span,span*2,span*2);ctx.restore();
    }
+   // Birds cross the sky while the sun is well up.
+   if(!reduced.matches&&day.light>.5){
+    for(let i=0;i<3;i++){
+     const run=((t*.011*(1+i*.2)+i*.37+seed*.02)%1.4)-.2,[bx,by]=at(run,.06+i*.035+Math.sin(t*.5+i)*.006),flap=Math.sin(t*7+i*2)>0?-2:1;
+     ctx.globalAlpha=Math.min(1,(day.light-.5)*1.2);ctx.strokeStyle='#2a3550';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(bx-5,by+flap);ctx.lineTo(bx,by);ctx.lineTo(bx+5,by+flap);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+   }
   }
   for(const [i,[u,v,r]] of (config.fog??[]).entries()){
    const [px,py]=at(u+Math.sin(t*(i%2?-.07:.09)+i)*.022,v+Math.sin(t*.07+i)*.007);
@@ -58,6 +66,10 @@ export function initializeWorldEnvironment(doc=document,win=window){
    const [px,py]=at(u,v);ctx.save();ctx.beginPath();ctx.rect(px,py,w*ww,h*hh);ctx.clip();
    for(let i=0;i<11;i++){const progress=(t*(.38+i%3*.11)+i*.137)%1;ctx.strokeStyle=i%3?'#b4efff45':'#f5ffff66';ctx.lineWidth=i%3===0?2:1;ctx.beginPath();ctx.moveTo(px+w*ww*(i+.5)/11,py+progress*h*hh);ctx.lineTo(px+w*ww*(i+.5)/11-1,py+progress*h*hh+h*.022);ctx.stroke();}
    ctx.restore();
+   // Mist billows where each fall lands.
+   const [mx,my]=at(u+ww/2,v+hh),spread=w*ww*(1.5+.25*Math.sin(t*.9+u*20)),mist=ctx.createRadialGradient(0,0,0,0,0,spread);
+   mist.addColorStop(0,'rgba(235,250,255,.22)');mist.addColorStop(1,'rgba(235,250,255,0)');
+   ctx.save();ctx.translate(mx,my);ctx.scale(1,.5);ctx.fillStyle=mist;ctx.fillRect(-spread,-spread,spread*2,spread*2);ctx.restore();
   }
   if(config.water){
    ctx.save();ctx.beginPath();for(const [i,p] of config.water.entries()){const q=at(...p);i?ctx.lineTo(...q):ctx.moveTo(...q);}ctx.closePath();ctx.clip();

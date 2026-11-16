@@ -69,6 +69,18 @@ function ambientParticles(ctx,point,time,profile,kind){
     }
   }
 }
+// The daytime counterpart to the fireflies: a few butterflies wandering in looping paths.
+function butterflies(ctx,point,time,area,alpha){
+  const [x0,y0,x1,y1]=area,colors=['#f6d98a','#f2a7b8','#bfe0f2','#ffffff'];
+  for(let i=0;i<4;i++){
+    const t=time/5200+seed(i,7)*9;
+    const x=x0+(x1-x0)*(.5+.42*Math.sin(t*.9+i)*Math.cos(t*.37+i*2)),y=y0+(y1-y0)*(.5+.42*Math.cos(t*.7+i*1.3)*Math.sin(t*.29+i));
+    const [px,py]=point(x,y,9+Math.sin(t*3.1+i)*5),open=Math.sin(time/90+i*2)>0,ix=Math.round(px),iy=Math.round(py);
+    ctx.globalAlpha=alpha*.85;ctx.fillStyle=colors[i%colors.length];
+    ctx.fillRect(ix-(open?2:1),iy-(open?1:2),open?2:1,2);ctx.fillRect(ix+1,iy-(open?1:2),open?2:1,2);
+    ctx.fillStyle='#3a2f3a';ctx.fillRect(ix,iy-1,1,2);
+  }
+}
 function campSmoke(ctx,point,time,lean=0){
   const [x,y]=point(3.5,4.5,17);
   for(let i=0;i<4;i++){
@@ -101,7 +113,7 @@ function fountainSpray(ctx,point,time){
   }
 }
 
-export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=false,sluiceOpen=false,wind=null}){
+export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=false,sluiceOpen=false,wind=null,hour=null}){
   const profile=Object.hasOwn(rooms,room)?rooms[room]:null;
   if(!profile)return;
   const still=reduced||inCombat;
@@ -109,7 +121,8 @@ export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=fa
   for(const [x,y,radius,tint] of profile.lights??[]){
     const [px,py]=point(x,y,1);
     const flicker=still?0:Math.sin(time/720+x)*.03+Math.sin(time/270+y)*.02;
-    glow(ctx,px,py,radius,tint,.16+flicker,.45);
+    // On maps with a day-night cycle, lanterns and campfires glow faintly by day and fully after dark.
+    glow(ctx,px,py,radius,tint,(.16+flicker)*(hour?.35+.65*(1-hour.light):1),.45);
   }
   if(!(room==='depthsGate'&&sluiceOpen))for(const [x,y,radius] of profile.mist??[]){
     const drift=still?0:Math.sin(time/3100+x)*.48;
@@ -117,7 +130,9 @@ export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=fa
     glow(ctx,px,py,radius,'#b4c9d8',still?.08:.13,.23);
   }
   if(!still){
-    for(const kind of ['dust','leaves','fireflies'])if(profile[kind])ambientParticles(ctx,point,time,profile[kind],kind);
+    const daylight=hour?hour.light:0;
+    for(const kind of ['dust','leaves','fireflies'])if(profile[kind]&&!(kind==='fireflies'&&daylight>=.45))ambientParticles(ctx,point,time,profile[kind],kind);
+    if(daylight>.6&&(profile.fireflies||profile.leaves))butterflies(ctx,point,time,(profile.fireflies??profile.leaves).area,(daylight-.6)/.4);
     if(profile.smoke)campSmoke(ctx,point,time,wind?.lean??0);
     if(profile.moths)shrineMoths(ctx,point,time);
     if(profile.fountain)fountainSpray(ctx,point,time);

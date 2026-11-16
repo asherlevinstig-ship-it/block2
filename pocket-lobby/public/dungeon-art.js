@@ -180,6 +180,18 @@ function markedArenaTiles(encounter,move){
  return tiles;
 }
 
+// The wall braziers are painted into each chamber; this adds their moving flame, a rising spark and a breathing halo every frame.
+export function drawDungeonBraziers(room,time,{point,polygon,rect,reduced}){
+ for(let x=2;x<=10;x++)if(x%3===1&&dungeonFloor(room,x,2)){
+  const [tx,ty]=point(x+.47,1.96,17+(x%3)*6);
+  const lick=reduced?0:Math.round(Math.sin(time/110+x)*1.4+Math.sin(time/47+x*2)*.8),lean=reduced?0:Math.round(Math.sin(time/83+x*3));
+  const ring=[];for(let i=0;i<10;i++){const a=i/10*Math.PI*2,r=7+lick*.7;ring.push([tx+Math.cos(a)*r,ty-9+Math.sin(a)*r]);}
+  polygon(ring,lick>0?'#ffb65c26':'#ffb65c14');
+  if(lick>0)rect(tx-2,ty-11-lick,4,lick,'#ff9a3c');
+  rect(tx-1+lean,ty-14-lick,2,4,'#ffd27a');
+  if(!reduced){const rise=(time/900+x*.37)%1;rect(tx+Math.round(Math.sin(rise*9+x)*3),ty-15-rise*14,1,1,rise<.6?'#ffd27a':'#ffd27a66');}
+ }
+}
 export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced}){
  if(encounter?.arenaVersion!==1||encounter.nextBoarAt-now>move.tell||encounter.nextBoarAt<now)return false;
  const imminent=encounter.enemy==='depthsGuardian'&&encounter.nextBoarAt-now<=350;
