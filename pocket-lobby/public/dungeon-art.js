@@ -1,5 +1,6 @@
 import {drawDungeonCreature} from './dungeon-creature-art.js';
 import {drawDungeonGuardian} from './dungeon-guardian-art.js';
+import {shoreDistance,drawWaterTile} from './water-art.js';
 import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,arenaMarkCount,isDungeonMob} from './dungeon-arena.js';
 export const dungeonHeights={depthsSkitter:29,depthsWarden:77,depthsSeer:61,depthsSentinel:76,depthsColossus:93,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
 const stone=['#94aeb3','#35495c','#597484'];
@@ -80,10 +81,14 @@ export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
  // A glow from far below turns the slab into a platform over deep water rather than a tile floating in the dark.
  const mist=side?.light??(gate?'#58c8d4':gallery?'#6fd0a0':vault?'#a58cf0':'#8f95e8');
  for(let i=0;i<6;i++)surface(-.6+i*.75,-1+i*.7,13.2-i*1.5,12-i*1.4,-30,mist+'1a');
+ // The flooded channel is one seamless run of water, darker along its middle.
+ const channel=gate?shoreDistance(12,10,(u,v)=>u===8&&dungeonFloor(room,u,v)):null;
  for(let y=0;y<10;y++)for(let x=0;x<12;x++){
   if(!dungeonFloor(room,x,y))continue;
   const water=gate&&x===8;
-  block(x,y,1,1,-8,8,tint);surface(x+.025,y+.025,.95,.95,.12,water?'#315f76':(x*7+y*3)%5===0?tint[0]:tint[2],tint[1]);
+  block(x,y,1,1,-8,8,tint);
+  if(water)drawWaterTile({x,y,distance:channel,surface,z:.12,shallow:'#4b8497',deep:'#27566f',reach:.6});
+  else surface(x+.025,y+.025,.95,.95,.12,(x*7+y*3)%5===0?tint[0]:tint[2],tint[1]);
   if(!water){const k=(x*13+y*7)%4;surface(x+.11,y+.15,.4,.025,.3,'#b2c6bb33');if(k===0){surface(x+.5,y+.05,.025,.38,.3,'#182e3c88');surface(x+.5,y+.43,.27,.025,.3,'#182e3c88');}}
   if(!water){
    // Worn, stained and chipped flags, with a pale lip where the slab ends.

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mixColor,shoreDistance,drawWaterBed} from '../public/water-art.js';
+import {mixColor,shoreDistance,drawWaterBed,drawWaterTile} from '../public/water-art.js';
 
 test('water colours blend between the shallows and the deep',()=>{
   assert.equal(mixColor('#000000','#ffffff',0),'#000000');
@@ -25,4 +25,13 @@ test('the water bed covers only wet tiles and darkens away from the bank',()=>{
   const near=drawn.find(cell=>cell.x<2.1).color,far=drawn.at(-1).color;
   assert.equal(far,'#222222');
   assert.ok(parseInt(near.slice(1,3),16)>parseInt(far.slice(1,3),16));
+});
+
+test('a single water tile can be painted against a shared shoreline',()=>{
+  const drawn=[];
+  drawWaterTile({x:8,y:3,distance:shoreDistance(12,10,x=>x===8),surface:(x,y,w,d,z,color)=>drawn.push({x,z,color}),z:.12,shallow:'#aaaaaa',deep:'#222222',reach:.5,cells:4,bands:4});
+  assert.equal(drawn.length,16);
+  assert.ok(drawn.every(cell=>cell.z===.12&&cell.x>7.9&&cell.x<9));
+  const edge=drawn.find(cell=>cell.x<8).color,middle=drawn.find(cell=>cell.x>8.2&&cell.x<8.3).color;
+  assert.ok(parseInt(edge.slice(1,3),16)>parseInt(middle.slice(1,3),16));
 });

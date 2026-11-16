@@ -1,12 +1,14 @@
 import {watchWater,watchAreas} from './watch-expedition.js';
+import {drawWaterBed} from './water-art.js';
 export const watchPropHeights={watchOak:65,watchPine:65,watchTower:110,watchBeacon:36,watchCache:19,watchSign:26,watchRock:22,watchCrystal:48,watchBramble:13,watchMushroom:12,watchBanner:49,watchMilestone:28};
 const masonry=['#d3d4c4','#53667b','#8396a2'],wood=['#c89c64','#66534d','#96714d'];
 export function drawWatchGround(id,{point,polygon,surface,block,rect,path}){
  const [base,light,road]=watchAreas[id].palette,cave=id==='starfall';
+ drawWaterBed({cols:12,rows:10,wet:(x,y)=>watchWater(id,x,y),surface,z:.1,shallow:cave?'#3f7f95':'#4f97a3',deep:cave?'#1d4861':'#245a74',reach:2.4});
  for(let y=0;y<10;y++)for(let x=0;x<12;x++){
   const dangerTrail=id==='ambermead'&&(y===2&&x>=5||x===5&&y>=2&&y<5);
   const water=watchWater(id,x,y),onRoad=path.has(x+','+y)||dangerTrail;
-  surface(x,y,1,1,.1,water?'#28576e':dangerTrail?'#ad7462':onRoad?road:(x*3+y*7)%4?base:light,water?'#497d8b':base);
+  if(!water)surface(x,y,1,1,.1,dangerTrail?'#ad7462':onRoad?road:(x*3+y*7)%4?base:light,base);
   if(onRoad&&!water){for(let i=0;i<2;i++)surface(x+.1+i*.45,y+.2+(x+y)%3*.17,.24,.12,.25,cave?'#96b6bc44':'#f1e0b44a');}
   else if(!water)for(let i=0;i<3;i++){const u=(x*17+y*13+i*29)%83/100,v=(y*19+x*7+i*23)%79/100;surface(x+u,y+v,.07,.1,.3,cave?'#93afc03c':id==='ambermead'?'#d5b26e':'#7c92915a');}
  }
@@ -26,7 +28,9 @@ export function drawWatchGround(id,{point,polygon,surface,block,rect,path}){
 export function drawWatchAtmosphere(id,time,{point,surface,block,ctx,reduced,progress}){
  const phase=reduced?0:time/2400;
  for(let y=0;y<10;y++)for(let x=0;x<12;x++)if(watchWater(id,x,y)){
-  const t=(phase+x*.11+y*.17)%1;surface(x+.08+t*.3,y+.32,.4,.025,.5,'#9bddd98a');surface(x+.36,y+.7,.35,.025,.5,'#66b9c580');
+  const t=(phase+x*.11+y*.17)%1,spot=(x*7+y*13)%5,shift=((x*31+y*17)%23)/100;
+  if(spot<3)surface(x+.04+shift+t*.3,y+.14+shift,.4,.025,.5,'#b4e8e48a');
+  if(spot>1)surface(x+.3,y+.56+shift,.35,.025,.5,'#7cc6d080');
  }
  const color=id==='ambermead'?'#efbc73':id==='thornwood'?'#c3a3ce':id==='starfall'?'#93e8ec':'#d7e5eb';
  for(let i=0;i<13;i++){const t=(phase*.23+i*.137)%1,[px,py]=point((i*17%110)/10,(i*13%90)/10,5+t*25);ctx.globalAlpha=reduced?.35:Math.sin(t*Math.PI)*.55;ctx.fillStyle=color;ctx.fillRect(px+(reduced?0:Math.sin(time/1700+i)*5),py, i%4===0?2:1,1);}ctx.globalAlpha=1;

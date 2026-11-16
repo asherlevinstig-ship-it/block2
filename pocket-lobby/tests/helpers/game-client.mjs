@@ -75,7 +75,7 @@ export function boot(saved){
     towerInitialState:saved,playerCloud:{enqueue:s=>saves.push(structuredClone(s)),attach:noop},addEventListener:noop,
   });
   context.window=context;
-  for(const file of ['fishing-moments.js','game.js'])vm.runInContext(fs.readFileSync(new URL(file,root),'utf8').replace('export const moonwood','const moonwood'),context,{filename:file});
+  for(const file of ['fishing-moments.js','game-lobby.js','game-camera.js','game-map.js','game.js'])vm.runInContext(fs.readFileSync(new URL(file,root),'utf8').replace('export const moonwood','const moonwood'),context,{filename:file});
   frames.shift()(1000);
   return {context,nodes,saves,frames,errors,read:expression=>vm.runInContext(expression,context),run:expression=>vm.runInContext(expression,context)};
 }

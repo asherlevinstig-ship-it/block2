@@ -680,6 +680,8 @@
       window.courtyardEnvironment=initializeCourtyardEnvironment();
       const {initializeHudClearance}=await import('./hud-clearance.js');
       initializeHudClearance();
+      // game.js is split into classic scripts that share one scope. The parts hold only declarations and load first.
+      for(const part of ['game-lobby.js','game-camera.js','game-map.js'])await new Promise((resolve,reject)=>{const piece=document.createElement('script');piece.src=part;piece.onload=resolve;piece.onerror=()=>reject(new Error('Could not load '+part));document.head.append(piece);});
       const script=document.createElement('script');script.src='game.js';
       script.onload=async()=>{
         if(!window.towerMillRaidHooks||!window.towerVaultCoopHooks||!window.towerPreparationHooks){

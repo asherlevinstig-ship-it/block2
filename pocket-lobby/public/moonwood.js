@@ -14,7 +14,7 @@ import {oreDeposits,quarryMiner,drawQuarryCliffs,depositRoom} from './mining.js'
 import {quarryForge} from './forge.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
-import {drawWaterBed} from './water-art.js';
+import {drawWaterBed,mixColor} from './water-art.js';
 import {watchAreas,watchRooms,watchWater,fishingSites,willowmereAreas,willowmereRooms,willowbankView,willowbankBarrier,riverWater,riverBridge} from './region-catalog.js';
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
@@ -182,6 +182,51 @@ export const moonwood=(()=>{
   }
   const layouts=Object.fromEntries(Object.keys(areas).map(id=>[id,generate(id)]));
 
+  // The open-air forest maps stand on grass and trodden earth, not paving: no tile outlines, turf that changes
+  // tone in broad patches, and dirt trails whose edges the grass has grown back over.
+  const woodlandFloors=new Set(['trail','grove','creek','pond','logging','clearing','shrine','ruins']);
+  function drawWoodlandFloor(id,{point,surface,rect},cols,rows,path,area){
+    const turf=['#386050','#3f6a55','#46745b','#4d7e62'].map(tone=>mixColor(tone,area.palette[0],.16));
+    const earth=['#7f705c','#8b7b64','#96856c'].map(tone=>mixColor(tone,area.palette[2],.2));
+    const hash=(x,y,k)=>((Math.imul(x+11,73856093)^Math.imul(y+7,19349663)^Math.imul(k+3,83492791))>>>0)%1000/1000;
+    const patch=(x,y)=>Math.min(3,Math.floor((Math.sin(x*.9+y*.35)+Math.sin(y*.8-x*.4+1.7)+Math.sin((x+y)*.45+4)+3)/6*4));
+    const dry=(x,y)=>x>=0&&y>=0&&x<cols&&y<rows&&!isWater(id,x,y);
+    const trodden=(x,y)=>dry(x,y)&&path.has(key(x,y));
+    const grassy=(x,y)=>dry(x,y)&&!path.has(key(x,y));
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      if(!grassy(x,y))continue;
+      const tone=patch(x,y);
+      surface(x-.03,y-.03,1.06,1.06,0,turf[tone]);
+      for(let k=0;k<2;k++)surface(x+.04+hash(x,y,k)*.55,y+.04+hash(x,y,k+5)*.6,.26+hash(x,y,k+9)*.2,.18+hash(x,y,k+13)*.16,.02,turf[(tone+1+k*2)%4]+'88');
+    }
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      if(!trodden(x,y))continue;
+      surface(x-.03,y-.03,1.06,1.06,0,earth[patch(x+3,y+5)%3]);
+      surface(x+.1+hash(x,y,2)*.5,y+.12+hash(x,y,3)*.6,.3,.035,.03,'#5d5145a0');
+      surface(x+.15+hash(x,y,4)*.5,y+.2+hash(x,y,6)*.55,.07,.06,.04,'#b8ab94');
+      if(hash(x,y,8)<.5)surface(x+.5+hash(x,y,10)*.3,y+.55+hash(x,y,12)*.3,.05,.05,.04,'#a39780');
+      // Grass creeps over each edge that meets turf, so the trail has no ruled border.
+      for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+        if(!grassy(x+dx,y+dy))continue;
+        const tone=turf[patch(x+dx,y+dy)];
+        for(let k=0;k<3;k++){
+          const along=k/3+hash(x,y,k+dx*3+dy*7+20)*.14,deep=.06+hash(x,y,k+dx*5+dy*11+30)*.15,wide=.2+hash(x,y,k+40)*.16;
+          if(dx)surface(dx<0?x-.01:x+1.01-deep,y+along,deep,wide,.03,tone);
+          else surface(x+along,dy<0?y-.01:y+1.01-deep,wide,deep,.03,tone);
+        }
+      }
+    }
+    // Blades and the odd flower stand upright on screen, which is what finally hides the grid.
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      if(!grassy(x,y))continue;
+      const blades=2+Math.floor(hash(x,y,50)*3);
+      for(let k=0;k<blades;k++){
+        const [px,py]=point(x+.08+hash(x,y,k+60)*.84,y+.08+hash(x,y,k+70)*.84),bx=Math.round(px),by=Math.round(py);
+        rect(bx,by-2,1,2,'#6c9f78');rect(bx+1,by-1,1,1,'#588a66');
+        if(k===0&&hash(x,y,80)<.1)rect(bx,by-3,1,1,hash(x,y,81)<.5?'#f0d9a0':'#cdb8f4');
+      }
+    }
+  }
   function drawGround(id,{point,polygon,surface,block,rect}){
     if(id==='millCellar'){drawCellarGround({point,polygon,surface,block,rect});return;}
     const {cols,rows}=id===wildlifeRoom?wildlifeView:id==='willowbank'?willowbankView:view, area=areas[id], path=layouts[id].path;
@@ -194,7 +239,8 @@ export const moonwood=(()=>{
     if(watchRooms.includes(id)){drawWatchGround(id,{point,polygon,surface,block,rect,path});return;}
     if(willowmereRooms.includes(id)){drawRiverGround(id,{point,polygon,surface,block,rect});return;}
     if(id==='pond'||id==='creek')drawWaterBed({cols,rows,wet:x=>isWater(id,x),surface,shallow:id==='pond'?'#6aa9a2':'#6fb0b4',deep:id==='pond'?'#2f6c86':'#3a7f92',reach:id==='pond'?3.2:.62});
-    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    if(woodlandFloors.has(id))drawWoodlandFloor(id,{point,surface,rect},cols,rows,path,area);
+    else for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
       const onTrail=path.has(key(x,y));
       if(isWater(id,x))continue;
       surface(x,y,1,1,0,onTrail?trail:(x*7+y*11)%4===0?light:ground,onTrail?'#514e66':'#344055');
