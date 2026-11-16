@@ -318,7 +318,7 @@ function drawTimberTree(item,time){
   const tree=treeState(item);
   const shared=sharedTimber.get(timberKey(item)),hitAge=time-(shared?.impactAt??-Infinity);
   const [x,y]=point(item.x+.5,item.y+.5);
-  const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,wind:frameWind,canopyOpacity:timberCanopyOpacity(item)});
+  const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,wind:frameWind,stir:stirAt(item.x,item.y),canopyOpacity:timberCanopyOpacity(item)});
   if(tree.regrowsAt){
     const falling=shared?{started:shared.impactAt,direction:shared.fallDirection}:treeFall?.key===timberKey(item)?treeFall:null;
     const fall=falling?Math.min(1,Math.max(0,(time-falling.started)/timberTreeRules.fallMs)):1;
@@ -3268,7 +3268,7 @@ function object(item,highlight=false,time=0,weather=null) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,wind:frameWind,portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):currentRoom==='willowbank'&&(type==='riverWillow'||type==='riverCypress')?riverTreeOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,wind:frameWind,stir:stirAt(item.x,item.y),portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):currentRoom==='willowbank'&&(type==='riverWillow'||type==='riverCypress')?riverTreeOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -3414,8 +3414,8 @@ function object(item,highlight=false,time=0,weather=null) {
   } else if(type==='streetlamp'){
     const [px,py]=point(x+.5,y+.5,45);
     const glow=ctx.createRadialGradient(px,py,1,px,py,28);
-    glow.addColorStop(0,'#ffce8c72');glow.addColorStop(1,'#ffce8c00');
-    ctx.save();ctx.globalAlpha*=1-.85*(frameHour?.light??0);ctx.fillStyle=glow;ctx.fillRect(px-28,py-28,56,56);ctx.restore();
+    glow.addColorStop(0,'#ffce8ca0');glow.addColorStop(1,'#ffce8c00');
+    ctx.save();ctx.globalAlpha*=(1-.85*(frameHour?.light??0))*(.71+Math.abs(stirAt(x,y,1.7))*.29);ctx.fillStyle=glow;ctx.fillRect(px-28,py-28,56,56);ctx.restore();
     part(.25,.25,.5,.5,0,3,'black');
     part(.41,.41,.18,.18,3,9,'trim');
     part(.453,.453,.095,.095,12,29,'black');
@@ -3519,7 +3519,10 @@ function object(item,highlight=false,time=0,weather=null) {
     for(let i=0;i<3;i++)part(.22+i*.20,.26,.13,.4,11,5,i%2?'blue':'cream');
   } else if(type==='armoryCounter'||type==='reception'||type==='tackleCounter'||type==='tradeCounter'){
     const [sx,sy]=point(x+1.46,y-.2,2);
-    sprite(ctx,sx,sy,{outfit:4,hair:1});
+    // Each keeper has their own look, turns to follow you around the shop, and waves when you walk in.
+    const keeper={reception:{outfit:4,hair:1},tackleCounter:{outfit:1,hair:3,gender:'female',hairStyle:'ponytail',faceStyle:'soft'},tradeCounter:{outfit:3,hair:2,skinTone:2},armoryCounter:{outfit:5,hair:0,skinTone:3,faceStyle:'angular'}}[type];
+    const greet=time-roomEnteredAt,hello=!reducedMotion.matches&&greet>350&&greet<1650;
+    sprite(ctx,sx,sy-(hello?Math.round(Math.sin((greet-350)/1300*Math.PI)*2):0),keeper,{direction:(player.x-(x+1.46))-(player.y-(y-.2))>=0?'right':'left',wave:hello?(greet-350)/1300:null,time});
     part(.06,.08,2.88,.87,0,19,'wood');
     part(.13,.91,2.73,.045,4,11,'black');
     for(let i=.25;i<2.85;i+=.23)part(i,.938,.055,.025,3,13,'gold');
@@ -4352,6 +4355,111 @@ function drawNightOwls(time){
   if(!blink){rect(x-2+turn,y,1,1,'#ffd76a');rect(x+1+turn,y,1,1,'#ffd76a');}
   ctx.restore();
 }
+// Everyone walking on this map, in tile coordinates.
+function walkers(){
+  return [{id:'self',x:player.x,y:player.y},...[...remotePeers.entries()].map(([id,peer])=>({id,x:peer.rx,y:peer.ry}))];
+}
+// How hard the nearest walker is brushing a spot, from -1 to 1. The sign is the side they push it toward on screen.
+function stirAt(x,y,reach=1.3){
+  let push=0;
+  for(const walker of walkers()){
+    const dx=x-walker.x,dy=y-walker.y,amount=1-Math.hypot(dx,dy)/reach;
+    if(amount>Math.abs(push))push=amount*(dx-dy>=0?1:-1);
+  }
+  return push;
+}
+// Footprints on open ground: every walker leaves alternating prints that fade over a few seconds.
+// In rain each new print also throws a small ripple.
+const footprints=[],lastPrint=new Map();
+function drawFootprints(time,weather){
+  const ground=moonwood.has(currentRoom)&&depthsStageIndex(currentRoom)<0&&!!window.towerWind?.for(currentRoom,0);
+  if(!ground){footprints.length=0;lastPrint.clear();return;}
+  for(const walker of walkers()){
+    const last=lastPrint.get(walker.id);
+    if(!last||last.room!==currentRoom){lastPrint.set(walker.id,{...walker,room:currentRoom,left:false});continue;}
+    const dx=walker.x-last.x,dy=walker.y-last.y,gap=Math.hypot(dx,dy);
+    if(gap>3){lastPrint.set(walker.id,{...walker,room:currentRoom,left:last.left});continue;}
+    if(gap<.45)continue;
+    const side=last.left?-.11:.11;
+    footprints.push({x:walker.x+.5-dy/gap*side,y:walker.y+.5+dx/gap*side,at:time,wet:!!weather?.rain});
+    lastPrint.set(walker.id,{...walker,room:currentRoom,left:!last.left});
+  }
+  while(footprints.length&&(footprints.length>90||time-footprints[0].at>7000))footprints.shift();
+  ctx.save();
+  for(const print of footprints){
+    const age=(time-print.at)/7000,[px,py]=point(print.x,print.y,.3);
+    ctx.globalAlpha=(1-age)*.3;rect(px-1,py,3,2,'#121a28');
+    if(print.wet&&age<.12&&!reducedMotion.matches){
+      const ring=age/.12;
+      ctx.globalAlpha=(1-ring)*.5;ctx.strokeStyle='#d9f1ef';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py,2+ring*7,1+ring*3.5,0,0,Math.PI*2);ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+// Doors answer an approach: light from the room beyond fills the doorway and spills across the floor.
+function drawDoorWelcome(){
+  if(currentRoom==='hub')return;
+  for(const door of hudRoomExits(currentRoom)){
+    if(!door.tile||door.side!=='left'&&door.side!=='right')continue;
+    const near=Math.max(0,1-Math.hypot(player.x-door.tile.x,player.y-door.tile.y)/2.6);
+    if(near<=0)continue;
+    const {side,start,end,height}=door,open=near*near*(3-2*near);
+    ctx.save();ctx.globalAlpha*=open*.6;
+    wall(side,start+.12,end-.12,1,height-4,'#ffd9a0');
+    ctx.globalAlpha*=.5;
+    if(side==='left')surface(.02,start+.1,1.1,end-start-.2,.3,'#ffd9a0');
+    else surface(start+.1,.02,end-start-.2,1.1,.3,'#ffd9a0');
+    ctx.restore();
+  }
+}
+// When the player last changed rooms, on the animation clock. Shopkeepers use it to greet.
+let roomEnteredAt=-Infinity;
+// Courtyard regulars. They are scenery: they follow fixed loops on the shared clock, never block a tile and cannot be clicked.
+function courtyardLife(now,hour){
+  const actors=[],still=reducedMotion.matches,loop=period=>((now/period)%1+1)%1,dark=hour?1-hour.light:0;
+  // The guard paces the Tower front and pauses at each end of the beat. After dark he carries a lantern.
+  const beat=loop(18000),out=beat<.5,leg=out?beat*2:(1-beat)*2,walking=!still&&leg>.1&&leg<.9;
+  actors.push({ambient:'guard',x:2,y:2+Math.min(1,Math.max(0,(leg-.1)/.8))*6,moving:walking,direction:walking?(out?'left':'right'):'right',back:walking&&!out,lantern:dark>.6});
+  // By day a child chases the Tower cat around the fountain, one lap and then a breather. At dusk they go in.
+  if(dark<.65){
+    const turn=loop(16000),lap=turn<.7?turn/.7:1,running=!still&&turn<.7;
+    const ring=u=>{
+      const side=Math.floor(u*4)%4,along=u*4%1,corners=[[4.9,3.9],[8.1,3.9],[8.1,7.1],[4.9,7.1]],[ax,ay]=corners[side],[bx,by]=corners[(side+1)%4];
+      return {x:ax+(bx-ax)*along,y:ay+(by-ay)*along,direction:side===0||side===3?'right':'left',back:side>=2};
+    };
+    actors.push({ambient:'cat',...ring((lap+.09)%1),moving:running});
+    actors.push({ambient:'child',...ring(lap%1),moving:running});
+  }
+  return actors;
+}
+function drawAmbientActor(item,time){
+  const [x,y]=point(item.x+.5,item.y+.5);
+  surface(item.x+.26,item.y+.3,.48,.42,.2,'#43324440');
+  if(item.ambient==='cat'){
+    const flip=item.direction==='right'?1:-1,step=item.moving?Math.floor(time/90)%2:0,fur='#d98a4a',shade='#a8612f',ink='#3a2a2e';
+    const r=(u,v,w,h,c)=>rect(flip>0?x+u:x-u-w,y+v-(item.moving?step:0),w,h,c);
+    if(item.moving){
+      r(-5,-6,10,4,fur);r(-5,-6,10,1,shade);
+      r(4,-9,4,4,fur);r(4,-10,1,1,fur);r(7,-10,1,1,fur);r(7,-7,1,1,ink);
+      r(-8,-8-step,3,1,fur);r(-9,-10-step,1,3,fur);
+      r(-4+step*2,-2,1,2,shade);r(-1-step,-2,1,2,shade);r(2+step,-2,1,2,shade);r(4-step*2,-2,1,2,shade);
+    }else{
+      r(-3,-7,6,7,fur);r(-3,-1,8,1,shade);
+      r(-1,-11,5,4,fur);r(-1,-12,1,1,fur);r(3,-12,1,1,fur);r(1,-9,1,1,ink);r(3,-9,1,1,ink);r(0,-5,3,3,'#f3e2c8');
+    }
+    return;
+  }
+  const child=item.ambient==='child';
+  ctx.save();
+  if(child){ctx.translate(x,y);ctx.scale(.74,.74);ctx.translate(-x,-y);}
+  sprite(ctx,x,y,child?{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}:{outfit:5,hair:1,trousers:3,boots:2,faceStyle:'angular'},
+    {direction:item.direction,back:item.back,cycle:item.moving?time/(child?100:170):0,time,vest:child?false:'leatherVest'});
+  ctx.restore();
+  if(item.lantern){
+    const lx=x+(item.direction==='right'?8:-8),ly=y-15;
+    lobbyLight(lx,ly,15,'#ffd08a66');rect(lx-1,ly-2,3,4,'#ffe6a8');rect(lx-1,ly-3,3,1,'#5b4a3a');
+  }
+}
 // The wind for the frame being drawn, or null indoors and for reduced motion.
 let frameWind=null;
 // Where the day stands on this map (null where there is no day-night cycle).
@@ -4429,6 +4537,8 @@ function draw(time){
   drawCombatSelection();
   if(enemy)drawCombatGroundFx({ctx,point,time,now:combatNow(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(currentRoom==='depthsVault')window.towerVaultCoop?.draw({ctx,point,surface,now:combatNow(),time,reduced:reducedMotion.matches});
+  drawDoorWelcome();
+  drawFootprints(time,weather);
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -4459,6 +4569,7 @@ function draw(time){
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
   const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
+  if(currentRoom==='outside')items.push(...courtyardLife(reducedMotion.matches?0:worldNow,frameHour));
   if(crossing){
     if(crossing.deer)items.push(crossing.deer);
     items.push(...willowbankFlock(wildlifeNow,[player,...[...remotePeers.values()].map(p=>({x:p.rx,y:p.ry}))]));
@@ -4552,13 +4663,14 @@ function draw(time){
       }
     }
   };
-  const depth=item=>item.type==='remotePlayer'?(item.peer.seat?depth(item.peer.seat)+.001:item.x+item.y+1):item.x+item.y+dimensions(item).reduce((a,b)=>a+b,0)-.55;
+  const depth=item=>item.type==='remotePlayer'?(item.peer.seat?depth(item.peer.seat)+.001:item.x+item.y+1):item.ambient?item.x+item.y+1:item.x+item.y+dimensions(item).reduce((a,b)=>a+b,0)-.55;
   items.sort((a,b)=>depth(a)-depth(b));
   const visual=combatRenderPosition(time);
   const playerDepth=player.seat?depth(player.seat)+.001:visual.x+visual.y+1;
   let drawn=false;hitboxes=[];
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
+    if(item.ambient){drawAmbientActor(item,time);continue;}
     if(item.type==='remotePlayer'){drawRemote(item.peer,time);const [px,py]=point(item.peer.rx+.5,item.peer.ry+.5);hitboxes.push({item,shape:[[px-9,py+3],[px+9,py+3],[px+9,py-38],[px-9,py-38]]});continue;}
     if(item.type==='wildAnimal'){drawWildAnimal(item,time);continue;}
     if(item.type==='willowbankBird'||item.type==='willowbankDeer'){
@@ -9573,6 +9685,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   if(next!==currentRoom&&$('venueLicenceDialog')?.open)$('venueLicenceDialog').close();
   if(shadowstepTargeting)setShadowstepTargeting(false);
   if(next!==currentRoom&&$('hearthDialog')?.open)$('hearthDialog').close();
+  if(currentRoom!==next)roomEnteredAt=performance.now();
   currentRoom=next;refreshShopLicence();selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   window.courtyardEnvironment?.setRoom(currentRoom);
   depthsExploring=explore;

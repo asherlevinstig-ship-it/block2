@@ -294,7 +294,7 @@ export const moonwood=(()=>{
     }
   }
 
-  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,wind=null,canopyOpacity=1,portalOpen=false}){
+  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={},campPhase='cold',weather,wind=null,stir=0,canopyOpacity=1,portalOpen=false}){
     if(Object.hasOwn(ashenPropHeights,item.type)){drawAshenProp(item,time,{point,polygon,rect,surface,block,reduced});return;}
     if(item.type==='stonebackBeetle'&&item.room==='emberwood'){
       drawAshback(item,time,{point,polygon,rect,surface,reduced,pose,exposed:(combat?.exposedUntil??0)>(pose.now??Date.now())});return;
@@ -351,7 +351,7 @@ export const moonwood=(()=>{
     if(Object.hasOwn(cellarHeights,type)){drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,pose});return;}
     if(Object.hasOwn(dungeonHeights,type)){drawDungeonProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,pose,combat});return;}
     if(Object.hasOwn(watchPropHeights,type)){drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,wind,canopyOpacity});return;}
-    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(type==='willowNook'?{...item,revealed:progress?.willowbankNook}:item,time,{point,polygon,surface,block,rect,ctx,reduced,weather,wind,canopyOpacity});return;}
+    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(type==='willowNook'?{...item,revealed:progress?.willowbankNook}:item,time,{point,polygon,surface,block,rect,ctx,reduced,weather,wind,stir,canopyOpacity});return;}
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
@@ -528,7 +528,7 @@ export const moonwood=(()=>{
       drawWildBoar(item,time,{point,polygon,rect,surface,reduced,pose});
     }else if(type==='wildtree'||type==='timberTree'){
       // Each crown leans with the shared wind, plus a small rustle of its own.
-      drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity,reduced||!wind?0:wind.lean*7+Math.sin(time/380+x*1.9+y*2.7)*wind.strength*1.5);
+      drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity,(reduced||!wind?0:wind.lean*7+Math.sin(time/380+x*1.9+y*2.7)*wind.strength*1.5)+stir*2.5);
     }else if(type==='wildrock'){
       drawWoodlandRock(x,y,{point,polygon,surface});
     }else if(type==='fishingPost'){
