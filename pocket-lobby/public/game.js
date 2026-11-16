@@ -4093,7 +4093,7 @@ function updateWorldLabels(time){
   }
   if(window.shopLicences?.[currentRoom]){
     const lounge=currentRoom==='lounge';
-    const site=lounge?point(0,6.4,48):point(currentRoom==='market'?6.2:3.4,0,48);
+    const site=lounge?point(0,6.4,48):point(currentRoom==='market'?6.2:3.4,0,['store','armory','furnishings'].includes(currentRoom)?27:48);
     if(shopOwner)add('SHOP OWNER',...site,'sign',openVenueLicence,shopOwner,{side:lounge?'left':'right',width:66,font:6});
     else add('Shop licence',...site,'sign',openVenueLicence,'',{side:lounge?'left':'right',width:55,font:6});
   }
@@ -4351,8 +4351,8 @@ function drawNightOwls(time){
   const blink=!still&&(time%5200<160||(time+1700)%8300<120);
   const [x,y]=point(tree.x+.5,tree.y+.5,31);
   ctx.save();ctx.globalAlpha*=(dark-.75)/.25;
-  rect(x-3+turn,y-2,6,5,'#1b2a2e');rect(x-3+turn,y-3,1,1,'#1b2a2e');rect(x+2+turn,y-3,1,1,'#1b2a2e');
-  if(!blink){rect(x-2+turn,y,1,1,'#ffd76a');rect(x+1+turn,y,1,1,'#ffd76a');}
+  rect(x-4+turn,y-4,8,8,'#5d4c3e');rect(x-4+turn,y-5,2,1,'#5d4c3e');rect(x+2+turn,y-5,2,1,'#5d4c3e');rect(x-2+turn,y,4,4,'#a8927a');rect(x-1+turn,y-1,2,1,'#e0b060');
+  if(!blink){rect(x-3+turn,y-3,2,2,'#ffd76a');rect(x+1+turn,y-3,2,2,'#ffd76a');}
   ctx.restore();
 }
 // Everyone walking on this map, in tile coordinates.
@@ -4374,21 +4374,28 @@ const footprints=[],lastPrint=new Map();
 function drawFootprints(time,weather){
   const ground=moonwood.has(currentRoom)&&depthsStageIndex(currentRoom)<0&&!!window.towerWind?.for(currentRoom,0);
   if(!ground){footprints.length=0;lastPrint.clear();return;}
+  // Prints belong to the map they were left on.
+  if(footprints.length&&footprints[0].room!==currentRoom)footprints.length=0;
   for(const walker of walkers()){
     const last=lastPrint.get(walker.id);
     if(!last||last.room!==currentRoom){lastPrint.set(walker.id,{...walker,room:currentRoom,left:false});continue;}
     const dx=walker.x-last.x,dy=walker.y-last.y,gap=Math.hypot(dx,dy);
     if(gap>3){lastPrint.set(walker.id,{...walker,room:currentRoom,left:last.left});continue;}
-    if(gap<.45)continue;
-    const side=last.left?-.11:.11;
-    footprints.push({x:walker.x+.5-dy/gap*side,y:walker.y+.5+dx/gap*side,at:time,wet:!!weather?.rain});
-    lastPrint.set(walker.id,{...walker,room:currentRoom,left:!last.left});
+    if(gap<.34)continue;
+    // Prints are laid at a fixed stride along the path, so the trail looks the same at any frame rate.
+    const ux=dx/gap,uy=dy/gap;let {x:lx,y:ly,left}=last;
+    for(let done=.34;done<=gap;done+=.34){
+      lx+=ux*.34;ly+=uy*.34;left=!left;
+      const side=left?-.15:.15;
+      footprints.push({x:lx+.5-uy*side,y:ly+.5+ux*side,at:time,room:currentRoom,wet:!!weather?.rain});
+    }
+    lastPrint.set(walker.id,{id:walker.id,x:lx,y:ly,room:currentRoom,left});
   }
-  while(footprints.length&&(footprints.length>90||time-footprints[0].at>7000))footprints.shift();
+  while(footprints.length&&(footprints.length>140||time-footprints[0].at>7000))footprints.shift();
   ctx.save();
   for(const print of footprints){
     const age=(time-print.at)/7000,[px,py]=point(print.x,print.y,.3);
-    ctx.globalAlpha=(1-age)*.3;rect(px-1,py,3,2,'#121a28');
+    ctx.globalAlpha=(1-age)*.5;rect(px-1,py,3,2,'#0b111c');ctx.globalAlpha=(1-age)*.16;rect(px-1,py+2,3,1,'#e8f0ff');
     if(print.wet&&age<.12&&!reducedMotion.matches){
       const ring=age/.12;
       ctx.globalAlpha=(1-ring)*.5;ctx.strokeStyle='#d9f1ef';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py,2+ring*7,1+ring*3.5,0,0,Math.PI*2);ctx.stroke();

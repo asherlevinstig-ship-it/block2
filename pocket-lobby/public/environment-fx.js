@@ -71,7 +71,7 @@ function ambientParticles(ctx,point,time,profile,kind){
 }
 // The daytime counterpart to the fireflies: a few butterflies wandering in looping paths.
 function butterflies(ctx,point,time,area,alpha){
-  const [x0,y0,x1,y1]=area,colors=['#f6d98a','#f2a7b8','#bfe0f2','#ffffff'];
+  const [x0,y0,x1,y1]=area,colors=['#f6d98a','#f2a7b8','#bfe0f2','#d3b6f5'];
   for(let i=0;i<4;i++){
     const t=time/5200+seed(i,7)*9;
     const x=x0+(x1-x0)*(.5+.42*Math.sin(t*.9+i)*Math.cos(t*.37+i*2)),y=y0+(y1-y0)*(.5+.42*Math.cos(t*.7+i*1.3)*Math.sin(t*.29+i));

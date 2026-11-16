@@ -14,6 +14,7 @@ import {oreDeposits,quarryMiner,drawQuarryCliffs,depositRoom} from './mining.js'
 import {quarryForge} from './forge.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
+import {drawWaterBed} from './water-art.js';
 import {watchAreas,watchRooms,watchWater,fishingSites,willowmereAreas,willowmereRooms,willowbankView,willowbankBarrier,riverWater,riverBridge} from './region-catalog.js';
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
@@ -192,21 +193,15 @@ export const moonwood=(()=>{
     if(Object.hasOwn(ashenAreas,id)){drawAshenGround(id,{surface,point,polygon,block},path);return;}
     if(watchRooms.includes(id)){drawWatchGround(id,{point,polygon,surface,block,rect,path});return;}
     if(willowmereRooms.includes(id)){drawRiverGround(id,{point,polygon,surface,block,rect});return;}
+    if(id==='pond'||id==='creek')drawWaterBed({cols,rows,wet:x=>isWater(id,x),surface,shallow:id==='pond'?'#6aa9a2':'#6fb0b4',deep:id==='pond'?'#2f6c86':'#3a7f92',reach:id==='pond'?3.2:.62});
     for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
       const onTrail=path.has(key(x,y));
-      const water=isWater(id,x);
-      const color=water?(id==='pond'?['#386b71','#336671','#2c5b6b','#295568','#285468','#254f66'][x-6]:['#356579','#3c7585','#417385'][y%3]):onTrail?trail:(x*7+y*11)%4===0?light:ground;
-      surface(x,y,1,1,0,color,water?(id==='pond'?undefined:'#3c697c'):onTrail?'#514e66':'#344055');
-      if(water){
-        if(id==='pond'){if(x===6)surface(x+.045,y+.07,.09,.83,.1,'#8dbbaa67');if((x+y*3)%5===0)surface(x+.45,y+.35,.28,.03,.11,'#99d1c25c');continue;}
-        surface(x+.13,y+.2,.35,.045,.16,'#81bbc0');
-        surface(x+.44,y+.66,.33,.031,.16,'#6ca4b3');
-      }else{
-        const offset=((x*17+y*23)%29)/100;
-        surface(x+.20+offset,y+.39,.12,.035,.14,onTrail?'#a6a0a4':'#668086');
-        if(onTrail&&id==='roots')surface(x+.37,y+.37,.26,.26,.25,'#cabb95','#645d63');
-        if(!onTrail)surface(x+.58,y+.72,.05,.12,.15,id==='roots'?'#9a7482':'#679397');
-      }
+      if(isWater(id,x))continue;
+      surface(x,y,1,1,0,onTrail?trail:(x*7+y*11)%4===0?light:ground,onTrail?'#514e66':'#344055');
+      const offset=((x*17+y*23)%29)/100;
+      surface(x+.20+offset,y+.39,.12,.035,.14,onTrail?'#a6a0a4':'#668086');
+      if(onTrail&&id==='roots')surface(x+.37,y+.37,.26,.26,.25,'#cabb95','#645d63');
+      if(!onTrail)surface(x+.58,y+.72,.05,.12,.15,id==='roots'?'#9a7482':'#679397');
     }
     if(id==='quarry'){drawQuarryCliffs({block,surface});drawMineMouth({block,point,polygon,rect});}
     if(id==='crystaldeep')drawCrystaldeepGround({block,surface,point,polygon});
@@ -237,14 +232,14 @@ export const moonwood=(()=>{
     for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
       if(!wet(x,y))continue;
       const breath=.5+.5*Math.sin(t/900+x*1.3+y*.7);
-      ctx.globalAlpha=.22+.3*breath;
-      if(x>0&&!wet(x-1,y))surface(x+.02+breath*.05,y+.05,.05,.9,.45,'#eef8f3');
-      if(x<cols-1&&!wet(x+1,y))surface(x+.93-breath*.05,y+.05,.05,.9,.45,'#eef8f3');
-      if(y>0&&!wet(x,y-1))surface(x+.05,y+.02+breath*.05,.9,.05,.45,'#eef8f3');
-      if(y<rows-1&&!wet(x,y+1))surface(x+.05,y+.93-breath*.05,.9,.05,.45,'#eef8f3');
+      ctx.globalAlpha=.3+.34*breath;
+      if(x>0&&!wet(x-1,y))surface(x+.02+breath*.05,y+.05,.08,.9,.45,'#eef8f3');
+      if(x<cols-1&&!wet(x+1,y))surface(x+.93-breath*.05,y+.05,.08,.9,.45,'#eef8f3');
+      if(y>0&&!wet(x,y-1))surface(x+.05,y+.02+breath*.05,.9,.08,.45,'#eef8f3');
+      if(y<rows-1&&!wet(x,y+1))surface(x+.05,y+.93-breath*.05,.9,.08,.45,'#eef8f3');
       if(!sheen)continue;
       const drift=(t/2600+x*.31+y*.17)%1;
-      ctx.globalAlpha=(.1+hour.warm*.16)*Math.sin(drift*Math.PI);
+      ctx.globalAlpha=(.16+hour.warm*.16)*Math.sin(drift*Math.PI);
       surface(x+.1+drift*.4,y+.46,.46,.06,.46,sheen);
       // After dark the odd tile catches a glint of moonlight.
       if(hour.light<.3&&(x*7+y*3)%5===0&&Math.sin(t/420+x*2+y)>.6){ctx.globalAlpha=.8*(1-hour.light/.3);const [gx,gy]=point(x+.5,y+.5,.5);rect(gx,gy,1,1,'#ffffff');}
@@ -280,8 +275,10 @@ export const moonwood=(()=>{
         continue;
       }
       const drift=(phase+x*.19+y*.27)%1;
-      surface(x+.08+drift*.35,y+.18,.34,.028,.22,'#9bced16b');
-      surface(x+.2+(1-drift)*.31,y+.65,.29,.035,.22,'#80bcc67a');
+      // Ripples sit at scattered spots so they never line up into a grid.
+      const spot=(x*7+y*13)%5,shift=((x*31+y*17)%23)/100;
+      if(spot<3)surface(x+.04+shift+drift*.35,y+.1+shift,.34,.028,.22,'#c4ecea6b');
+      if(spot>1)surface(x+.14+(1-drift)*.31,y+.52+shift,.29,.035,.22,'#a8dce07a');
       if((x+y)%3===0)surface(x+.42,y+.36,.055,.07,.24,'#d5e4d6a0');
     }
     if(id==='pond'){

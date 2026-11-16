@@ -1,14 +1,15 @@
 import {riverWater,riverBridge,willowbankView,willowbankTrail,willowbankShortcut} from './region-catalog.js';
+import {drawWaterBed} from './water-art.js';
 export const riverPropHeights={willowLatch:22,willowNook:38,riverWillow:68,riverCypress:62,riverReeds:18,riverLantern:38,riverFlowers:6,riverRock:14,riverMill:76,riverCottage:60,riverTrader:34,riverBench:13,riverCrates:18};
 const stone=['#ded0ad','#7e8c89','#a6afa0'],wood=['#be9061','#655348','#8c6c4c'];
 export function drawRiverGround(id,{point,polygon,surface,block,rect}){
  // Broad shorelines and curved accents soften the underlying isometric grid.
  const {cols,rows}=id==='willowbank'?willowbankView:{cols:12,rows:10};
+ drawWaterBed({cols,rows,wet:(x,y)=>riverWater(id,x,y),surface,z:.12,shallow:'#62b3ad',deep:'#2b7890',reach:id==='millbrook'?2.6:id==='willowbank'?1.5:.9});
  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
   const water=riverWater(id,x,y),bridge=riverBridge(id,x,y),road=id==='reedwater'?y===4||y===5:id==='willowbank'?willowbankTrail(x,y):y===6||x===5;
-  surface(x,y,1,1,.12,water?'#2e7e8b':road==='river'?'#a47e58':road==='bank'?'#819574':road?'#c7b38c':(x*13+y*7)%4===0?'#6b9275':'#567d65',water?'#3b8f98':road?'#bba985':'#567d65');
+  if(!water)surface(x,y,1,1,.12,road==='river'?'#a47e58':road==='bank'?'#819574':road?'#c7b38c':(x*13+y*7)%4===0?'#6b9275':'#567d65',road?'#bba985':'#567d65');
   if(!water&&!road){for(let i=0;i<3;i++){const u=((x*19+y*11+i*23)%73)/100,v=((y*17+x*7+i*29)%79)/100;surface(x+u,y+v,.06,.13,.3,i%2?'#90b18a':'#759c78');}}
-  if(water){surface(x+.12,y+.3,.5,.03,.25,'#6bb7b6');surface(x+.49,y+.7,.3,.025,.3,'#75b9b2');}
   if(id==='willowbank'&&road==='nook'){
    surface(x+.16,y+.19,.32,.24,.34,'#8fa991');
    surface(x+.53,y+.54,.28,.21,.34,'#a5b494');
@@ -45,7 +46,9 @@ export function drawRiverWater(id,time,{point,surface,block,ctx,reduced,progress
  const phase=reduced?0:time/1900;
  const {cols,rows}=id==='willowbank'?willowbankView:{cols:12,rows:10};
  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if(riverWater(id,x,y)&&!riverBridge(id,x,y)){
-  const t=(phase+y*.23+x*.11)%1;surface(x+.1+t*.4,y+.23,.39,.025,.42,'#a5e2d779');surface(x+.4-t*.2,y+.7,.32,.035,.43,'#b5ddd06b');
+  const t=(phase+y*.23+x*.11)%1,spot=(x*7+y*13)%5,shift=((x*31+y*17)%23)/100;
+  if(spot<3)surface(x+.04+shift+t*.4,y+.12+shift,.39,.025,.42,'#c9f2e679');
+  if(spot>1)surface(x+.34-t*.2,y+.56+shift,.32,.035,.43,'#b5ddd06b');
   if((x+y)%4===0){const [px,py]=point(x+.5,y+.55,.5);ctx.beginPath();ctx.ellipse(px,py,4+t*12,2+t*5,0,0,Math.PI*2);ctx.strokeStyle='rgba(190,240,218,'+(.22*(1-t))+')';ctx.lineWidth=.8;ctx.stroke();}
  }
  if(id==='willowbank'){
