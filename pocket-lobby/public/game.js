@@ -891,8 +891,9 @@ function updateBedGuide(){
 function needsAutoLesson(){return (window.playerCloud?.initial??savedPlayerState)?.autoLesson==='required';}
 function playerMeditating(){return window.towerLearning?.active&&!routineControlled()&&!player.inCombat&&!player.seat&&!step&&!woodSession&&!fishingSession&&!miningCut&&!homeBedRest;}
 function needsLearningPoints(){const points=(window.playerCloud?.initial??savedPlayerState)?.actionPoints;return points?.value===0&&!points.unlimited;}
+let autoLessonHeldUntil=-Infinity;
 function updateAutoLessonGuide(){
-  const visible=needsAutoLesson()&&!loungeDressGuiding&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
+  const visible=performance.now()>=autoLessonHeldUntil&&needsAutoLesson()&&!loungeDressGuiding&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
   $('autoLessonGuide').hidden=!visible;
   $('autoStart').classList.toggle('tutorial-focus',visible);
   if(visible){$('questTracker').hidden=true;$('contextGuide').hidden=true;}
@@ -973,7 +974,9 @@ function questAction(){
     savePlayerState();
     if(unlocksLobby){
       $('questDialog').close();
-      note(needsAutoLesson()?'The lobby doors are open. Set your first Auto job, then fish, hunt and trade in any order.':'The lobby doors are open. Fish, hunt and trade in any order.');
+      // The doors get a moment to themselves before the Auto lesson card arrives.
+      autoLessonHeldUntil=performance.now()+3600;
+      note(needsAutoLesson()?'The lobby doors are open.':'The lobby doors are open. Fish, hunt and trade in any order.',3600);
     }else note('First Steps accepted. Catch 3 fish, defeat a boar and sell spoils in any order.');
     return;
   }
@@ -4101,11 +4104,12 @@ function updateWorldLabels(time){
   if(currentRoom==='bakery')add('Baker',...point(foodStall.x+.5,foodStall.y+.5,47),'npc',()=>use(bakeryFurniture[0]),'Buy Tower Bread');
   if(currentRoom==='hub'){
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
-    add(factionRegistrar.name,...point(registrar.x+.5,registrar.y+.5,45),'npc',()=>use(registrar));
+    // Until the Warden has opened the doors he is the only named figure in the room.
+    if(lobbyRoutesOpen())add(factionRegistrar.name,...point(registrar.x+.5,registrar.y+.5,45),'npc',()=>use(registrar));
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
     if(!lobbyRoutesOpen())add('TOWER OF',...point(0,2.7,52),'sign',null,'BEGINNINGS',{side:'left',width:51,font:6});
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
-    add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
+    add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')));
   }
   if(currentRoom==='cinderwatch')add('Camp brazier',...point(cinderBrazier.x+.5,cinderBrazier.y+.5,32),'npc',()=>use(roomFurniture().find(item=>item.type==='campfire')),'Rest · 1 AP');
   if(currentRoom==='emberwood'&&!adventure.ashenShortcut)add('Open road shortcut',...point(ashenLatch.x+.5,ashenLatch.y+.5,29),'npc',()=>use(roomFurniture().find(item=>item.type==='ashenLatch')));
@@ -5510,6 +5514,16 @@ async function serverGameplayTeacherTeleport(room){
   try{return await window.playerCloud.teacherTeleport(room);}
   finally{serverActionBusy=false;}
 }
+// What each Tower shop is for, in the order a new player needs them.
+const shopDirectory=[['store','Buy bait and rods'],['market','Sell fish, timber and hunting spoils'],['armory','Buy weapons'],['bakery','Buy bread and rations'],['tailor','Buy outfits and clothing'],['furnishings','Buy furniture, lighting and storage'],['library','Read skill books']];
+function showShopDoor(room){
+  if(currentRoom===room){canvas.focus({preventScroll:true});return;}
+  setExplorationDestination(room);
+  const name=roomDetails[room].name.replace(/^The /,'');
+  if(nextExplorationDoor())note(currentRoom==='hub'?'The highlighted door leads to '+name+'.':'Follow the highlighted exit to reach '+name+'.',4200);
+  else showHudMap(room);
+  canvas.focus({preventScroll:true});
+}
 function showHudMap(destination=null){
   const dialog=$('hudMapDialog'),routes=$('hudMapRoutes'),shops=destination==='shops';
   if(destination&&destination!=='shops'&&!mapRouteVisible(destination))destination=null;
@@ -5519,7 +5533,7 @@ function showHudMap(destination=null){
   $('mapTrailStatus').textContent='';
   const moonButton=$('mapMoonSight');moonButton.hidden=shops||familiarState.equipped!=='owl'||!canScoutHere();moonButton.disabled=!!familiarSeconds()||unavailable();moonButton.textContent=familiarSeconds()?'Moon Sight · '+familiarSeconds()+'s':'Moon Sight';
   $('hudMapIntro').textContent=shops
-    ?'Choose a shop to see the way there.'
+    ?(lobbyRoutesOpen()?'Choose a shop to highlight the door that leads to it.':'Talk to the Tower Warden to open the shop doors.')
     :next?'To reach '+mapPlaceName(destination)+', start with '+mapPlaceName(next.to)+'.'
     :depthsRun?'Use the chamber controls to bank your spoils or go deeper.'
     :currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.'
@@ -5532,9 +5546,16 @@ function showHudMap(destination=null){
     button.classList.toggle('route-next',highlight);
     button.onclick=()=>{dialog.close();action();};
     routes.append(button);
+    return button;
   };
+  dialog.dataset.mode=shops?'shops':'map';
   if(shops&&lobbyRoutesOpen()){
-    for(const [room,label] of [['library','Library'],['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['bakery','Bakery'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
+    for(const [room,purpose] of shopDirectory){
+      if(room!==currentRoom&&!hudRoute(room).length)continue;
+      const detail=document.createElement('small');
+      detail.textContent=room===currentRoom?'You are here':purpose;
+      add(roomDetails[room].name.replace(/^The /,''),()=>showShopDoor(room)).append(detail);
+    }
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(mapPlaceName(door.to)+(worldMapVisibility().frontier.has(door.to)?' · Explore':''),()=>followHudDoor(door),door.to===next?.to);
   }
@@ -9469,11 +9490,38 @@ document.addEventListener('keydown',e=>{
   }
 });
 // The lobby and courtyard open closer in with a following camera; the 10x10 rooms use the closest zoom that still shows the whole room.
-function defaultRoomZoom(room){return depthsStageIndex(room)>=0?1.27:['pond','millCellar','logging','clearing'].includes(room)?1.10:moonwood.has(room)?1:room==='hub'||room==='outside'?1.25:1.125;}
+function defaultRoomZoom(room){return depthsStageIndex(room)>=0?1.27:['pond','millCellar','logging','clearing'].includes(room)?1.10:moonwood.has(room)?1:room==='hub'?1:room==='outside'?1.25:1.125;}
 // Past 1x the camera tracks the player without looking beyond the canvas. Arenas, raids and decorating stay centred so nothing important slides out of view.
+// The Grand Lobby is framed, not followed. At its default zoom the whole room sits in the clear space between the
+// HUD panels, so the Warden, the Outside steps and both door walls are visible together on any screen.
+// Zooming by hand returns to the usual follow camera; Reset zoom frames the room again.
+const hubFrame={left:48,right:672,top:30,bottom:440};
+let hubFramed=false,hubFrameAt=-Infinity,hubFrameCamera=null;
+function hubFraming(){
+  const p=canvasBounds(),box=canvas.getBoundingClientRect();
+  const edge=(node,side)=>{
+    const r=node?.getBoundingClientRect?.();
+    if(!(r?.width>0&&r.height>0))return null;
+    return r.right>box.left&&r.left<box.right&&r.bottom>box.top&&r.top<box.bottom?r[side]:null;
+  };
+  const left=Math.max(box.left,edge(document.querySelector('.hud-rail'),'right')??box.left)+6;
+  const right=Math.min(box.right,edge($('plus'),'left')??box.right)-6;
+  const top=Math.max(box.top,edge(document.querySelector('.play-head'),'bottom')??box.top)+4;
+  const bottom=Math.min(box.bottom,edge($('hint'),'top')??box.bottom)-4;
+  const fit=Math.min((right-left)/p.scale/(hubFrame.right-hubFrame.left),(bottom-top)/p.scale/(hubFrame.bottom-hubFrame.top));
+  if(!(fit>0&&Number.isFinite(fit)))return {zoom:1,x:view.width/2,y:view.height/2-4};
+  const framedZoom=Math.max(.75,Math.min(1.25,Math.floor(fit*16)/16));
+  return {zoom:framedZoom,
+    x:(hubFrame.left+hubFrame.right)/2-(((left+right)/2-box.left-p.x)/p.scale-view.width/2)/framedZoom,
+    y:(hubFrame.top+hubFrame.bottom)/2-(((top+bottom)/2-box.top-p.y)/p.scale-(view.height/2-4))/framedZoom};
+}
 function updateCamera(time,centerX,centerY){
   const {width,height}=view;let x=centerX,y=centerY;
-  if(zoom>1&&!editing&&!player.inCombat&&depthsStageIndex(currentRoom)<0&&!window.millRaidClient?.active){
+  if(currentRoom==='hub'&&hubFramed&&!editing&&!player.inCombat){
+    if(!hubFrameCamera||time-hubFrameAt>400){hubFrameCamera=hubFraming();hubFrameAt=time;}
+    if(zoom!==hubFrameCamera.zoom)setZoom(hubFrameCamera.zoom,true);
+    x=hubFrameCamera.x;y=hubFrameCamera.y;
+  }else if(zoom>1&&!editing&&!player.inCombat&&depthsStageIndex(currentRoom)<0&&!window.millRaidClient?.active){
     const [px,py]=point(player.x+.5,player.y+.5);
     x=Math.max(centerX/zoom,Math.min(width-(width-centerX)/zoom,px));
     y=Math.max(centerY/zoom,Math.min(height-(height-centerY)/zoom,py-16));
@@ -9485,13 +9533,14 @@ function updateCamera(time,centerX,centerY){
   // Whole device-independent pixels keep the pixel art from shimmering while the camera glides.
   camX=Math.round(camSmoothX*zoom)/zoom;camY=Math.round(camSmoothY*zoom)/zoom;
 }
-function setZoom(value){
+function setZoom(value,framed=false){
   zoom=Math.max(.75,Math.min(1.5,value));hover=null;hoverItem=null;
+  hubFramed=framed;if(!framed)hubFrameCamera=null;
   $('plus').disabled=zoom===1.5;$('minus').disabled=zoom===.75;
 }
 $('plus').onclick=()=>setZoom(zoom+.125);
 $('minus').onclick=()=>setZoom(zoom-.125);
-$('resetView').onclick=()=>setZoom(defaultRoomZoom(currentRoom));
+$('resetView').onclick=()=>setZoom(defaultRoomZoom(currentRoom),currentRoom==='hub');
 window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&player.inCombat&&window.playerCloud?.initial?.plan?.source!=='rules'){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);}
@@ -9734,7 +9783,7 @@ function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChes
   if(next==='depthsGate'&&arrival?.x>=8&&!floodgateOpen(depthsRun))arrival={x:7,y:4};
   if(next==='depthsGate'&&arrival?.x===8&&!floodCrossingOpen(depthsRun,arrival.x,arrival.y))arrival={x:7,y:floodCrossingRow(depthsRun)};
   movePlayerToSpawn(arrival);
-  setZoom(defaultRoomZoom(next));
+  setZoom(defaultRoomZoom(next),next==='hub');
   if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);
     showTransaction('New place discovered',[{icon:'✦',text:name+' · Map fog cleared'}]);
