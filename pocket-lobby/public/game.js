@@ -2726,7 +2726,9 @@ function drawLobbyBanner(side,at){
 function drawLobbySconce(side,u){
   const [x,y]=lobbyWallPoint(side,u,37);
   lobbyLight(x,y,37,'#ffc68088');
-  const floor=lobbyWallPoint(side,u,0);lobbyLight(floor[0],floor[1],34,'#fbc58048',.48);
+  // Each sconce washes the wall beneath it and drops a warm pool on the floor.
+  lobbyLight(x,y+12,60,'#ffb7602e',1.3);
+  const floor=lobbyWallPoint(side,u,0);lobbyLight(floor[0],floor[1],56,'#fbc5805e',.48);
   rect(x-4,y-6,8,13,'#39303c');
   rect(x-3,y-5,6,10,'#bb8051');
   rect(x-2,y-4,4,8,'#ffe6a8');
@@ -2824,6 +2826,10 @@ function drawGrandLobby(showDoors=true){
   }
   for(const edge of [.32,cols-.37])surface(edge,.32,.055,rows-.64,.17,'#d5b080');
   for(const edge of [.32,rows-.37])surface(.32,edge,cols-.64,.055,.17,'#d5b080');
+  // A landing spreads from the head of the carpet to the Warden's feet, so the first walk ends where he stands.
+  surface(9.7,2.85,2.1,1.9,.22,'#584a51');
+  surface(9.8,2.93,1.9,1.74,.27,'#182943','#b28a5c');
+  surface(9.93,3.06,1.64,1.48,.31,'#223b65','#d6ae6e');
   surface(6.89,3.98,3.22,10.56,.22,'#584a51');
   surface(7,4.07,3,10.38,.27,'#182943','#b28a5c');
   surface(7.13,4.22,2.74,10.08,.31,'#223b65','#d6ae6e');
@@ -2844,6 +2850,23 @@ function drawGrandLobby(showDoors=true){
     surface(x,y,3.6,3.7,.15,'#8d909c','#bbad93');
     surface(x+.12,y+.12,3.36,3.46,.18,'#9696a0');
   }
+  // A compass mosaic gives the open south-east floor a place to gather.
+  {
+    const cx=13.5,cy=13.4;
+    const ring=(r,z,fill,line)=>{
+      const [x,y]=point(cx,cy,z);
+      ctx.beginPath();ctx.ellipse(x,y,r*25.456,r*12.728,0,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
+      if(line){ctx.strokeStyle=line;ctx.lineWidth=1;ctx.stroke();}
+    };
+    const star=(r,turn,z,color)=>polygon(Array.from({length:8},(_,i)=>{
+      const angle=turn+i*Math.PI/4,reach=i%2?r*.38:r;
+      return point(cx+Math.cos(angle)*reach,cy+Math.sin(angle)*reach,z);
+    }),color);
+    ring(1.75,.15,'#6f6672');ring(1.62,.18,'#cdb07a');ring(1.5,.2,'#22375a');ring(1.02,.22,'#2b4570','#b9975f');
+    star(1.42,Math.PI/4,.24,'#b9975f');star(1.36,0,.26,'#ead29a');
+    ring(.2,.3,'#22375a','#ead29a');
+    lobbyLight(...point(cx,cy),70,'#ffd39a55',.47);
+  }
   for(const [x,y] of [[2.3,2.9],[4.4,4.1],[12.9,8.5],[6.7,14.2]]){
     lobbyLight(...point(x,y),68,'#ffd39a7a',.47);
   }
@@ -2852,6 +2875,12 @@ function drawGrandLobby(showDoors=true){
     const middle=(door.start+door.end)/2;
     const spot=door.side==='front'?point(middle,rows-.8):door.side==='left'?point(.86,middle):point(middle,.86);
     lobbyLight(...spot,32,lobbyPortalColors[door.to][2]+'63',.55);
+    // Each portal throws its own colour across the tiles in front of it.
+    if(door.side!=='front')for(const [reach,inset,alpha] of [[2.5,.05,'1c'],[1.7,.2,'26'],[.95,.36,'33']]){
+      const glow=lobbyPortalColors[door.to][2]+alpha,span=door.end-door.start-inset*2;
+      if(door.side==='left')surface(.4,door.start+inset,reach,span,.2,glow);
+      else surface(door.start+inset,.4,span,reach,.2,glow);
+    }
   }
   for(const side of ['left','right']){
     const length=side==='left'?rows:cols;
@@ -2865,6 +2894,10 @@ function drawGrandLobby(showDoors=true){
     wall(side,0,length,12,14,'#a58669');
     wall(side,0,length,77,81,'#8b8190');
     wall(side,0,length,79,81,'#c0ab99');
+    // A studded frieze under the cornice dresses the wall above the door signs.
+    wall(side,0,length,70.5,76,'#252f49');
+    wall(side,0,length,70.5,71.2,'#8f775c');
+    for(let u=.55;u<length;u+=.5)wall(side,u,u+.16,72.6,74.4,'#c9a66b');
     for(const u of (side==='left'?[.20,4.4,8,12.05,15.54]:[.20,5.6,12.0,17.5])){
       wall(side,u,u+.25,1,76,'#2b354d');
       wall(side,u+.04,u+.18,3,76,'#718096');
@@ -3400,9 +3433,9 @@ function object(item,highlight=false,time=0,weather=null) {
     part(.07,.15,length-.14,.035,21,.8,'trim');
     part(.03,.28,.1,.57,16,.7,cloth);part(length-.13,.28,.1,.57,16,.7,cloth);
     if(type==='sofa'){
-      part(.22,.35,.32,.24,13,5,'gold');
-      part(.25,.39,.22,.035,18,.6,'cream');
-      part(1.43,.32,.33,.27,13,5,'cream');
+      // Two throw pillows rest against the back, leaving the seats clear.
+      part(.2,.26,.36,.1,13,6.5,'gold');
+      part(1.42,.26,.36,.1,13,6.5,'cream');
       part(.99,.33,.035,.55,13,.3,'trim');
     }else part(.24,.34,.25,.2,13,5,'cream');
   } else if(type==='bench'){
@@ -4443,6 +4476,21 @@ function courtyardLife(now,hour){
   }
   return actors;
 }
+// Lobby regulars. Like the Courtyard's, they are scenery on the shared clock: they never block a tile and cannot be clicked.
+// They arrive once the Warden has opened the doors, so a first-time visitor sees him alone.
+function lobbyLife(now){
+  const still=reducedMotion.matches,loop=period=>((now/period)%1+1)%1;
+  // A porter walks the south side of the hall and waits at each end.
+  const beat=loop(26000),out=beat<.5,leg=out?beat*2:(1-beat)*2,walking=!still&&leg>.12&&leg<.88;
+  return [
+    {ambient:'porter',x:10.6+Math.min(1,Math.max(0,(leg-.12)/.76))*5.2,y:11.7,moving:walking,direction:walking&&!out?'left':'right',back:walking&&!out,
+      look:{outfit:5,hair:3,trousers:3,boots:2,faceStyle:'angular'}},
+    // Two visitors talk on the compass mosaic, and the Tower cat keeps the seats company.
+    {ambient:'visitor',x:12.7,y:13.1,moving:false,direction:'right',back:false,look:{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}},
+    {ambient:'visitor',x:13.8,y:13.5,moving:false,direction:'left',back:false,look:{outfit:5,hair:1,trousers:1,boots:0,faceStyle:'soft'}},
+    {ambient:'cat',x:6.1,y:11.2,moving:false,direction:'right',back:false}
+  ];
+}
 function drawAmbientActor(item,time){
   const [x,y]=point(item.x+.5,item.y+.5);
   surface(item.x+.26,item.y+.3,.48,.42,.2,'#43324440');
@@ -4463,8 +4511,8 @@ function drawAmbientActor(item,time){
   const child=item.ambient==='child';
   ctx.save();
   if(child){ctx.translate(x,y);ctx.scale(.74,.74);ctx.translate(-x,-y);}
-  sprite(ctx,x,y,child?{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}:{outfit:5,hair:1,trousers:3,boots:2,faceStyle:'angular'},
-    {direction:item.direction,back:item.back,cycle:item.moving?time/(child?100:170):0,time,vest:child?false:'leatherVest'});
+  sprite(ctx,x,y,child?{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}:item.look??{outfit:5,hair:1,trousers:3,boots:2,faceStyle:'angular'},
+    {direction:item.direction,back:item.back,cycle:item.moving?time/(child?100:170):0,time,vest:child||item.look?false:'leatherVest'});
   ctx.restore();
   if(item.lantern){
     const lx=x+(item.direction==='right'?8:-8),ly=y-15;
@@ -4581,6 +4629,7 @@ function draw(time){
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
   const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
   if(currentRoom==='outside')items.push(...courtyardLife(reducedMotion.matches?0:worldNow,frameHour));
+  if(currentRoom==='hub'&&lobbyRoutesOpen())items.push(...lobbyLife(reducedMotion.matches?0:worldNow));
   if(crossing){
     if(crossing.deer)items.push(crossing.deer);
     items.push(...willowbankFlock(wildlifeNow,[player,...[...remotePeers.values()].map(p=>({x:p.rx,y:p.ry}))]));
