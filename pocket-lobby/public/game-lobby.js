@@ -12,20 +12,6 @@ function lobbyLight(x,y,radius,color,flatten=1){
   ctx.fillRect(-radius,-radius,radius*2,radius*2);
   ctx.restore();
 }
-function drawLobbySky(){
-  const {width,height}=view;
-  lobbyLight(width*.54,height*.38,350,'#29467999',.8);
-  const ridge=(base,heights,color)=>{
-    const peaks=heights.map((rise,i)=>[i*width/(heights.length-1),base-rise]);
-    polygon([...peaks,[width,height],[0,height]],color);
-  };
-  ridge(260,[52,85,40,106,73,113,60,96,49,109,63,96,70],'#142440');
-  ridge(294,[73,46,78,40,75,53,77,58,99,68,96,44,65],'#101c33');
-  for(let i=0;i<39;i++){
-    const x=17+(i*137)%686,y=12+(i*47)%158;
-    rect(x,y,i%8===0?2:1,1,i%4===0?'#a4c7d7ad':'#7690b46e');
-  }
-}
 function lobbyWallPoint(side,u,z){
   return side==='right'?point(u,0,z):point(0,u,z);
 }
@@ -109,7 +95,10 @@ function drawLobbyCrystal(x,y,time){
 }
 function drawGrandLobby(showDoors=true){
   const {cols,rows}=view;
-  drawLobbySky();
+  // The surrounding atrium already provides the backdrop. Keep the room layer transparent at its edges.
+  for(const inset of [.55,.32,.12]){
+    polygon([point(-inset,0,-13),point(cols+inset,0,-13),point(cols+inset,rows+inset,-13),point(0,rows+inset,-13)],'#070d1928');
+  }
   polygon([point(-.25,-.25,-9),point(cols+.44,-.25,-10),point(cols+.44,rows+.46,-14),point(-.25,rows+.46,-11)],'#080f1bc9');
   block(0,0,cols,rows,-13,13,['#9f9ca1','#555568','#363e55']);
   block(0,rows-.07,cols,.08,-10,2,['#9a785d','#b79265','#72584d']);
@@ -144,9 +133,14 @@ function drawGrandLobby(showDoors=true){
   surface(8.44,9.05,.13,.18,.75,'#1e3557');
   for(let y=4.8;y<13.5;y+=.42){surface(7.18,y,.035,.12,.5,'#caa465');surface(9.78,y,.035,.12,.5,'#caa465');}
   // Seating bays use architectural inlays, leaving all existing walking tiles free.
-  for(const [x,y] of [[1.4,9.55],[12.4,7.55]]){
-    surface(x,y,3.6,3.7,.15,'#8d909c','#bbad93');
-    surface(x+.12,y+.12,3.36,3.46,.18,'#9696a0');
+  for(const [x,y,width,depth,ink,edge] of [[3.22,9.49,3.24,3.76,'#635669','#b58b78'],[12.81,9.39,3.69,2.98,'#556971','#b5a378']]){
+    surface(x,y,width,depth,.16,'#4b454f');
+    surface(x+.1,y+.1,width-.2,depth-.2,.2,ink,edge);
+    for(const offset of [.19,depth-.25])surface(x+.2,y+offset,width-.4,.05,.22,edge);
+    for(let offset=.28;offset<depth-.28;offset+=.24){
+      surface(x+.18,y+offset,.11,.052,.24,edge);
+      surface(x+width-.29,y+offset,.11,.052,.24,edge);
+    }
   }
   // A compass mosaic gives the open south-east floor a place to gather.
   {
@@ -220,16 +214,36 @@ function drawGrandLobby(showDoors=true){
 }
 // Lobby regulars. Like the Courtyard's, they are scenery on the shared clock: they never block a tile and cannot be clicked.
 // They arrive once the Warden has opened the doors, so a first-time visitor sees him alone.
+function drawLobbyAmbience(time){
+  const still=reducedMotion.matches;
+  const t=still?0:time/1000;
+  ctx.save();
+  for(const [x,y,phase] of [[4.7,11.35,0],[14.65,10.82,2.3],[8.58,14.48,4.8]]){
+    const [px,py]=point(x,y,.22);
+    ctx.globalAlpha=still?.55:.49+.07*Math.sin(t*1.7+phase)+.045*Math.sin(t*4.9+phase);
+    lobbyLight(px,py,42,'#ffbd7055',.48);
+  }
+  for(let i=0;i<9;i++){
+    const a=(i*.397+t*.063)%1;
+    const [x,y]=point(2+(i%3)*5.2+a*1.1,1.3+(i*.91)%3.9,8+a*27);
+    ctx.globalAlpha=.13+.37*Math.sin(a*Math.PI);
+    rect(x,y,i%4?1:2,1,'#ffe7b0');
+  }
+  ctx.restore();
+}
 function lobbyLife(now){
   const still=reducedMotion.matches,loop=period=>((now/period)%1+1)%1;
   // A porter walks the south side of the hall and waits at each end.
-  const beat=loop(26000),out=beat<.5,leg=out?beat*2:(1-beat)*2,walking=!still&&leg>.12&&leg<.88;
+  const beat=loop(34000),out=beat<.5,leg=out?beat*2:(1-beat)*2,walking=!still&&leg>.2&&leg<.8;
+  const chatPhase=loop(10800),greeting=chatPhase>.25&&chatPhase<.35?(chatPhase-.25)*10:null;
+  const catPhase=loop(42000),catWalking=!still&&catPhase>.64&&catPhase<.78;
+  const catOut=loop(84000)<.5,catStep=Math.min(1,Math.max(0,(catPhase-.64)/.14));
   return [
-    {ambient:'porter',x:10.6+Math.min(1,Math.max(0,(leg-.12)/.76))*5.2,y:11.7,moving:walking,direction:walking&&!out?'left':'right',back:walking&&!out,
+    {ambient:'porter',x:11.6+Math.min(1,Math.max(0,(leg-.2)/.6))*4,y:12.04,moving:walking,direction:walking&&!out?'left':'right',back:walking&&!out,
       look:{outfit:5,hair:3,trousers:3,boots:2,faceStyle:'angular'}},
     // Two visitors talk on the compass mosaic, and the Tower cat keeps the seats company.
-    {ambient:'visitor',x:12.7,y:13.1,moving:false,direction:'right',back:false,look:{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}},
+    {ambient:'visitor',x:12.7,y:13.1,moving:false,direction:'right',back:false,wave:still?null:greeting,look:{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}},
     {ambient:'visitor',x:13.8,y:13.5,moving:false,direction:'left',back:false,look:{outfit:5,hair:1,trousers:1,boots:0,faceStyle:'soft'}},
-    {ambient:'cat',x:6.1,y:11.2,moving:false,direction:'right',back:false}
+    {ambient:'cat',x:5.45+(catOut?catStep:1-catStep)*.8,y:11.65,moving:catWalking,direction:catOut?'right':'left',back:false}
   ];
 }

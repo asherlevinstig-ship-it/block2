@@ -12,7 +12,9 @@ test('room client filters itself, sends movement/chat and cancels stale joins',a
  const room=createRoomConnection({getLocal:()=>local,flush:async()=>{},onPeers:p=>peers=p,onMoves:p=>moves=p,onChat:m=>chat.push(m),onHistory:()=>{},onStatus:s=>status=s,onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket,origin:'https://tower.test'});
  try{
   await room.join('hub');assert(sockets[0].url.startsWith('wss://tower.test/api/world/connect?room=hub'));
-  const ws=sockets[0];ws.message({type:'welcome',selfId:'me',players:[{id:'me'},{id:'other'}],chat:[]});assert.deepEqual(peers,[{id:'other'}]);assert.equal(status,'2 / 20 in room');
+  const ws=sockets[0];ws.message({type:'welcome',selfId:'me',players:[{id:'me'}],chat:[]});assert.equal(status,'1 player in room');
+  const crowd=Array.from({length:20},(_,i)=>({id:'player-'+i}));
+  ws.message({type:'snapshot',players:[{id:'me'},...crowd]});assert.deepEqual(peers,crowd);assert.equal(status,'21 players in room');
   assert(new URL(ws.url).searchParams.has('deltas'));
   ws.message({type:'moves',moves:[{id:'me',x:6},{id:'other',x:7}]});
   assert.deepEqual(moves,[{id:'other',x:7}]);
@@ -24,6 +26,22 @@ test('room client filters itself, sends movement/chat and cancels stale joins',a
  let resume;const pending=new Promise(resolve=>resume=resolve);
  const stale=createRoomConnection({getLocal:()=>local,flush:()=>pending,onPeers:()=>{},onChat:()=>{},onHistory:()=>{},onStatus:()=>{},onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket});
  const joining=stale.join('hub');stale.disconnect();resume();await joining;assert.equal(sockets.length,1);
+});
+test('public joins clear the old capacity limit and private homes still reject a second character',async t=>{
+ const originalPair=Object.getOwnPropertyDescriptor(globalThis,'WebSocketPair');
+ Object.defineProperty(globalThis,'WebSocketPair',{configurable:true,value:class {constructor(){this.client={};this.server={};}}});
+ t.after(()=>{if(originalPair)Object.defineProperty(globalThis,'WebSocketPair',originalPair);else delete globalThis.WebSocketPair;});
+ const room=Object.create(SharedRoom.prototype);
+ room.env={TOWER_DB:{prepare:()=>({bind:()=>({first:async()=>null})})}};
+ const join=roomName=>room.join(new Request('https://tower.test/',{headers:{
+  'X-Tower-Profile':encodeURIComponent(JSON.stringify({playerId:'new-player',id:'new-peer',room:roomName}))
+ }}));
+ room.sessions=new Map(Array.from({length:20},(_,i)=>[{}, {playerId:'player-'+i}]));
+ const publicJoin=await join('hub');
+ assert.equal(publicJoin.status,401,'The 21st join reaches character validation.');
+ assert.equal((await publicJoin.json()).error,'Character not found.');
+ room.sessions=new Map([[{}, {playerId:'home-owner'}]]);
+ assert.equal((await join('home')).status,409);
 });
 test('movement updates coalesce and keep older clients in sync without exposing hidden players',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});

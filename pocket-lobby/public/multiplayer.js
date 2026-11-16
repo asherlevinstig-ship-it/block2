@@ -26,7 +26,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
         }
         if(data.type==='welcome'||data.type==='snapshot'){
           const players=Array.isArray(data.players)?data.players:[];
-          onPeers(players.filter(peer=>peer.id!==selfId));onStatus(next==='home'?'Private home':players.length+' / 20 in room');
+          onPeers(players.filter(peer=>peer.id!==selfId));onStatus(next==='home'?'Private home':players.length+(players.length===1?' player in room':' players in room'));
           if(data.trees)onTrees(data.trees);
         }
         if(data.type==='moves'&&Array.isArray(data.moves))onMoves?.(data.moves.filter(peer=>peer.id!==selfId));

@@ -724,10 +724,10 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     const ramps=PALETTES.map((group,index)=>group?(group[indices[index]]??group[0]):null);
     for(let y=0;y<height;y++)for(let x=0;x<width;x++){
       const source=((selection.row*height+y)*meta.width+selection.column*width+x)*4,target=(y*width+x)*4;
-      sourcePixels.set(atlas.data.subarray(source,source+4),target);
-      const r=atlas.data[source],g=atlas.data[source+1],b=atlas.data[source+2];
+      const r=atlas.data[source],g=atlas.data[source+1],b=atlas.data[source+2],a=atlas.data[source+3];
+      sourcePixels[target]=r;sourcePixels[target+1]=g;sourcePixels[target+2]=b;sourcePixels[target+3]=a;
       const color=r===250&&g>=1&&g<=4?ramps[g][Math.min(2,b)]:null;
-      pixels[target]=color?color[0]:r;pixels[target+1]=color?color[1]:g;pixels[target+2]=color?color[2]:b;pixels[target+3]=atlas.data[source+3];
+      pixels[target]=color?color[0]:r;pixels[target+1]=color?color[1]:g;pixels[target+2]=color?color[2]:b;pixels[target+3]=a;
     }
     shapeCharacterIdentity(pixels,sourcePixels,width,height,appearance,selection);
     tailorTowerFrame(pixels,sourcePixels,width,height,appearance,selection,vest);

@@ -5,27 +5,31 @@ export const ashenAreas={
  cinderwatch:{number:'29',name:'Cinderwatch Camp',region:'Ashen March',badge:'ASHEN MARCH · SAFE CAMP',floor:'Frontier camp',
   description:'Rest at the brazier. Red flags mark the Broken Road. Follow the amber lamps to the Emberwood for a quieter route.',
   center:[5,5],palette:['#514957','#68565d','#b59976'],
-  authored:[['waystationAwning',3,2],['campfire',cinderBrazier.x,cinderBrazier.y],['riverCrates',7,3],['riverLantern',3,6],['riverLantern',8,5],['ashenStandard',9,4],['watchRock',1,2]]},
+  authored:[['ashenShelter',3,2],['campfire',cinderBrazier.x,cinderBrazier.y],['riverCrates',7,3],['riverLantern',3,6],['riverLantern',8,5],['ashenStandard',9,4],['watchRock',1,2]]},
  brokenRoad:{number:'30',name:'The Broken Road',region:'Ashen March',badge:'ASHEN MARCH · HOSTILE',floor:'Ruined military road',
-  description:'A Cinderback guards the direct road toward the Keep. Watch its charge and keep the west road clear for retreat.',
+  description:'A Cinderback guards the collapsed checkpoint. Watch its charge and keep the west road clear for retreat.',
   center:[5,5],palette:['#5e4948','#74605b','#ba866b'],landmark:['wildboar',6,5,5,5],
-  authored:[['ashenStandard',3,3],['ashenStandard',9,3],['ashenBarricade',3,6],['ashenBarricade',8,7],['ashenRuin',8,4],['ashenRuin',10,4],['ashenSnag',1,1],['ashenSnag',10,8],['riverLantern',1,6]]},
+  authored:[['ashenStandard',3,3],['ashenStandard',9,3],['ashenBarricade',3,6],['ashenBarricade',8,7],['ashenCheckpoint',8,4],['ashenRuin',10,4],['ashenSnag',1,1],['ashenSnag',10,8],['riverLantern',1,6]]},
  emberwood:{number:'31',name:'The Emberwood',region:'Ashen March',badge:'ASHEN MARCH · HOSTILE',floor:'Ash woodland',
   description:'Follow the amber lamps. Give the Ashback room, then reach the old latch to link this trail with the Broken Road.',
   center:[6,7],palette:['#49454b','#605059','#bd9a6f'],landmark:['stonebackBeetle',6,5,5,5],
-  authored:[['ashenSnag',1,1],['ashenSnag',3,2],['ashenSnag',8,2],['ashenSnag',10,1],['riverLantern',8,5],['watchMushroom',4,6],['watchMushroom',8,8],['riverLantern',3,7],['watchRock',8,7],['ashenLatch',ashenLatch.x,ashenLatch.y]]}
+  authored:[['ashenSnag',1,1],['ashenBurntTree',3,2],['ashenBurntTree',8,2],['ashenSnag',10,1],['riverLantern',8,5],['watchMushroom',4,6],['watchMushroom',8,8],['riverLantern',3,7],['watchRock',8,7],['ashenLatch',ashenLatch.x,ashenLatch.y]]}
 };
 export const ashenRooms=Object.keys(ashenAreas);
 export const ashenMapPositions={cinderwatch:[110,1290],brokenRoad:[110,1405],emberwood:[365,1405]};
 export const ashenFlags=['ashenShortcut'];
 export const ashenHostile=room=>room==='brokenRoad'||room==='emberwood';
-export const ashenPropHeights={ashenStandard:42,ashenBarricade:25,ashenRuin:38,ashenSnag:49};
+export const ashenPropHeights={ashenStandard:42,ashenBarricade:25,ashenRuin:38,ashenSnag:49,ashenShelter:58,ashenCheckpoint:65,ashenBurntTree:72};
 export function drawAshenGround(room,{surface,point,polygon,block},path){
  const [ground,light,trail]=ashenAreas[room].palette;
  for(let y=0;y<10;y++)for(let x=0;x<12;x++){
   const onTrail=path.has(x+','+y);
-  surface(x,y,1,1,0,onTrail?trail:(x*7+y*11)%4===0?light:ground,onTrail?'#69504b':'#423840');
+  surface(x,y,1,1,0,onTrail?trail:(x*7+y*11)%4===0?light:ground,onTrail?'#69504b':room==='emberwood'?'#39313b6e':'#423840');
   const n=(x*37+y*19)%11;
+  if(room==='emberwood'&&!onTrail){
+   if(n<5)surface(x+.03+(n%3)*.08,y+.1,.61,.59,.14,'#30253252');
+   if(n<4){surface(x+.2,y+.55,.52,.045,.2,'#744550');surface(x+.57,y+.57,.095,.045,.23,'#ed945d');}
+  }
   if(n<4)surface(x+.18+n*.10,y+.27,.16,.07,.12,onTrail?'#ecc59972':'#d0a18447');
   if(room==='brokenRoad'&&onTrail){
    for(const offset of [.09,.44,.78])surface(x+.10,y+offset,.8,.035,.18,'#dfb48e44');
@@ -38,7 +42,19 @@ export function drawAshenGround(room,{surface,point,polygon,block},path){
    block(x+.57,y+.56,.13,.2,0,1,['#9a786e','#45363d','#655052']);
   }
  }
- if(room==='cinderwatch')surface(3.18,3.88,3.64,2.82,.15,'#b98a5342','#cda171');
+ if(room==='cinderwatch'){
+  surface(3.18,3.88,3.64,2.82,.15,'#b98a5342','#cda171');
+  const wall=['#9c7c72','#4b3744','#69515a'],posts=['#b08b70','#4d3a43','#77554d'];
+  for(const start of [1.7,5.2]){
+   block(start,.75,2.65,.40,0,8,wall);
+   for(let i=0;i<6;i++){
+    const x=start+.12+i*.42,height=19+(i%3)*3;
+    block(x,.82,.3,.25,8,height-8,posts);
+    polygon([point(x,.81,height),point(x+.15,.81,height+5),point(x+.3,.81,height)],posts[0]);
+   }
+   block(start,.75,2.65,.08,13,2,wall);
+  }
+ }
  if(room==='brokenRoad')for(const x of [2,4,5,7,10]){
   const y=1.3+x%3*.21;
   surface(x+.1,y+.16,.8,.55,.12,'#221d2b58');
@@ -50,9 +66,10 @@ export function drawAshenDrift(room,time,{ctx,point,reduced}){
  ctx.save();
  for(let i=0;i<count;i++){
   const u=(i*.618+t*.14)%1,v=(i*.371+t*.08)%1;
-  const [x,y]=point(.5+u*11,.4+v*9,5+i*3%28);
+  const ember=room==='emberwood'&&i%3===0;
+  const [x,y]=ember?point((i%2?3.5:8.5)+(u-.5)*1.4,2.4+(v-.5)*1.4,4+u*48):point(.5+u*11,.4+v*9,5+i*3%28);
   ctx.globalAlpha=.12+.3*Math.sin(Math.PI*u);
-  ctx.fillStyle=i%4===0?'#ffbc78':'#c2aaa2';
+  ctx.fillStyle=ember?'#ff9d65':i%4===0?'#ffbc78':'#c2aaa2';
   ctx.fillRect(Math.round(x),Math.round(y),i%4===0?2:1,1);
  }
  ctx.restore();
@@ -62,7 +79,47 @@ export function drawAshenProp(item,time,{point,polygon,rect,surface,block,reduce
  const {x,y,type}=item,[px,py]=point(x+.5,y+.5);
  const shape=(vertices,fill,edge)=>polygon(vertices.map(([a,b])=>[px+a,py+b]),fill,edge);
  surface(x+.08,y+.14,.89,.77,.15,'#22192370');
- if(type==='ashenStandard'){
+ if(type==='ashenShelter'){
+  const timber=['#ad826b','#42313a','#75534e'];
+  const masonry=['#9b8584','#4c3e4c','#6f5a64'];
+  block(x-.38,y-.12,1.74,1.16,0,5,masonry);
+  block(x-.33,y-.1,1.64,.22,5,34,masonry);
+  for(const u of [-.33,1.13]){
+   block(x+u,y+.04,.24,1.02,5,14,masonry);
+   block(x+u,y+.8,.22,.22,19,22,timber);
+  }
+  const p=(u,v,z)=>point(x+u,y+v,z);
+  polygon([p(-.55,-.28,41),p(1.53,-.28,41),p(1.53,.42,58),p(-.55,.42,58)],'#55444d','#2d2434');
+  polygon([p(-.55,.42,58),p(1.53,.42,58),p(1.53,1.05,40),p(-.55,1.05,40)],'#a55446','#422e3c');
+  for(const u of [-.45,.04,.53,1.02]){
+   polygon([p(u,.43,57),p(u+.21,.43,57),p(u+.21,1.06,41),p(u,1.06,41)],'#c16f52');
+  }
+  polygon([p(-.55,1.05,40),p(1.53,1.05,40),p(1.53,1.05,36),p(-.55,1.05,36)],'#e3a276','#553544');
+  block(x+.25,y+.32,.44,.4,5,10,timber);
+  for(const u of [-.2,1.18]){const [lx,ly]=p(u,1.02,31);rect(lx-3,ly-6,6,9,'#412b34');rect(lx-2,ly-5,4,6,'#ffd68f');}
+ }else if(type==='ashenCheckpoint'){
+  const stone=['#ab8a88','#483641','#755881'];
+  block(x-.37,y+.04,1.73,.88,0,5,stone);
+  for(const [u,height] of [[-.28,58],[.94,39]]){
+   block(x+u,y+.12,.42,.55,5,height-5,stone);
+   for(let z=12;z<height;z+=9)block(x+u,y+.66,.42,.033,z,1,['#503c49','#503c49','#503c49']);
+  }
+  const p=(u,v,z)=>point(x+u,y+v,z);
+  polygon([p(-.29,.67,57),p(.14,.67,57),p(.81,.67,44),p(.47,.67,35),p(.21,.67,46),p(-.29,.67,45)],'#79606a','#3d2a39');
+  block(x+.48,y+.69,.43,.27,5,9,stone);
+  block(x+.18,y+.78,.27,.18,5,4,stone);
+ }else if(type==='ashenBurntTree'){
+  shape([[-9,0],[-6,-13],[-3,-46],[-7,-59],[-3,-69],[3,-64],[7,-49],[6,-17],[12,-2],[3,-4]],'#33252e','#231d28');
+  const branches=[
+   [[-3,-32],[-16,-44],[-27,-59],[-20,-56],[-16,-49],[-17,-64],[-13,-58],[-11,-49],[2,-41]],
+   [[3,-38],[14,-52],[15,-64],[19,-69],[18,-55],[30,-63],[27,-56],[16,-47],[6,-28]],
+   [[-4,-49],[-12,-65],[-15,-73],[-7,-67],[1,-57]]
+  ];
+  for(const branch of branches)shape(branch,'#4a3239','#261f29');
+  shape([[-3,-1],[-1,-36],[2,-51],[4,-47],[1,-18],[3,-4]],'#8b5149');
+  const heat=reduced||Math.sin(time/520+x)>0?'#ffab68':'#ce684d';
+  rect(px-1,py-20,2,7,heat);rect(px+3,py-10,2,5,'#bc6450');
+ }else if(type==='ashenStandard'){
   const sway=reduced?0:Math.round(Math.sin(time/330+x)*2);
   block(x+.34,y+.34,.32,.32,0,4,['#a58c7b','#453742','#66505a']);
   rect(px-2,py-43,4,41,'#463439');rect(px-1,py-42,1,39,'#ae7b5d');

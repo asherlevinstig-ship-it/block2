@@ -3,8 +3,8 @@ import {drawStonebackBeetle,stonebackArtHeight} from './stoneback-beetle-art.js'
 import {drawMoonbackStag,moonbackArtHeight} from './moonback-stag-art.js';
 import {drawMapProp} from './map-prop-art.js';
 import {ashenAreas,ashenPropHeights,ashbackArtHeight,drawAshenGround,drawAshenProp,drawCinderback,drawAshback} from './ashen-march.js';
-import {overlookRoom,overlookArea} from './lantern-keepers.js';
-import {waystationRoom,waystationArea} from './waystation.js';
+import {overlookRoom,overlookArea,drawKeeperOverlook} from './lantern-keepers.js';
+import {waystationRoom,waystationArea,drawWaystationGround} from './waystation.js';
 import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
 import {galleryLightReceiver,galleryLightSites} from './gallery-light.js';
 import {floodCrossingRow,floodCrossingOpen} from './flooded-chamber.js';
@@ -38,19 +38,19 @@ export const moonwood=(()=>{
     depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Rune Channeler protects 50 gold. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['depthsSeer',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
     depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Heavy plating shields the Ironhide Guardian. Build stagger to crack its armour. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
     depthsRest:{number:'D2·R',name:'The Quiet Shrine',description:'A peaceful spring offers 30 HP for 15 gold from your unbanked haul. One blessing per expedition.',badge:'OPTIONAL · REST',floor:'Shrine branch',center:[4,5],palette:['#344f52','#4c6a68','#99b6aa'],authored:[['pillar',3,2],['pillar',8,2],['glowFungus',3,7],['glowFungus',9,3],['cachePassage',2,5],['restAltar',6,4]]},
-    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A duelling Thornblade Duelist guards an Awakening Seal. Time a dodge and punish it with a counter. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['depthsSentinel',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
+    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A duelling Thornblade Duelist guards an Awakening Seal. Time a dodge and punish it with a counter. Win the challenge, then claim the reward from the seal.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['depthsSentinel',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
     depthsVault:{number:'D3',name:'The Sunken Vault',description:'A chained colossus rises over the drowned vault. Study the relief, then face its armour, blades and runic heart.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['depthsColossus',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
     logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',11,4],['wildtree',0,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
     trail:{number:'04',name:'Lantern Trail',description:'Follow the old trail into Moonwood. A lantern waits at the first waystone.',badge:'MOONWOOD',floor:'Forest trail',center:[5,5],palette:['#324957','#3e5460','#788285'],landmark:['lanternStand',5,4,5,5]},
     grove:{number:'05',name:'Whispering Grove',description:'The trees crowd around a trail that only a lantern can reveal.',badge:'MOONWOOD',floor:'Hidden grove',center:[5,5],palette:['#36465d','#4c4c6a','#777294']},
-    creek:{number:'06',name:'Glass Creek',description:'Tap Cross to the Ruins to light the stepping stones and walk across.',badge:'MOONWOOD',floor:'Creek crossing',center:[4,4],palette:['#32535b','#4a666c','#82928d']},
+    creek:{number:'06',name:'Glass Creek',description:'Follow the pale stones across to Moonwell Ruins.',badge:'MOONWOOD',floor:'Creek crossing',center:[4,4],palette:['#32535b','#4a666c','#82928d']},
     shrine:{number:'07',name:'Moth Shrine',description:'Pale moths circle a stone altar in a quiet clearing.',badge:'MOONWOOD',floor:'Hidden landmark',center:[5,4],palette:['#3c4862','#4f5773','#8f85a3'],landmark:['mothAltar',6,4,5,4],authored:[['pillar',4,2],['pillar',8,2],['pillar',4,6],['pillar',8,6],['wildtree',1,1],['wildtree',10,7],['wildbloom',5,2],['wildbloom',7,6]]},
     ruins:{number:'08',name:'Moonwell Ruins',description:'A Stoneback Beetle guards the portal to Moonwell Depths.',badge:'MOONWOOD',floor:'Ancient landmark',center:[5,4],palette:['#444258','#57536b','#8d8194'],landmark:['moonwell',6,4,5,4],authored:[['stonebackBeetle',6,5],['pillar',3,2],['pillar',8,2],['pillar',3,6],['pillar',8,6],['wildrock',9,6],['wildbloom',4,3],['wildtree',1,8],['wildtree',10,1]]},
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#303645','#443f56','#a38a77'],authored:[['wildtree',1,2],['wildtree',6,2],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from one of three fishing posts and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',2,0],['wildtree',0,8],['wildrock',2,7],['wildbloom',2,9],['wildbloom',3,3]]}
   };
-  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:32,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:stonebackArtHeight,moonbackStag:moonbackArtHeight,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
+  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:38,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:stonebackArtHeight,moonbackStag:moonbackArtHeight,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -231,6 +231,7 @@ export const moonwood=(()=>{
     if(id==='millCellar'){drawCellarGround({point,polygon,surface,block,rect});return;}
     const {cols,rows}=id===wildlifeRoom?wildlifeView:id==='willowbank'?willowbankView:view, area=areas[id], path=layouts[id].path;
     const [ground,light,trail]=area.palette;
+    if(id===overlookRoom){drawKeeperOverlook({point,polygon,surface,block,rect},path,rows,cols);return;}
     if(dungeonRooms.includes(id)){drawDungeonGround(id,{point,polygon,surface,block,rect});return;}
     if(id===wildlifeRoom){drawReserveGround({point,polygon,surface,block,rect});return;}
     polygon([point(-.25,-.3,-7),point(cols+.36,-.3,-8),point(cols+.37,rows+.42,-8),point(-.25,rows+.42,-8)],'#0c18268c');
@@ -248,6 +249,37 @@ export const moonwood=(()=>{
       surface(x+.20+offset,y+.39,.12,.035,.14,onTrail?'#a6a0a4':'#668086');
       if(onTrail&&id==='roots')surface(x+.37,y+.37,.26,.26,.25,'#cabb95','#645d63');
       if(!onTrail)surface(x+.58,y+.72,.05,.12,.15,id==='roots'?'#9a7482':'#679397');
+    }
+    if(id===waystationRoom)drawWaystationGround({surface});
+    if(id==='trail'){
+      surface(4.13,4.16,1.72,.68,.18,'#c0a880','#726550');
+      surface(4.24,4.28,1.48,.44,.22,'#dfc190');
+      surface(4.09,4.14,.23,.72,.23,'#af8862');
+    }
+    if(id==='creek'){
+      for(const x of [3,4,6,7]){
+        surface(x+.02,4.13,.96,.74,.19,'#9dbaae');
+        surface(x+.07,4.2,.86,.6,.21,'#c3d5bd');
+      }
+    }
+    if(id==='roots'){
+      const bark=['#786061','#382e41','#524052'];
+      const p=(x,y,z)=>point(x,y,z);
+      for(const x of [1,3.7,6.4,9.1,10.7]){
+        block(x-.43,2.32,.86,.56,0,15,bark);
+        polygon([p(x-.46,2.48,0),p(x-.41,2.54,24),p(x-.27,3.11,43),p(x-.19,4.27,51),p(x+.12,4.45,44),p(x+.25,3.26,32),p(x+.43,2.64,10),p(x+.42,2.56,0)],'#554052','#302839');
+        polygon([p(x-.4,2.57,9),p(x-.36,2.7,27),p(x-.22,3.39,43),p(x-.19,4.27,51),p(x-.03,3.54,40),p(x-.22,2.81,21)],'#967271');
+      }
+      for(const x of [2,5,8]){
+        polygon([p(x-.42,6.84,0),p(x-.23,6.79,17),p(x+.06,6.34,28),p(x+.36,6.01,24),p(x+.31,6.63,11),p(x+.58,7.07,0)],'#514052','#322a3d');
+        surface(x-.38,6.68,.96,.33,.16,'#473746');
+      }
+      for(const x of [2,5,8,10]){
+        polygon([p(x-.22,2.86,18),p(x+.55,3.27,32),p(x+1.15,3.17,29),p(x+.74,3.03,22),p(x+.21,2.83,13)],'#69505b','#443448');
+        surface(x,3.36,.40,.07,.3,'#89bf9a');
+      }
+      surface(10.18,5.19,1.58,.62,.31,'#879e724e');
+      surface(10.52,5.35,.95,.31,.34,'#b5cf8a');
     }
     if(id==='quarry'){drawQuarryCliffs({block,surface});drawMineMouth({block,point,polygon,rect});}
     if(id==='crystaldeep')drawCrystaldeepGround({block,surface,point,polygon});
@@ -407,15 +439,16 @@ export const moonwood=(()=>{
       ctx.save();ctx.globalAlpha=reduced?.15:.2+Math.sin(time/500)*.06;surface(x-.3,y-.3,1.6,1.6,.3,'#b9ffe0');ctx.restore();return;
     }
     if(type==='cachePassage'){
-      if(['depthsRest','depthsTreasury'].includes(item.room)&&drawMapProp(ctx,'arch',px,py)){
-        surface(x+.18,y+.17,.64,.65,.3,'#c5a0ee28');
-        rect(px-2,py-17,4,9,'#c5a0ee');rect(px-1,py-15,2,6,'#ffe9b7');
+      const returning=item.room!=='depthsGallery';
+      if(returning&&drawMapProp(ctx,'arch',px,py)){
+        surface(x+.18,y+.17,.64,.65,.3,'#85e0d073');
+        rect(px-2,py-17,4,9,'#76d6c0');rect(px-1,py-15,2,6,'#cbfff0');
         return;
       }
       part(.1,.1,.2,.8,0,27,stone);part(.7,.1,.2,.8,0,27,stone);
       part(.1,.1,.8,.8,27,4,['#c3ad77','#6c5d7a','#8d7b94']);
       surface(x+.32,y+.13,.34,.73,.3,'#3a273f');
-      rect(px-2,py-22,4,13,'#c5a0ee');rect(px-1,py-20,2,9,'#ffe9b7');
+      rect(px-2,py-22,4,13,returning?'#76d6c0':'#c5a0ee');rect(px-1,py-20,2,9,returning?'#cbfff0':'#ffe9b7');
       return;
     }
     if(type==='essenceCache'||type==='sideSeal'){
@@ -569,6 +602,10 @@ export const moonwood=(()=>{
       drawStonebackBeetle(item,time,{point,polygon,rect,surface,reduced,pose,exposed:!pose.defeated&&(combat?.exposedUntil??0)>Date.now()});
     }else if(type==='wildboar'){
       drawWildBoar(item,time,{point,polygon,rect,surface,reduced,pose});
+    }else if(type==='wildtree'&&item.room==='roots'){
+      polygon([[px-14,py-1],[px-6,py-9],[px-4,py-30],[px+3,py-36],[px+8,py-29],[px+6,py-12],[px+14,py-3],[px+2,py-2],[px-4,py-4]],'#69505d','#392b3d');
+      polygon([[px-5,py-8],[px-2,py-29],[px+3,py-33],[px+5,py-28],[px+1,py-16],[px-2,py-7]],'#a47d75');
+      rect(px+1,py-19,1,5,'#86ad8f');
     }else if(type==='wildtree'||type==='timberTree'){
       // Each crown leans with the shared wind, plus a small rustle of its own.
       drawWoodlandTree(x,y,{point,polygon,surface,block,rect,ctx},canopyOpacity,(reduced||!wind?0:wind.lean*7+Math.sin(time/380+x*1.9+y*2.7)*wind.strength*1.5)+stir*2.5);
@@ -621,11 +658,17 @@ export const moonwood=(()=>{
         part(.29,.29,.42,.42,23,2,stone);
         if(!progress.lantern)part(.35,.35,.30,.30,25,6,['#f8d890','#b58c72','#d9ab7c']);
       }else if(type==='mothAltar'){
-        part(.17,.17,.66,.66,0,7,stone);
-        part(.27,.27,.46,.46,7,10,stone);
-        part(.20,.20,.60,.60,17,3,aqua);
-        polygon([[px,py-25],[px+6,py-21],[px,py-17],[px-6,py-21]],light);
-        rect(px-9,py-26,2,1,light);rect(px+8,py-29,2,1,light);
+        part(.04,.04,.92,.92,0,5,stone);
+        part(.14,.14,.72,.72,5,8,stone);
+        for(const side of [-1,1]){
+          const points=vertices=>vertices.map(([x,y])=>[px+side*x,py+y]);
+          polygon(points([[2,-19],[8,-38],[24,-46],[29,-39],[22,-25],[27,-19],[17,-13],[6,-16]]),'#817495','#3d3556');
+          polygon(points([[5,-21],[13,-36],[24,-41],[19,-27],[15,-22],[19,-20],[12,-17]]),'#b29ac5');
+          polygon(points([[9,-26],[19,-35],[15,-27],[11,-22]]),'#f0cdea');
+        }
+        part(.33,.34,.34,.32,13,8,aqua);
+        polygon([[px,py-38],[px+5,py-28],[px,py-21],[px-5,py-28]],light);
+        rect(px-1,py-30,2,5,'#fff2dc');
       }else if(type==='moonwell'){
         ctx.save();
         part(.04,.04,.92,.92,0,6,stone);

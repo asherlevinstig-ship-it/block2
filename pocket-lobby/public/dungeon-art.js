@@ -103,7 +103,22 @@ export function drawDungeonGround(room,{point,polygon,surface,block,rect}){
  }
  // Entrance threshold, leading lines, and a large inlaid seal make the architecture legible.
  for(let x=2;x<6;x++)surface(x,5,.95,.9,.4,gate?'#b7ae8b':gallery?'#9ab69c':'#b3a0ba',tint[1]);
+ if(gallery){
+  for(let x=7;x<=9;x++){
+   surface(x+.04,5.19,.91,.62,.44,'#ba9a5b52');
+   polygon([point(x+.33,5.31,.5),point(x+.68,5.5,.5),point(x+.33,5.69,.5),point(x+.42,5.5,.5)],'#f2ca85');
+  }
+ }
  if(vault){
+  for(const x of [2,9]){
+   const basalt=['#8a788c','#352b46','#564764'];
+   block(x,1.53,.74,.53,-3,44,basalt);
+   block(x-.1,1.42,.94,.75,41,5,basalt);
+   surface(x+.13,2.07,.47,1.89,.21,'#d3a87328');
+   const [px,py]=point(x+.37,2.08,33);
+   polygon([[px-5,py],[px+5,py],[px+5,py+14],[px,py+18],[px-5,py+14]],'#69445f','#d3a873');
+   rect(px-1,py+4,2,7,'#ffe3aa');
+  }
   const [cx,cy]=point(6.5,5.5,.8);for(const radius of [36,53,70]){const points=[];for(let i=0;i<12;i++){const a=i/12*Math.PI*2;points.push([cx+Math.cos(a)*radius,cy+Math.sin(a)*radius*.5]);}polygon(points,'#75678444','#c1a7c088');}
   for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const sx=6.15+Math.cos(a)*2.1,sy=5.15+Math.sin(a)*2.1;surface(sx-.12,sy-.12,.52,.52,.6,'#ffd98a16');surface(sx,sy,.28,.28,.6,'#d6b77a');surface(sx+.08,sy+.08,.12,.12,.6,'#fff0c4');}
  }

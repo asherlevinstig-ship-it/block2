@@ -51,7 +51,7 @@ function glow(c,x,y,rx,ry,rgb,alpha){
   g.addColorStop(0,'rgba('+rgb+','+alpha+')');g.addColorStop(.45,'rgba('+rgb+','+alpha*.42+')');g.addColorStop(1,'rgba('+rgb+',0)');
   c.save();c.translate(x,y);c.scale(rx,ry);c.fillStyle=g;c.beginPath();c.arc(0,0,1,0,Math.PI*2);c.fill();c.restore();
 }
-function render(s){
+function render(s,quality){
   const r=game.getBoundingClientRect(),p=scene.getBoundingClientRect();
   if(r.width<8||r.height<8)return false;
   const dpr=Math.min(window.devicePixelRatio||1,quality>1?2:1);
@@ -168,7 +168,8 @@ function render(s){
 function frame(s){
   if(!enabled||!quality){off();return;}
   try{
-    if(!render(s))return;
+    // Dense rooms keep the scaled scene and effects without the extra full-frame bloom pass.
+    if(!render(s,s.crowded?1:quality))return;
     if(!live){live=true;document.documentElement.classList.add('scene-polish');}
     if(s.room!==lastRoom){
       if(lastRoom&&!s.reduced)fx.animate?.([{opacity:0},{opacity:1}],{duration:320,easing:'ease-out'});

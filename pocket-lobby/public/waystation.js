@@ -12,6 +12,17 @@ export const waystationArea={
  ['keeperCrate',9,4],['riverBench',5,7],['riverLantern',3,6],['riverFlowers',8,8],['waystationSign',2,5],['waystationAwning',8,7]]
 };
 
+export function drawWaystationGround({surface}){
+ surface(3.94,4.69,2.59,3.19,.19,'#555b66','#81858a');
+ surface(4.25,5.05,1.95,2.52,.21,'#697279');
+ surface(4.29,5.07,1.87,.08,.24,'#b0a18c');
+ surface(7.36,3.17,2.72,2.52,.19,'#644d46','#a2886e');
+ for(let x=0;x<7;x++){
+  const left=7.44+x*.37;
+  surface(left,3.24,.34,2.38,.21,x%2?'#896951':'#80614e','#5e4f49');
+ }
+}
+
 export function drawWaystationProject(item,time,{point,polygon,surface,block,rect,reduced,weather},board){
  const {x,y,type}=item;
  if(type==='waystationSign'){
@@ -57,7 +68,8 @@ export function drawWaystationProject(item,time,{point,polygon,surface,block,rec
   if(complete){
    const pulse=reduced?0:Math.sin(time/130)*3;
    const wind=reduced?0:weather?.wind??0;
-   surface(x-.3,y-.3,1.6,1.6,.31,'#f5a75530');
+   surface(x-.5,y-.5,2,2,.31,'#f5a75529');
+   surface(x-.3,y-.3,1.6,1.6,.33,'#ffc37633');
    polygon([[px-11,py-4],[px-9,py-14],[px-4,py-10],[px+1+wind*8,py-28-pulse],[px+9,py-12],[px+11,py-4],[px+2,py]],'#e67542');
    polygon([[px-5,py-4],[px-2,py-12],[px+1,py-19-pulse],[px+6,py-5],[px+1,py-1]],'#ffe09b');
    if(!reduced)for(let i=0;i<7;i++){
@@ -77,7 +89,13 @@ export function drawWaystationProject(item,time,{point,polygon,surface,block,rec
  }
  if(count>=8)block(x+.09,y+.10,.85,.81,18,3,wood);
  if(complete){
+  const [left,top]=point(x-.04,y+.02,35),[right,end]=point(x+1.12,y+.02,35);
+  polygon([[left,top-8],[right,end-8],[right-4,end+5],[left-4,top+5]],'#467e7c','#bfd5b5');
   block(x+.04,y+.05,.92,.9,32,4,['#a9bfba','#4a5a62','#667d82']);
+  for(let i=0;i<4;i++){
+   const [stripeX,stripeY]=point(x+.08+i*.25,y+.94,35);
+   rect(stripeX-3,stripeY-2,7,5,i%2?'#dfbd85':'#659990');
+  }
   for(let i=0;i<3;i++)block(x+.25+i*.17,y+.5,.12,.19,21,3,['#ffdc8d','#9a643c','#ce9550']);
   rect(px-7,py-23,14,4,'#ebc98e');
  }

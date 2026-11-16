@@ -309,7 +309,7 @@ export class SharedRoom{
     let profile;try{profile=JSON.parse(decodeURIComponent(request.headers.get('X-Tower-Profile')));}catch{return json({error:'Invalid room identity.'},403);}
     if(!profile?.playerId||!profile.id||!Object.hasOwn(socialRooms,profile.room))return json({error:'Invalid room identity.'},403);
     for(const [ws,meta] of this.sessions)if(meta.playerId===profile.playerId){recordPlayUsage(this.env,meta,Date.now(),{flush:true});ws.close(4001,'Character opened in another window');this.sessions.delete(ws);}
-    if(this.sessions.size>=(profile.room==='home'?1:20))return json({error:'This room is full. Try another area.'},409);
+    if(profile.room==='home'&&this.sessions.size>0)return json({error:'This room is full. Try another area.'},409);
     const [client,server]=Object.values(new WebSocketPair()),now=Date.now();
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
