@@ -117,7 +117,8 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
   // Closed-eye frames have no pupil markers. Preserve the blink and meditation.
   if(!eyes.length||!skin.length||!front||selection.state==='blink'||selection.state==='meditate')return;
   const colors=(tone??['#b97956','#d79e6c','#f6d0a0','#ffe5bf']).map(rgb);
-  const white=rgb('#fff0d7'),ink=rgb('#262033'),brow=rgb(face==='angular'?'#3b2a30':'#634136');
+  const white=rgb('#fff0d7'),ink=rgb('#262033'),brow=rgb(face==='angular'?'#3b2a30':'#634136'),catchlight=rgb('#5d6488');
+  const blush=colors[2].map((v,i)=>Math.round(v*.62+[232,118,118][i]*.38)),lip=colors[0].map((v,i)=>Math.round(v*.55+[190,84,92][i]*.45));
   const eyeTop=Math.min(...eyes.map(p=>p.y)),eyeBottom=Math.max(...eyes.map(p=>p.y));
   const facePixels=skin.filter(p=>p.y>=eyeTop-4&&p.y<=eyeBottom+5);
   const mask=new Set([...facePixels,...features].map(p=>at(p.x,p.y)));
@@ -129,11 +130,10 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
   const center=(left+right)/2,look=selection.row===1?1:-1;
   for(const p of facePixels){
     const far=(p.x-center)*look<-3;
-    const cheek=p.y>=eyeBottom+1&&Math.abs(p.x-center)>=4;
     const jaw=p.y>=eyeBottom+3;
-    let shade=far||cheek||p.shade===0?1:2;
+    // Clean planes read better at game size: a shaded far side, the fringe's shadow and a chin line.
+    let shade=far||p.y<=eyeTop-3||p.y>=eyeBottom+5?1:2;
     if(face==='angular'&&jaw)shade=far?0:1;
-    if(face==='soft'&&p.y===eyeBottom+2&&!far)shade=3;
     draw(p.x,p.y,colors[shade]);
   }
   for(const p of features){
@@ -149,12 +149,14 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
   for(const group of groups){
     const x=Math.round(group.reduce((sum,p)=>sum+p.x,0)/group.length),y=Math.min(...group.map(p=>p.y));
     const start=face==='soft'?y-1:y;
-    const end=face==='soft'?y+2:face==='angular'?y:y+1;
+    const end=face==='angular'?y:y+1;
     for(let dy=start;dy<=end;dy++){
       draw(x,dy,ink);
       draw(x+look,dy,ink);
       draw(x-look,dy,white);
     }
+    // Soft eyes are three pixels tall, so one can carry a catchlight without thinning the eye.
+    if(face==='soft')draw(x,start,catchlight);
     const eyebrowY=start-2;
     draw(x-look,eyebrowY,brow);
     draw(x,eyebrowY,brow);
@@ -163,12 +165,13 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
       draw(x+look*2,eyebrowY+1,brow);
       draw(x+look*3,eyebrowY+1,brow);
     }
-    if(face==='soft')draw(x+look,eyeBottom+2,colors[1]);
+    if(face==='soft')draw(x,eyeBottom+2,blush);
   }
 
   const mouthX=Math.round(center+look*2),mouthY=eyeBottom+4;
-  draw(mouthX,mouthY,colors[0]);
-  draw(mouthX+look,mouthY,colors[0]);
+  const mouth=face==='soft'?lip:colors[0];
+  draw(mouthX,mouthY,mouth);
+  draw(mouthX+look,mouthY,mouth);
   if(face==='soft')draw(mouthX+look*2,mouthY-1,colors[0]);
   if(face==='angular')draw(mouthX-look,mouthY,colors[0]);
 }
@@ -681,6 +684,36 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
     }
   }
 }
+// Final pass on every frame: a soft bevel lit from the upper left, cooler shadow on the far side,
+// and an outline that picks up the colour it surrounds where the light falls.
+export function polishCharacterFrame(pixels,width,height){
+  const count=width*height,solid=new Uint8Array(count),rim=new Uint8Array(count),source=new Uint8ClampedArray(pixels);
+  for(let i=0;i<count;i++)solid[i]=source[i*4+3]>127?1:0;
+  const open=(x,y)=>x<0||y<0||x>=width||y>=height||!solid[y*width+x];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x;
+    if(solid[i]&&(open(x-1,y)||open(x+1,y)||open(x,y-1)||open(x,y+1)))rim[i]=1;
+  }
+  const edge=(x,y)=>open(x,y)||rim[y*width+x]===1;
+  const inner=(x,y)=>!open(x,y)&&!rim[y*width+x];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x,p=i*4;
+    if(!solid[i])continue;
+    const r=source[p],g=source[p+1],b=source[p+2];
+    if(rim[i]){
+      // Lit-side outline only; the shadow side keeps its full ink for contrast against the floor.
+      if(!(open(x-1,y)||open(x,y-1))||open(x+1,y)&&open(x,y+1))continue;
+      const q=inner(x+1,y)?p+4:inner(x,y+1)?p+width*4:-1;
+      if(q<0)continue;
+      pixels[p]=r*.62+source[q]*.21;pixels[p+1]=g*.62+source[q+1]*.21;pixels[p+2]=b*.62+source[q+2]*.24;
+      continue;
+    }
+    const lit=edge(x-1,y)||edge(x,y-1),dark=edge(x+1,y)||edge(x,y+1);
+    if(dark&&!lit){pixels[p]=r*.8;pixels[p+1]=g*.82;pixels[p+2]=b*.92;}
+    else if(lit&&!dark){pixels[p]=r*1.1+8;pixels[p+1]=g*1.08+6;pixels[p+2]=b*1.03+2;}
+    else if(!lit&&!dark&&(edge(x+2,y)||edge(x,y+2))){pixels[p]=r*.91;pixels[p+1]=g*.92;pixels[p+2]=b*.97;}
+  }
+}
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
   const meta=metadata,cache=new Map(),outlines=new WeakMap(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
@@ -704,6 +737,7 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     if(selection.state==='meditate')meditateTowerFrame(pixels,sourcePixels,width,height,appearance,selection);
     if(selection.signature==='bloodPrice')bloodPriceHands(pixels,sourcePixels,width,height,appearance,selection,vest);
     finishCharacterFace(pixels,width,height,appearance,selection);
+    polishCharacterFrame(pixels,width,height);
     const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');
     const frame=selection.stance?articulateFrame(pixels,width,height,selection.stance,meta.pivot):pixels;
     const data=typeof ImageData==='function'?new ImageData(frame,width,height):{data:frame,width,height};ctx.putImageData(data,0,0);

@@ -236,3 +236,17 @@ test('reading frames are cached separately and never draw a carried or equipped 
  renderer.draw(ctx,0,0,{},{});renderer.draw(ctx,0,0,{}, {reading:true,weapon:true,sheathed:true,meditating:true,weaponTier:'trainingSword',readingAge:1000});
  assert.notEqual(images[0],images[1]);renderer.draw(ctx,0,0,{}, {reading:true,readingAge:1000});assert.equal(images[1],images[2]);
 });
+
+test('the finishing pass bevels a frame from the upper left without changing its silhouette',async()=>{
+ const {polishCharacterFrame}=await import('../public/character-art.js');
+ const width=12,height=12,pixels=new Uint8ClampedArray(width*height*4),at=(x,y)=>(y*width+x)*4;
+ for(let y=2;y<10;y++)for(let x=2;x<10;x++)pixels.set(x===2||x===9||y===2||y===9?[30,30,50,255]:[120,100,80,255],at(x,y));
+ const before=pixels.slice();
+ polishCharacterFrame(pixels,width,height);
+ for(let i=3;i<pixels.length;i+=4)assert.equal(pixels[i],before[i]);
+ assert(pixels[at(3,3)]>before[at(3,3)],'upper-left interior is lifted');
+ assert(pixels[at(8,8)]<before[at(8,8)],'lower-right interior is shaded');
+ assert.deepEqual([...pixels.slice(at(5,5),at(5,5)+4)],[120,100,80,255]);
+ assert(pixels[at(2,5)]>before[at(2,5)],'lit outline takes some of the colour beside it');
+ assert.deepEqual([...pixels.slice(at(9,5),at(9,5)+4)],[30,30,50,255]);
+});
