@@ -131,12 +131,22 @@ function render(s){
         const life=(t/(5200+c*3800)+a)%1;x=ox+dw*(.1+.8*b+Math.sin(life*9+c*6)*.015);y=oy+dh*(.95-life*.8);
         alpha=Math.sin(life*Math.PI)*.6;rad=(.7+d*.8)*dpr*1.3;rgb='255,158,92';
       }else{
-        const life=(t/(14000+c*9000)+a)%1;x=ox+dw*((b+life*.08+Math.sin(life*7+d*5)*.012)%1);y=oy+dh*(.9-((c+life*.35)%1)*.8);
+        const life=(t/(14000+c*9000)+a)%1;x=ox+dw*((b+life*(.08+(s.wind?.strength??0)*.5)+Math.sin(life*7+d*5)*.012)%1);y=oy+dh*(.9-((c+life*.35)%1)*.8);
         alpha=(.5+.5*Math.sin(t/1300+d*40))*.2*Math.sin(life*Math.PI);rad=(.8+d*1.1)*dpr;rgb='255,236,205';
       }
       if(alpha<.02)continue;
       if(mood.motes!=='dust')glow(fctx,x,y,rad*4,rad*4,rgb,alpha*.45);
       fctx.globalAlpha=alpha;fctx.fillStyle='rgb('+rgb+')';fctx.beginPath();fctx.arc(x,y,rad,0,Math.PI*2);fctx.fill();
+    }
+  }
+  // Gusts: pale streaks cross the scene when the wind is up, on the same swell that bends the trees.
+  if(!s.reduced&&s.wind&&s.wind.strength>.4){
+    fctx.globalCompositeOperation='lighter';fctx.strokeStyle='#eef6ff';fctx.lineCap='round';
+    const force=(s.wind.strength-.4)/.6;
+    for(let i=0;i<6;i++){
+      const [a,b,c]=seeds[i],run=(t/(1500+c*1300)+a)%1,x=ox+dw*(run*1.3-.15),y=oy+dh*(.16+.66*b)+Math.sin(run*5+c*6)*dh*.02,reach=dw*(.05+.05*c);
+      fctx.globalAlpha=Math.sin(run*Math.PI)*force*s.wind.gust*.3;fctx.lineWidth=Math.max(1,dpr);
+      fctx.beginPath();fctx.moveTo(x-reach,y);fctx.quadraticCurveTo(x-reach*.4,y-dh*.012,x,y+dh*.004);fctx.stroke();
     }
   }
   // 5. Click feedback: an isometric ring where the pointer landed.

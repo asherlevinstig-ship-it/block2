@@ -318,7 +318,7 @@ function drawTimberTree(item,time){
   const tree=treeState(item);
   const shared=sharedTimber.get(timberKey(item)),hitAge=time-(shared?.impactAt??-Infinity);
   const [x,y]=point(item.x+.5,item.y+.5);
-  const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,canopyOpacity:timberCanopyOpacity(item)});
+  const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,wind:frameWind,canopyOpacity:timberCanopyOpacity(item)});
   if(tree.regrowsAt){
     const falling=shared?{started:shared.impactAt,direction:shared.fallDirection}:treeFall?.key===timberKey(item)?treeFall:null;
     const fall=falling?Math.min(1,Math.max(0,(time-falling.started)/timberTreeRules.fallMs)):1;
@@ -3268,7 +3268,7 @@ function object(item,highlight=false,time=0,weather=null) {
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
       }
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):currentRoom==='willowbank'&&(type==='riverWillow'||type==='riverCypress')?riverTreeOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun,weather,wind:frameWind,portalOpen:depthsDiscovered,canopyOpacity:type==='wildtree'?timberCanopyOpacity(item):currentRoom==='willowbank'&&(type==='riverWillow'||type==='riverCypress')?riverTreeOpacity(item):1,...(type==='trailCamp'?{campPhase:campFirePhase()}:{})});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -4299,9 +4299,13 @@ function drawCombatSelection(){
   }
   ctx.restore();
 }
+// The wind for the frame being drawn, or null indoors and for reduced motion.
+let frameWind=null;
 function draw(time){
   const worldNow=combatNow();
   const weather=outdoorWeather(currentRoom,worldNow);
+  // One wind per frame for everything that bends: trees, reeds, flags, smoke and gusts.
+  frameWind=reducedMotion.matches?null:window.towerWind?.for(currentRoom,worldNow)??null;
   window.courtyardEnvironment?.update();
   renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
@@ -4361,7 +4365,7 @@ function draw(time){
   const crossing=wildlifeNow===null?null:willowbankDeer(wildlifeNow);
   if(crossing?.tracks)drawWillowbankTracks({surface});
   drawOutdoorWeather(currentRoom,weather,{ctx,point,surface,rect,reduced:reducedMotion.matches});
-  drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
+  drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,wind:frameWind,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
   drawCombatSelection();
@@ -4577,7 +4581,7 @@ function draw(time){
   if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
   updateWorldFloats(time);
   for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
-  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,now:combatNow(),room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(currentRoom==='depthsVault'&&!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom)});}
+  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,now:combatNow(),wind:frameWind,room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(currentRoom==='depthsVault'&&!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom)});}
 }
 
 

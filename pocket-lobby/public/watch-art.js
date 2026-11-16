@@ -35,7 +35,7 @@ export function drawWatchAtmosphere(id,time,{point,surface,block,ctx,reduced,pro
   for(const y of [7.9,9]){block(0,y,4,.12,9,2,wood);for(const x of [0,1,2,3,3.8])block(x,y,.13,.14,0,12,wood);}
  }
 }
-export function drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,canopyOpacity=1}){
+export function drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,wind=null,canopyOpacity=1}){
  const {x,y,type}=item,[px,py]=point(x+.5,y+.5),part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
  if(type==='watchOak'||type==='watchPine'){
   surface(x-.2,y-.2,1.4,1.3,.3,'#111a2b55');part(.38,.4,.2,.2,0,34,wood);
@@ -65,7 +65,7 @@ export function drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,re
  }else if(type==='watchSign'){
   part(.43,.43,.1,.1,0,23,wood);part(.1,.2,.8,.2,21,7,['#d8b985','#74634e','#9f855f']);rect(px-7,py-25,14,2,'#f0d39b');
  }else if(type==='watchBanner'){
-  part(.4,.4,.1,.1,0,47,masonry);const sway=reduced?0:Math.sin(time/1100)*2;polygon([[px+2,py-46],[px+16+sway,py-44],[px+16,py-22],[px+9,py-26],[px+2,py-23]],'#49778c');rect(px+7,py-39,3,9,'#e9d095');
+  part(.4,.4,.1,.1,0,47,masonry);const sway=reduced?0:Math.sin(time/(wind?1100-wind.strength*650:1100))*(2+(wind?.strength??0)*2)+(wind?.lean??0)*4;polygon([[px+2,py-46],[px+16+sway,py-44],[px+16,py-22],[px+9,py-26],[px+2,py-23]],'#49778c');rect(px+7,py-39,3,9,'#e9d095');
  }else if(type==='watchMushroom'){
   for(let i=0;i<3;i++){const dx=i*6-6;rect(px+dx,py-7-i%2*4,2,8,'#91b7b6');ctx.fillStyle=i%2?'#b1e3d8':'#94bdcf';ctx.beginPath();ctx.ellipse(px+dx,py-8-i%2*4,5,3,0,0,Math.PI*2);ctx.fill();}
  }else if(type==='watchBramble'){

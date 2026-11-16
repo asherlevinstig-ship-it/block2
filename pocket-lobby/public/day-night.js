@@ -18,6 +18,7 @@ export function dayPhase(now){
 let offset=0;
 // The game passes its server-synchronised clock so every player sees the same sky.
 export function syncDayClock(now){if(Number.isFinite(now))offset=now-Date.now();}
+export const worldNow=()=>Date.now()+offset;
 // Only open-air maps follow the cycle; interiors, caves, the dungeon and the Ashen March keep their own light.
 export function dayNightFor(room,now=Date.now()+offset){
  return environmentForRoom(room)?.dayNight?dayPhase(now):null;

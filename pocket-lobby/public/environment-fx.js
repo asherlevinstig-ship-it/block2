@@ -69,10 +69,10 @@ function ambientParticles(ctx,point,time,profile,kind){
     }
   }
 }
-function campSmoke(ctx,point,time){
+function campSmoke(ctx,point,time,lean=0){
   const [x,y]=point(3.5,4.5,17);
   for(let i=0;i<4;i++){
-    const age=fract(time/2900+i/4),px=x+Math.sin(age*3+i)*5+age*9,py=y-age*35;
+    const age=fract(time/2900+i/4),px=x+Math.sin(age*3+i)*5+age*9+age*age*lean*30,py=y-age*(35-lean*9);
     const size=3+age*6;
     ctx.globalAlpha=Math.sin(age*Math.PI)*.21;
     ctx.fillStyle='#b0b0b5';
@@ -101,7 +101,7 @@ function fountainSpray(ctx,point,time){
   }
 }
 
-export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=false,sluiceOpen=false}){
+export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=false,sluiceOpen=false,wind=null}){
   const profile=Object.hasOwn(rooms,room)?rooms[room]:null;
   if(!profile)return;
   const still=reduced||inCombat;
@@ -118,7 +118,7 @@ export function drawEnvironmentFx({room,ctx,point,time,reduced=false,inCombat=fa
   }
   if(!still){
     for(const kind of ['dust','leaves','fireflies'])if(profile[kind])ambientParticles(ctx,point,time,profile[kind],kind);
-    if(profile.smoke)campSmoke(ctx,point,time);
+    if(profile.smoke)campSmoke(ctx,point,time,wind?.lean??0);
     if(profile.moths)shrineMoths(ctx,point,time);
     if(profile.fountain)fountainSpray(ctx,point,time);
   }

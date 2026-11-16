@@ -1,5 +1,6 @@
 import {environmentForRoom} from './world-environment-catalog.js';
 import {dayNightFor} from './day-night.js';
+import {windFor} from './wind.js';
 
 export function initializeWorldEnvironment(doc=document,win=window){
  const css=doc.createElement('link');css.rel='stylesheet';css.href='courtyard-environment.css';doc.head.append(css);
@@ -77,8 +78,10 @@ export function initializeWorldEnvironment(doc=document,win=window){
    const [px,py]=at(side+(i*.021)% .11+Math.sin(t*.24+i)*.012,.20+p*.70);
    ctx.globalAlpha=(.2+.35*Math.sin(p*Math.PI))*(.7+.3*Math.sin(t+i));ctx.fillStyle=config.motes;ctx.fillRect(px,py,i%4===0?2:1,2);
   }
-  if(!reduced.matches&&config.leaves)for(let i=0;i<8;i++){
-   const p=(t*(.024+i%3*.006)+i*.117)%1,[px,py]=at(.025+(i*.029)% .14+Math.sin(p*7+i)*.014,p);
+  // Leaves fall faster, in greater number and further across the scene as the wind rises.
+  const wind=windFor(displayedRoom);
+  if(!reduced.matches&&config.leaves)for(let i=0,n=8+Math.round((wind?.strength??0)*10);i<n;i++){
+   const p=(t*(.024+i%3*.006)*(1+(wind?.strength??0))+i*.117)%1,[px,py]=at(.025+(i*.029)% .14+Math.sin(p*7+i)*.014+p*((wind?.strength??0)*.34+(wind?.lean??0)*.08)*(.4+i%5*.15),p);
    ctx.save();ctx.translate(px,py);ctx.rotate(Math.sin(t*.5+i));ctx.globalAlpha=Math.sin(p*Math.PI)*.6;ctx.fillStyle=i%2?'#bca25f':'#d3b46c';ctx.fillRect(-2,-1,4,2);ctx.restore();
   }
   if(!reduced.matches&&config.sky&&night>.6){const p=(t%23)/1.2;if(p<1){const [px,py]=at(.58-p*.14,.07+p*.10),tail=ctx.createLinearGradient(px,py,px+w*.045,py-h*.031);tail.addColorStop(0,'#dcf7ffbb');tail.addColorStop(1,'#b8ddff00');ctx.globalAlpha=Math.sin(p*Math.PI);ctx.strokeStyle=tail;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px+w*.045,py-h*.031);ctx.stroke();}}
