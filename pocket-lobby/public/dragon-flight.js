@@ -1,10 +1,7 @@
-import {ashenRooms,watchRooms,willowmereRooms} from './region-catalog.js';
-import {overlookRoom} from './lantern-keepers.js';
-import {waystationRoom} from './waystation.js';
-import {wildlifeRoom} from './wildlife.js';
+import {moonwood} from './moonwood.js';
 
-const ridingRooms=new Set(['outside','trail','grove','creek','pond','logging','clearing','shrine','ruins','quarry',overlookRoom,waystationRoom,wildlifeRoom,...ashenRooms,...watchRooms.filter(room=>room!=='starfall'),...willowmereRooms]);
-export const canRideHere=room=>ridingRooms.has(room);
+export const canRideHere=room=>room==='outside'||moonwood.has(room);
+export const dragonLandingAccess=(room,x,run)=>room!=='depthsGate'||x<8||run?.finds?.includes('sluiceLever')===true;
 export const dragonFlightRules={range:9,height:82,canopy:57};
 const hoverClimbMs=950;
 export const dragonHoverLandingMs=1250;

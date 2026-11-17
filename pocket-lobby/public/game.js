@@ -7872,7 +7872,8 @@ function cancelSelection(){selection=null;editStatus('Select a piece to get star
 var fieldJournalOpen=false;
 function updateMountControl(state=window.playerCloud?.initial){
   const flight=$('quickFlight');
-  const riding=!!window.activeMount?.(state)&&currentRoom===state.location;
+  const localState=dragonLocalState(state);
+  const riding=!!currentDragon(localState);
   const hovering=dragonFlight?.hover&&dragonFlight.landAt===null;
   if(flight){
     flight.hidden=!dragonFlight&&!riding;
@@ -7884,8 +7885,9 @@ function updateMountControl(state=window.playerCloud?.initial){
   $('quickHover').hidden=!riding||!!dragonFlight||!!flightAim;
   const button=$('quickMount');
   if(!button)return;
-  button.hidden=!!dragonFlight||!window.dragonUnlocked?.(state?.mounts)||!window.canRideMount?.(state)||state.location!==currentRoom;
-  button.textContent=window.activeMount?.(state)&&!player.seat?'Dismount':'Ride dragon';
+  button.hidden=!!dragonFlight||!window.dragonUnlocked?.(localState?.mounts)||!window.canRideHere?.(currentRoom);
+  button.disabled=!window.canRideMount?.(localState)||player.inCombat||!!window.millRaidClient?.active;
+  button.textContent=localState?.mounts?.selected?'Dismount':'Ride dragon';
 }
 function updateFieldJournal(){
   updateMountControl();
@@ -10028,7 +10030,7 @@ function dragonFlightTargets(from){
   const tiles=[],items=roomFurniture();
   for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     const tile={x,y};
-    if(withinDragonFlightRange(from,tile)&&!blocked(x,y,items))tiles.push(tile);
+    if(withinDragonFlightRange(from,tile)&&dragonLandingAccess(currentRoom,x,depthsRun)&&!blocked(x,y,items))tiles.push(tile);
   }
   return tiles.sort((a,b)=>Math.hypot(a.x-from.x,a.y-from.y)-Math.hypot(b.x-from.x,b.y-from.y));
 }
@@ -10095,10 +10097,13 @@ function finishDragonFlightWhenDue(){
     note(error.message);
   }).finally(()=>{flightLandingBusy=false;});
 }
-function currentDragon(){
+function dragonLocalState(state=window.playerCloud?.initial){
+  // Walking through an exit updates the scene before the queued server save completes.
+  return state&&state.location!==currentRoom?{...state,location:currentRoom}:state;
+}
+function currentDragon(state=dragonLocalState()){
   if(dragonFlight||player.inCombat||vaultCoopState||routineControlled()||player.seat||window.millRaidClient?.active)return null;
-  const state=window.playerCloud?.initial;
-  return state?.location===currentRoom?window.activeMount?.(state)??null:null;
+  return window.activeMount?.(state)??null;
 }
 async function claimTeacherDragon(){
   if(unavailable()||window.playerCloud?.initial?.styleAbilities?.teacherAccess!==true)return;

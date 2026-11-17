@@ -1,6 +1,7 @@
 import {activeMount} from '../public/mounts.js';
-import {withinDragonFlightRange,dragonFlightDuration,dragonHoverLandingMs,dragonGlideArrival} from '../public/dragon-flight.js';
+import {withinDragonFlightRange,dragonFlightDuration,dragonHoverLandingMs,dragonGlideArrival,dragonLandingAccess} from '../public/dragon-flight.js';
 import {moonwood} from '../public/moonwood.js';
+import {dungeonRooms,dungeonWalkable} from '../public/dungeon-arena.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 
 export function startDragonFlight(state,{tile,hover,direction,back},now){
@@ -21,8 +22,15 @@ export function startDragonFlight(state,{tile,hover,direction,back},now){
  state.mounts.flight={room,from:{...from},to,startedAt:now,landAt:now+dragonFlightDuration(from,to)};
 }
 
-function clearLandingTile({location:room,adventure},{x,y}){
- return validRoomTile(room,x,y,roomBoxes(room),adventure)&&!moonwood.blocked(room,x,y,adventure);
+function clearLandingTile({location:room,adventure,depthsRun},{x,y}){
+ if(!dragonLandingAccess(room,x,depthsRun)||moonwood.blocked(room,x,y,adventure,depthsRun))return false;
+ if(dungeonRooms.includes(room)){
+  const scenery=moonwood.layouts[room].scenery.filter(item=>
+   (item.type!=='galleryCache'||depthsRun?.finds?.includes('shellChime'))&&
+   (item.type!=='runeCoffer'||depthsRun?.finds?.includes('galleryCrack')));
+  return dungeonWalkable(room,{x,y},scenery,depthsRun?.vaultMechanism);
+ }
+ return validRoomTile(room,x,y,roomBoxes(room),adventure);
 }
 
 export function descendDragonHover(state,now){

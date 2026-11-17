@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dragonFlightPose,dragonGlideArrival,withinDragonFlightRange} from '../public/dragon-flight.js';
-import {activeMount,canRideHere,legendaryDragon} from '../public/mounts.js';
+import {dragonFlightPose,dragonGlideArrival,dragonLandingAccess,withinDragonFlightRange} from '../public/dragon-flight.js';
+import {activeMount,canRideHere,canRideMount,dragonUnlocked,legendaryDragon} from '../public/mounts.js';
+import {depthsStageIndex} from '../public/depths.js';
 import {ashenStagRules,ashenStagSighting,ashenChargePath,ashstepCloakId} from '../public/ashen-stag.js';
 import {actVaultParty,advanceVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';
 import {arenaMoveEvent} from '../public/dungeon-arena.js';
@@ -124,7 +125,7 @@ test('Cinderwing is earned from three distinct claimed hunts and rides outdoors 
  applyGameplayAction(s,'dragonMount',{selected:true});
  const loaded=normalizeState(s);
  assert.equal(activeMount(loaded),'cinderwing');
- for(const patch of [{location:'hub'},{location:'starfall'},{controlMode:'auto'},{vaultCoop:{}},{fishingCast:{}}])assert.equal(activeMount({...loaded,...patch}),null);
+ for(const patch of [{location:'hub'},{location:'library'},{controlMode:'auto'},{vaultCoop:{}},{fishingCast:{}}])assert.equal(activeMount({...loaded,...patch}),null);
  assert.equal(protectFishingState(normalizeState(),structuredClone(loaded)).mounts,undefined);
  const indoor={...loaded,location:'hub'};
  applyGameplayAction(indoor,'dragonMount',{selected:false});assert(!indoor.mounts.selected);
@@ -180,17 +181,58 @@ test('Cinderwing can fly and land in every rideable area and stays grounded insi
  }
 });
 
-test('The flight button opens landing selection outdoors and stays hidden in the Tower',()=>{
- for(const room of ['outside','willowbank','hub']){
-  const state=normalizeState({location:room,position:{x:4,y:4},mounts:{sightings:3,selected:true},bedLessonComplete:true,quest:{accepted:true}});
+test('Every adventure map, including dungeon branches, supports mounting, hovering, and flight',()=>{
+ for(const room of Object.keys(moonwood.areas)){
+  const index=depthsStageIndex(room);
+  const depthsRun=index<0?undefined:{cleared:room==='depthsGate'?0:2,routeChoice:'dangerous'};
+  const state=normalizeState({location:room,position:{x:4,y:5},depthsRun,adventure:{millCellarFound:true},mounts:{sightings:3,selected:false}});
+  const centralTiles=[{x:4,y:5},{x:5,y:5},{x:3,y:5},{x:4,y:4},{x:4,y:6}];
+  applyGameplayAction(state,'dragonMount',{selected:true},1000);
+  const from=centralTiles.find(tile=>{
+   state.position=tile;
+   try{applyGameplayAction(state,'dragonFlight',{hover:true},2000);return true;}
+   catch(error){assert.match(error.message,/clear tile/,room);return false;}
+  });
+  assert(from,room);
+  assert.equal(normalizeState(state).mounts.flight.room,room);
+  const to=centralTiles.find(tile=>{
+   if(tile===from)return false;
+   try{applyGameplayAction(state,'dragonGlide',{tile},4000);return true;}
+   catch(error){assert.match(error.message,/clear tile/,room);return false;}
+  });
+  assert(to,room);
+  applyGameplayAction(state,'dragonLand',{},7000);
+  assert(settleActivities(state,state.mounts.flight.landAt),room);
+  assert.deepEqual(state.position,to);
+  applyGameplayAction(state,'dragonMount',{selected:false},10000);
+  assert.equal(activeMount(state),null);
+ }
+});
+
+test('Cinderwing cannot land beyond the Flooded Gate before the sluice is opened',()=>{
+ const state=normalizeState({location:'depthsGate',position:{x:6,y:5},depthsRun:{cleared:0},mounts:{sightings:3,selected:true}});
+ const tile={x:9,y:5};
+ assert.throws(()=>applyGameplayAction(state,'dragonFlight',{tile},1000),/clear tile/);
+ state.depthsRun.finds=['sluiceLever'];
+ applyGameplayAction(state,'dragonFlight',{tile},1000);
+ assert.deepEqual(state.mounts.flight.to,tile);
+});
+
+test('Flight and mount controls follow the visible map even while a travel save is pending',()=>{
+ for(const room of ['outside','willowbank','crystaldeep','starfall','depthsVault','hub']){
+  const position={x:5,y:5},depthsRun=room==='depthsVault'?{cleared:2}:undefined;
+  const state=normalizeState({location:room,position,depthsRun,mounts:{sightings:3,selected:true},bedLessonComplete:true,quest:{accepted:true}});
   const game=boot(state);
-  Object.assign(game.context,{activeMount,withinDragonFlightRange});
-  game.context.playerCloud.initial=state;
+  Object.assign(game.context,{activeMount,canRideHere,canRideMount,dragonUnlocked,dragonLandingAccess,withinDragonFlightRange});
+  game.context.playerCloud.initial={...state,location:room==='hub'?'outside':'hub'};
   game.run('updateMountControl()');
   const button=game.nodes.get('quickFlight');
   assert.equal(button.hidden,room==='hub');
   assert.equal(game.nodes.get('quickHover').hidden,room==='hub');
+  assert.equal(game.nodes.get('quickMount').hidden,room==='hub');
   if(room==='hub')continue;
+  assert.equal(game.nodes.get('quickMount').textContent,'Dismount');
+  assert.equal(game.nodes.get('quickMount').disabled,false);
   assert.equal(button.textContent,'Take flight');
   button.onclick();
   assert(game.read('flightAim.tiles.length')>0);
