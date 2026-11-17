@@ -9,7 +9,7 @@ import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress,pinnedGoalSummary,ironSwordFishTask,ironSwordCatchTask,ironSwordHuntTask} from './upgrade-goals.js';
 import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile,playerMeleeReach} from './hunting.js';
-import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor,safeLaneDistance,ARENA_STEP_COST} from './dungeon-arena.js';
+import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor,safeLaneDistance,ARENA_STEP_COST,projectileCover} from './dungeon-arena.js';
 import {manaReadyAt} from './player-vitals.js';
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
@@ -132,8 +132,9 @@ export function nextCombatTactic(state){
  }
  if(e.brainVersion===2){
   const at=Math.max(earliest,e.arenaStepAt??0,e.brainAutoStepAt??0),p=arenaPlayer(e),foe=combatTargetTile(e),reach=playerMeleeReach(state.combatGear?.equippedWeapon);
-  if(Math.hypot(p.x-foe.x,p.y-foe.y)>reach&&at<strike-attack.tell&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST){
-   const tile=advanceOnEnemy({...e,arenaEnemy:foe,arenaSolids:[...(e.arenaSolids??[]),...(e.combatTarget&&e.combatTarget!=='leader'?[arenaEnemy(e)]:[])],adds:(e.adds??[]).filter(a=>a.id!==e.combatTarget)},reach);if(tile)offer({...make(at,'move','Closing to weapon range during the opening.',20),tile});
+  const bow=state.combatGear?.equippedWeapon==='shortbow',clear=tile=>!bow||!projectileCover(e,tile,foe);
+  if((Math.hypot(p.x-foe.x,p.y-foe.y)>reach||!clear(p))&&at<strike-attack.tell&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST){
+   const tile=advanceOnEnemy({...e,arenaEnemy:foe,arenaSolids:[...(e.arenaSolids??[]),...(e.combatTarget&&e.combatTarget!=='leader'?[arenaEnemy(e)]:[])],adds:(e.adds??[]).filter(a=>a.id!==e.combatTarget)},reach,clear);if(tile)offer({...make(at,'move',bow?'Seeking a clear shot.':'Closing to weapon range during the opening.',20),tile});
   }
  }
  const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;

@@ -7,11 +7,12 @@ export function combatFacing(from,to){
   const dx=to.x-from.x,dy=to.y-from.y;
   return dx||dy?{direction:dx-dy>=0?'right':'left',back:dx+dy<0}:null;
 }
-export function meleeApproach(from,target,reach,walkable){
-  if(Math.hypot(from.x-target.x,from.y-target.y)<=reach)return null;
+export function meleeApproach(from,target,reach,walkable,clear=()=>true){
+  const ready=tile=>Math.hypot(tile.x-target.x,tile.y-target.y)<=reach&&clear(tile);
+  if(ready(from))return null;
   const queue=[{...from,first:null}],seen=new Set([from.x+','+from.y]);
   for(const tile of queue){
-    if(tile.first&&Math.hypot(tile.x-target.x,tile.y-target.y)<=reach)return tile.first;
+    if(tile.first&&ready(tile))return tile.first;
     for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const next={x:tile.x+dx,y:tile.y+dy},key=next.x+','+next.y;
       if(seen.has(key)||next.x===target.x&&next.y===target.y||!walkable(next))continue;

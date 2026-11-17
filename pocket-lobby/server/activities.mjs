@@ -35,7 +35,7 @@ import {castEssencePower} from './essences.mjs';
 import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
-import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,huntRespawnField,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
+import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,huntRespawnField,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary,shortbowDrawMs,playerMeleeReach} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 import {bloodPriceRules,activePreyTrail,preyTrail,ambushPrey,ambushPosition,styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
@@ -76,6 +76,14 @@ export function startCombatEncounter(state,enemy,now){
   const relics=detectCombatBuild(state).relics;if(relics?.length)state.hunting.encounter.buildRelics=relics;
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths')||enemy.room==='millCellar'||enemy.room==='crystaldeep')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,...(enemy.room==="depthsVault"&&state.depthsRun?.vaultMechanism?{vaultMechanism:state.depthsRun.vaultMechanism}:{}),arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
+  if(state.combatGear.equippedWeapon==='shortbow'){
+    state.hunting.encounter.nextPlayerAt=now+shortbowDrawMs;
+    if(enemy.id==='boar'){
+      const scenery=moonwood.layouts.clearing.scenery??[];
+      Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:'clearing',arenaPlayer:{...state.position},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:scenery.filter(p=>p.type==='wildtree'||p.type==='wildrock').map(({x,y})=>({x,y}))});
+      state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
+    }
+  }
   if(enemy.room==='millCellar'||enemy.room==='crystaldeep')state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt||state.plan?.miningWork)state.hunting.encounter.tacticsAt=now;
@@ -220,6 +228,7 @@ function result(state,event,now,random=Math.random){
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
+  if(event.arrow&&encounter.arenaVersion!==1)event.arrow.from={...state.position};
   if(combatCostsPoint(event))spendActionPoint(state,now,{stopAuto:false});
   return {...event,...(enemy.id==='moonbackStag'?{enemyTile:arenaEnemy(encounter)}:{}),...(encounter.arenaVersion===1?{enemyTile:event.enemyTile??arenaEnemy(encounter),attackTile:event.attackTile??encounter.arenaTarget,attackCenter:event.attackCenter??enemyAttack(encounter).center,attackFan:event.attackFan??enemyAttack(encounter).fan,attackReach:event.attackReach??enemyAttack(encounter).reach}:{}),enemyId:event.enemyId??enemy.id,at:now};
 }
@@ -327,7 +336,9 @@ export function activityAction(state,action,body,now,random){
       enemy={...huntEnemies.moonbackStag,room:state.location};
     }
     if(enemy?.id==='millCustodian'&&(!state.adventure.millCellarFound||state.adventure.millCellarCleared))throw new Error('Choose another challenge. The cellar custodian has already been defeated.');
-    if(!enemy||!adjacent(state,sighting??{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
+    const prey=sighting??{x:6,y:5};
+    const bowOpening=enemy?.id==='boar'&&state.combatGear.equippedWeapon==='shortbow'&&Math.hypot(state.position.x-prey.x,state.position.y-prey.y)<=playerMeleeReach('shortbow');
+    if(!enemy||!bowOpening&&!adjacent(state,prey))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(!sighting&&(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy)))throw new Error('Invalid encounter. Wait for the creature to return.');
     if(body.ambush===true){

@@ -50,7 +50,7 @@ export function recordCombatFx(events,result,time){
   if(result.enemyTile)events.enemyTile=result.enemyTile;
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
-  if(action==='attack'&&damage)events.strikeAt=time;
+  if(action==='attack'&&(damage||result.arrow))events.strikeAt=time;
   if(!result.targetId)recordEnemyReaction(events,{damage,guarded:result.shellGuarded,broken:result.faultbreaker||staggered,interrupted},time);
   if(perfectDodge)events.perfectDodgeAt=time;
   if(counter)events.counterAt=time;
@@ -61,9 +61,9 @@ export function recordCombatFx(events,result,time){
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
   if(power){events.castAt=time;events.castKind=null;}
   if(result.outcome==='victory')events.victoryAt=time;
-  if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
+  if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&!result.splash?.length&&!result.arrow&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
-  events.bursts=[...live,{time,faultbreaker:result.faultbreaker,bloodPriceBlocked:result.bloodPriceBlocked,bloodPriceBroken:result.bloodPriceBroken,stoneguardBlocked:result.stoneguardBlocked,splash:result.splash,flanked:result.flanked,recoveryOpening:result.recoveryOpening,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
+  events.bursts=[...live,{time,arrow:result.arrow,faultbreaker:result.faultbreaker,bloodPriceBlocked:result.bloodPriceBlocked,bloodPriceBroken:result.bloodPriceBroken,stoneguardBlocked:result.stoneguardBlocked,splash:result.splash,cleave:result.cleave,flanked:result.flanked,recoveryOpening:result.recoveryOpening,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
     wardBroken,wardAbsorbed,staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
@@ -100,13 +100,13 @@ function hex(ctx,x,y,radius){
   ctx.closePath();ctx.stroke();
 }
 function drawMeleeImpact(ctx,{bx,by,px,py,aim},t,effect,reduced){
-  const tint=effect.counter?'#fff1a8':effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword;
+  const tint=effect.cleave?'#f7bd77':effect.counter?'#fff1a8':effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword;
   ctx.save();
   if(!reduced&&t<.58){
     const swing=t/.58;
     ctx.globalAlpha=1-swing;
     const x=px+(bx-px)*(.28+swing*.58),y=py+(by-py)*(.28+swing*.58);
-    ctx.strokeStyle=tint;ctx.lineWidth=effect.counter?5:3;arc(ctx,x,y,aim-.65+swing,15+swing*4);
+    ctx.strokeStyle=tint;ctx.lineWidth=effect.cleave||effect.counter?5:3;arc(ctx,x,y,aim-.65+swing,(effect.cleave?25:15)+swing*4);
     ctx.strokeStyle='#fff3d7';ctx.lineWidth=1;arc(ctx,x,y,aim-.60+swing,19);
   }
   ctx.globalAlpha=1;
@@ -208,7 +208,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
     else if(effect.wardAbsorbed&&enemyRow<3)popup(ctx,'RUNE WARD −'+effect.wardAbsorbed,ex,ey-22-rise-enemyRow++*13,t,'#c3b1ef',9);
     if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',10);
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',9);
-    for(const hit of effect.splash??[]){const [x,y]=point(hit.x+.5,hit.y+.5,15);popup(ctx,'−'+hit.damage+' SPLASH',x,y-26-rise,t,effect.powerColor??'#ffe49a',10);}
+    for(const hit of effect.splash??[]){const [x,y]=point(hit.x+.5,hit.y+.5,15);popup(ctx,'−'+hit.damage+' SPLASH',x,y-26-rise,t,effect.powerColor??(effect.cleave?'#f7bd77':'#ffe49a'),10);}
     const blocks=(effect.warded??0)+(effect.absorbed??0)+(effect.bloodPriceBlocked??0);
     const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.spatialAvoided?(effect.covered?'COVER':'CLEAR'):effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'SHIELD ABSORBED '+blocks:effect.ward?'WARD '+effect.ward:'';
@@ -219,6 +219,17 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
     if(effect.weakened&&playerRow<3)popup(ctx,'SHADOW −'+effect.weakened,px,py-34-rise-playerRow++*13,t,'#d0a5ff',9);
     if(effect.power&&playerRow<3)popup(ctx,effect.power,px,py-34-rise-playerRow++*13,t,effect.powerColor??'#cab6ff',9);
   }
+}
+export function drawShortbowArrow(ctx,point,arrow,age,reduced){
+  if(age<0||age>=350)return;
+  const {from,to,blocked}=arrow,t=age/350;
+  const [ax,ay]=point(from.x+.5,from.y+.5,16),[tx,ty]=point(to.x+.5,to.y+.5,blocked?11:15);
+  const travel=reduced?1:Math.min(1,t/.68),x=ax+(tx-ax)*travel,y=ay+(ty-ay)*travel;
+  const trail=Math.max(0,travel-.18);
+  ctx.save();ctx.strokeStyle='#ffe0a1';ctx.lineWidth=1.6;ctx.globalAlpha=travel<1?1:1-t;
+  line(ctx,ax+(tx-ax)*trail,ay+(ty-ay)*trail,x,y);
+  if(travel===1)particles(ctx,tx,ty,t,blocked?'#d9b493':'#ffdb8a',reduced,13,5);
+  ctx.restore();
 }
 export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,encounter}){
   const [bx,by]=point(arenaEnemy(encounter).x+.5,arenaEnemy(encounter).y+.5,15),[px,py]=point(player.x+.5,player.y+.5,18);
@@ -259,7 +270,8 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     const target={...points,bx:ex,by:ey,aim:Math.atan2(ey-py,ex-px)};
     for(const hit of effect.splash??[]){const [x,y]=point(hit.x+.5,hit.y+.5,15);particles(ctx,x,y,t,effect.powerColor??'#ffe49a',reduced,20,6);}
     if(effect.power)drawSpell(ctx,target,t,effect,reduced);
-    else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,target,t,effect,reduced);
+    else if(effect.arrow)drawShortbowArrow(ctx,point,effect.arrow,time-effect.time,reduced);
+    else if(effect.action==='attack'&&(effect.damage||effect.cleave))drawMeleeImpact(ctx,target,t,effect,reduced);
     if(effect.addKill)particles(ctx,ex,ey,t,'#ddcbfa',reduced,22,9);
     else if(effect.action==='enemy'){
       let impact=points;

@@ -6,7 +6,7 @@ import {buildProfile} from './combat-builds.js';
 import {FOX_STAGGER} from './familiars.js';
 import {addKinds,activeAdd,addEncounter,mergeAddEvent,normalizeAdds} from './dungeon-adds.js';
 import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-brain.js';
-import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor,isCombatArena} from './dungeon-arena.js';
+import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor,isCombatArena,projectileCover} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
 import {moonbackSite} from './moonback.js';
@@ -17,7 +17,7 @@ export function staggerProfile(enemy){
  return {limit:boss?160:enemy.room.startsWith('depths')?140:80,stun:boss?900:1800,opening:boss?1800:2400,recovery:boss?5000:3500};
 }
 export function weaponStagger(weapon,upgrade,counter=false){
- const profile=weaponProfile(weapon,upgrade);const base=!profile?0:profile.interval>=1400?36:profile.interval>=1000?18:8;
+ const profile=weaponProfile(weapon,upgrade);const base=!profile?0:weapon==='shortbow'?8:profile.interval>=1400?36:profile.interval>=1000?18:8;
  return base+(profile?.staggerBonus??0)+(counter?40:0);
 }
 export {vaultWarningPrompt} from './vault-coop.js';
@@ -107,7 +107,8 @@ const enemyMoves={
   aftershock:{id:'aftershock',name:'Aftershock',tell:900,delay:1350,damage:-10,shape:'ring',opensShell:false}
 };
 export const dungeonEnemyPreview=enemy=>enemy?.room.startsWith('depths')?smartProfile(enemy):enemy;
-export const playerMeleeReach=weapon=>['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45;
+export const shortbowDrawMs=900;
+export const playerMeleeReach=weapon=>weapon==='shortbow'?5:['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45;
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   if(encounter?.addActor)return addKinds[encounter.addActor].move;
   if(encounter?.brainVersion===2&&Object.hasOwn(smartAttacks,encounter.brainMove))return smartAttacks[encounter.brainMove];
@@ -155,6 +156,8 @@ export const weaponCatalog={
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
   wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
   ironSword:{name:'Iron Sword',damage:20,interval:1200,strength:2,agility:1,price:150,description:'A dependable blade with a steady rhythm.'},
+  shortbow:{name:'Hunting Shortbow',damage:13,interval:1800,strength:1,agility:2,description:'A craftable bow with a 5-tile range. Draw before firing. Cover blocks arrows.'},
+  warAxe:{name:'War Axe',damage:24,interval:1550,strength:3,agility:2,description:'Forged at Coppervein Quarry. A landed swing also deals half base damage to one nearby reinforcement.'},
   huntingSpear:{name:'Hunting Spear',damage:30,interval:1700,strength:3,agility:1,price:600,description:'Heavy thrusts with a longer recovery between attacks.'},
   quickDagger:{name:'Quick Dagger',damage:12,interval:700,strength:1,agility:3,price:550,description:'A light blade for rapid, precise strikes.'}
 };
@@ -360,7 +363,10 @@ export function resumeHunt(encounter,now,stats={},charmEquipped=false){
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={},openingMultiplier=1){
   const target=action==='attack'&&!encounter?.addActor&&activeAdd(encounter);
-  if(target&&now>=target.spawnAt)return mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments),now);
+  if(target&&now>=target.spawnAt){
+    const event=mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments),now);
+    return warAxeSweep(event,encounter,target,weapon,now);
+  }
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
@@ -387,7 +393,13 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   if(action==='attack'){
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
-    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2)result.encounter.nextPlayerAt=now+350;return result;}
+    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2||weapon==='shortbow'?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2&&weapon!=='warAxe')result.encounter.nextPlayerAt=now+350;return result;}
+    if(weapon==='shortbow'){
+      const from=arenaPlayer(encounter),to=arenaEnemy(encounter);
+      const cover=encounter.arenaVersion===1?projectileCover(encounter,from,to):null;
+      result.arrow={from,to:cover??to,blocked:!!cover};
+      if(cover)return result;
+    }
     result.damage=Math.ceil((attributes.damage+Math.floor(random()*5))*openingMultiplier);
     const fractured=!encounter.addActor&&encounter.faultHits>0&&now<encounter.faultUntil&&enemy.shellArmor;
     if(fractured){
@@ -501,8 +513,41 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}
   }
-  return transitionVaultPhase(result,encounter,now);
+  const event=transitionVaultPhase(result,encounter,now);
+  return warAxeSweep(event,encounter,arenaEnemy(encounter),weapon,now);
 }
+
+export function warAxeReinforcement(player,target,adds,primaryId){
+  let closest=null,distance=Infinity;
+  for(const add of adds){
+    if(add.id===primaryId||Math.hypot(add.x-player.x,add.y-player.y)>2)continue;
+    const gap=Math.hypot(add.x-target.x,add.y-target.y);
+    if(gap>1.5||gap>distance||gap===distance&&closest&&add.id>=closest.id)continue;
+    closest=add;distance=gap;
+  }
+  return closest;
+}
+export const warAxeSweepDamage=()=>Math.floor(weaponCatalog.warAxe.damage/2);
+
+function warAxeSweep(event,before,primary,weapon,now){
+  if(weapon!=='warAxe'||event?.action!=='attack'||event.outOfRange||!event.encounter?.adds?.length)return event;
+  const next=event.encounter;
+  const add=warAxeReinforcement(arenaPlayer(before),primary,next.adds.filter(candidate=>candidate.health>0&&candidate.spawnAt<=now),event.targetId);
+  if(!add)return event;
+  const damage=Math.min(add.health,warAxeSweepDamage()),killed=add.health===damage;
+  next.adds=killed?next.adds.filter(candidate=>candidate.id!==add.id):next.adds.map(candidate=>candidate.id===add.id?{...candidate,health:add.health-damage}:candidate);
+  event.splash=[{id:add.id,x:add.x,y:add.y,damage,killed}];
+  event.cleave=true;
+  if(killed){
+    event.splashKills=1;next.addKills=(next.addKills??0)+1;
+    if(next.combatTarget===add.id){next.combatTarget='leader';next.manualTarget=false;}
+    if(before.enemy==='cacheGuardian'&&add.kind==='wisp'&&!next.adds.some(candidate=>candidate.kind==='wisp')){
+      next.staggerWeakUntil=Math.max(next.staggerWeakUntil??0,now+3000);event.wardBroken=true;
+    }
+  }
+  return event;
+}
+
 export function enemyStatusEffects(encounter,now){
   if(!encounter)return [];
   const effects=[];

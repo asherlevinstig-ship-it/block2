@@ -1,5 +1,7 @@
 export function shopItemArt(id){
  const swords={
+ shortbow:'<path d="m22 9 15 5 10 18-10 18-15 5" fill="none" stroke="#462d2b" stroke-width="8" stroke-linejoin="round"/><path d="m22 9 15 5 10 18-10 18-15 5" fill="none" stroke="#d49b56" stroke-width="4" stroke-linejoin="round"/><path d="M22 9v46m-8-23h39m-6-5 6 5-6 5" fill="none" stroke="#e9e3c2" stroke-width="2"/>',
+ warAxe:'<path d="M28 13h7v44h-7z" fill="#8d5b3d" stroke="#302838" stroke-width="2"/><path d="M30 17h2v37h-2z" fill="#d7a574"/><path d="m16 14 17 3 13-8 10 3v21l-10 5-12-11-18 2z" fill="#9fb6c4" stroke="#273748" stroke-width="3"/><path d="m47 10 8 2v20l-9 4 4-6V16z" fill="#edf4e6"/><path d="M23 18h13v9H23z" fill="#b88453"/>',
  trainingSword:'<path d="m30 10 4-4 2 5v27h-6z" fill="#b3cad3"/><path d="M24 36h18v4H24zM31 40h4v12h-4zM28 52h10v4H28z" fill="#ac8856"/>',
  ironSword:'<path d="m29 8 4-5 4 5 2 29H27z" fill="#92aebc"/><path d="M29 11h3v25h-3z" fill="#edf2e8"/><path d="M21 36h24v5H21z" fill="#394d5d"/><path d="M30 41h6v13h-6z" fill="#684838"/><path d="M27 54h12v4H27z" fill="#9eb7c4"/>',
  wardenSword:'<path d="m28 9 5-6 5 6v27H28z" fill="#b8d6c5"/><path d="M29 11h3v23h-3z" fill="#f0f1d6"/><path d="m17 31 11 5h10l11-5-4 10H21z" fill="#f4d484"/><path d="M30 40h6v14h-6z" fill="#405d59"/><path d="M27 53h12v5H27z" fill="#efca74"/><path d="m33 34 4 4-4 4-4-4z" fill="#e5f2c7"/>',

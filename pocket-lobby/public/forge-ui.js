@@ -1,5 +1,7 @@
 import {pickaxes,pickaxeArt,miningLevel,equippedPickaxe} from './mining.js';
-import {barProducts,forgeCraftReason,barArt,pickaxeRecipe,pickaxeIngredients,forgeMaterialName} from './forge.js';
+import {weaponCatalog,warAxeSweepDamage} from './hunting.js';
+import {shopItemArt} from './shop-ui.js';
+import {barProducts,forgeCraftReason,barArt,pickaxeRecipe,pickaxeIngredients,forgeMaterialName,warAxeCraftReason,warAxeRecipe,shortbowCraftReason,shortbowRecipe} from './forge.js';
 
 export function initializeQuarryForge(api,doc=document){
  const css=doc.createElement('link');css.rel='stylesheet';css.href='forge.css';doc.head.append(css);
@@ -9,7 +11,7 @@ export function initializeQuarryForge(api,doc=document){
   <p class="forge-stock" data-forge="stock"></p>
   <p class="forge-status" data-forge="status" role="status"></p>
   <div class="forge-columns"><section aria-label="Smelt bars"><h3>Smelt bars</h3><p>Three ore makes one bar.</p><div data-forge="bars"></div></section>
-  <section aria-label="Craft pickaxes"><h3>Craft pickaxes</h3><p>Craft an upgrade and equip it immediately.</p><div data-forge="picks"></div></section></div>`;
+  <section aria-label="Craft equipment"><h3>Craft equipment</h3><p>Craft an upgrade and equip it immediately.</p><div data-forge="picks"></div></section></div>`;
  doc.body.append(dialog);
  const by=name=>dialog.querySelector('[data-forge="'+name+'"]');
  const node=(tag,text,className='')=>{const element=doc.createElement(tag);element.textContent=text;if(className)element.className=className;return element;};
@@ -55,6 +57,19 @@ export function initializeQuarryForge(api,doc=document){
    const button=node('button',state.mining.upgrades.includes(id)?'Already crafted':'Craft & equip');button.type='button';
    button.disabled=busy||!!reason||!api.ready();button.onclick=()=>change('mineCraft',{id},pick.name);
    card.append(button);by('picks').append(card);
+  }
+  for(const [id,reason,recipe,detail] of [
+   ['shortbow',shortbowCraftReason(state),shortbowRecipe,'Range 5 tiles · Cover blocks shots.'],
+   ['warAxe',warAxeCraftReason(state),warAxeRecipe,'Cleave one nearby reinforcement for '+warAxeSweepDamage()+' damage.']
+  ]){
+   const weapon=weaponCatalog[id];
+   const card=doc.createElement('article');card.className='forge-recipe forge-pick';
+   const art=doc.createElement('div');art.className='forge-art';art.innerHTML=shopItemArt(id);
+   const button=node('button',state.combatGear.ownedWeapons.includes(id)?'Already crafted':'Craft & equip '+weapon.name);
+   button.type='button';button.disabled=busy||!!reason||!api.ready();button.onclick=()=>change('mineCraft',{id},weapon.name);
+   card.append(art,node('h4',weapon.name),node('p',recipe),node('b',weapon.damage+' base damage · '+weapon.interval/1000+'s between attacks'),
+    node('p',detail),node('small',reason||'Ready to craft · 1 AP'),button);
+   by('picks').append(card);
   }
  }
  async function change(action,body,name){

@@ -7,6 +7,31 @@ import {boot} from './helpers/game-client.mjs';
 function fighter(room='depthsCache',magic=false){const cleared=room==='depthsGate'?0:room==='depthsGallery'?1:2;const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:{cleared,routeChoice:'dangerous'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword'],equippedWeapon:'ironSword'},characterRules:{combat:{enabled:true,dodge:true,q:false,e:false,fleeBelow:0}}});if(magic)prepareDungeonBuild(s);applyGameplayAction(s,'fight',{},1000,()=>.5);return s;}
 const sample=(room,magic=false)=>{const s=fighter(room,magic),events=advanceServerCombat(s,91000,()=>.5);return {s,events};};
 
+test('shortbow draws before firing and a Wild Boar closes on a distant archer',()=>{
+ const s=normalizeState({location:'clearing',position:{x:6,y:1},actionPoints:{value:3},stats:{agilityXp:1000},
+  combatGear:{ownedWeapons:['shortbow'],equippedWeapon:'shortbow'}});
+ applyGameplayAction(s,'fight',{},1000,()=>.5);
+ const initial=s.hunting.encounter;
+ assert.equal(initial.nextPlayerAt,1900);
+ assert.equal(normalizeHunting(s.hunting).encounter.arenaRoom,'clearing');
+ const first=advanceServerCombat(s,1899,()=>.5);
+ assert(!first.some(e=>e.action==='attack'));
+ assert(first.some(e=>e.action==='enemyMove'));
+ const shot=advanceServerCombat(s,1900,()=>.5).find(e=>e.action==='attack');
+ assert(shot.arrow);assert.equal(s.actionPoints.value,2);
+ assert.equal(shot.encounter.nextPlayerAt,3700);
+});
+
+test('shortbow shoots across a ranged dungeon lane but cover stops the same shot',()=>{
+ const e=fighter('depthsCache').hunting.encounter;
+ const from={x:3,y:3},target={x:6,y:3};
+ const shot=huntingTurn({...e,arenaPlayer:from,arenaEnemy:target},100,{},'attack',6000,()=>.5,'shortbow');
+ assert.deepEqual(shot.arrow,{from,to:{x:4,y:3},blocked:true});assert.equal(shot.damage,0);
+ const clear={x:3,y:5};
+ const hit=huntingTurn({...e,arenaPlayer:clear,arenaEnemy:target},100,{},'attack',6000,()=>.5,'shortbow');
+ assert.deepEqual(hit.arrow,{from:clear,to:target,blocked:false});assert(hit.damage>0);
+});
+
 test('Elite strength and previews agree with the live scaled encounter and boss thresholds',()=>{
  for(const [id,hp] of [['cacheGuardian',315],['sealGuardian',368],['depthsGuardian',420]]){const base=huntEnemies[id],s=fighter(base.room);assert.equal(s.hunting.encounter.health,hp);assert.equal(smartProfile(base).health,hp);assert.equal(huntEnemy(s.hunting.encounter).health,hp);assert(huntEnemy(s.hunting.encounter).damage>base.damage);}
  const e=fighter('depthsVault').hunting.encounter;for(const [hp,index] of [[281,1],[280,2],[141,2],[140,3]])assert.equal(vaultPhase({...e,health:hp}).index,index);

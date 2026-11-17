@@ -765,6 +765,7 @@ function drawRemote(peer,time){
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  if(peer.arrow)drawShortbowArrow(ctx,point,peer.arrow.shot,time-peer.arrow.at,reducedMotion.matches);
   if(peer.stoneguardUntil>now)window.drawStoneguard?.(ctx,x,y,time,peer.stoneguardUntil-now,reducedMotion.matches);
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
   if(peer.undead?.until>now){const [ux,uy]=point(peer.rx+1.25,peer.ry+1.25);drawUndeadAlly(ctx,ux,uy,peer.undead,time,reducedMotion.matches,{attackAge:now-(peer.undead.lastStrikeAt??0),flipped:peer.direction==='left'});}
@@ -1662,7 +1663,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(!result)return;
   const action=result.action,enemy=huntEnemies[result.enemyId]??(result.targetId?Object.values(addKinds).find(a=>a.id===result.enemyId):null)??huntEnemy(hunting.encounter);
   const encounter=result.encounter??hunting.encounter;
-  if(playEffects&&result.damage>0&&(action==='attack'||result.power)){
+  if(playEffects&&(result.damage>0||result.arrow)&&(action==='attack'||result.power)){
     const tile=result.enemyTile??(encounter?.arenaVersion===1?combatTargetTile(encounter):null);
     faceCombatTarget(tile);
   }
@@ -1681,11 +1682,13 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   else if(result.bloodPriceBlocked)combatMessage+=' Blood Price absorbed '+result.bloodPriceBlocked+' damage.';
   if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
+  if(result.arrow?.blocked)combatMessage='Cover blocked your arrow. Move for a clear shot.';
   if(result.outOfRange)combatMessage='Out of reach · Move closer to your target.';
   if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
   if(result.behaviour)combatMessage=result.behaviour;
   if(result.action==='reinforcements'&&result.spawned)combatMessage='Reinforcements are summoning!';
   if(result.addKill)combatMessage=enemy.name+' defeated.';
+  if(result.cleave)combatMessage+=' Cleave hit a reinforcement for '+result.splash[0].damage+' damage.';
   if(result.wardBroken)combatMessage='Rune Ward broken! Strike the Channeler now · Damage +25% for 3 seconds.';
   else if(result.wardAbsorbed)combatMessage+=' Rune Ward absorbed '+result.wardAbsorbed+' damage · Defeat its Rune Wisp.';
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
@@ -1896,7 +1899,7 @@ function updateCombatPanel(){
   $('quickDodge').classList.toggle('dodge-ready',timing&&!$('quickDodge').disabled);
   $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
-  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
+  $('combatCooldown').textContent=encounter?(combatGear.equippedWeapon==='shortbow'?'Next arrow ':'Next strike ')+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
   $('combatLog').textContent=(encounter&&needsLearningPoints()?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments,currentCombatBuild());
@@ -2231,7 +2234,7 @@ function updateDungeonArenaHud(){
  setHudText($('dungeonEnemyHealth'),(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health);
  $('dungeonEnemyBar').max=targetEnemy.health;$('dungeonEnemyBar').value=selected?.health??e?.health??enemy.health;
  const role=enemyRoleInfo(e,combatNow(),enemy.id),pack=e?.adds?.filter(a=>a.spawnAt<=combatNow()).length>=2;
- $('dungeonWeakness').hidden=!role&&!pack;setHudText($('dungeonWeakness'),(role?.status??'')+(pack?' · PACK · Fire / Storm Blade splash nearby reinforcements':''));$('dungeonWeakness').title=role?.hint??'';
+ $('dungeonWeakness').hidden=!role&&!pack;setHudText($('dungeonWeakness'),(role?.status??'')+(pack?(combatGear.equippedWeapon==='warAxe'?' · PACK · War Axe can cleave one nearby reinforcement':' · PACK · Fire / Storm Blade splash nearby reinforcements'):''));$('dungeonWeakness').title=role?.hint??'';
  const targets=$('dungeonTargets');targets.hidden=!e?.adds?.length;
  const targetKey=e?.adds?.length?JSON.stringify([e.combatTarget,e.health,e.adds.map(a=>[a.id,a.health,a.spawnAt<=combatNow()])]):'';
  if(targets.dataset.key!==targetKey){targets.dataset.key=targetKey;const focused=document.activeElement?.dataset.target;targets.replaceChildren();
@@ -4141,32 +4144,36 @@ function selectedCombatTarget(){
   if(!e||e.arenaVersion!==1)return null;
   const add=activeAdd(e);
   return {tile:combatTargetTile(e),name:add?addKinds[add.kind].name:huntEnemy(e).name,
-    reach:e.brainVersion===2?playerMeleeReach(combatGear.equippedWeapon):2.5};
+    reach:e.brainVersion===2||combatGear.equippedWeapon==='shortbow'?playerMeleeReach(combatGear.equippedWeapon):2.5};
 }
 function combatTargetGuidance(){
   const selected=selectedCombatTarget();
   if(!selected)return null;
   const from={x:player.cx,y:player.cy},distance=Math.hypot(from.x-selected.tile.x,from.y-selected.tile.y);
   const inRange=distance<=selected.reach;
-  if(inRange||!combatGear.equippedWeapon)return {...selected,inRange,step:null};
+  const bow=combatGear.equippedWeapon==='shortbow',arena=hunting.encounter??window.towerVaultCoop?.encounter();
+  const clear=tile=>!bow||!arena||!projectileCover(arena,tile,selected.tile);
+  const covered=inRange&&!clear(from);
+  if(inRange&&!covered||!combatGear.equippedWeapon)return {...selected,inRange,step:null};
   const items=roomFurniture();
-  const key=JSON.stringify([currentRoom,from,selected.tile,selected.reach,items.map(i=>[i.type,i.x,i.y,i.rot])]);
+  const key=JSON.stringify([currentRoom,from,selected.tile,selected.reach,arena?.vaultMechanism,items.map(i=>[i.type,i.x,i.y,i.rot])]);
   if(combatApproachCache.key!==key){
-    combatApproachCache={key,step:meleeApproach(from,selected.tile,selected.reach,tile=>!blocked(tile.x,tile.y,items))};
+    combatApproachCache={key,step:meleeApproach(from,selected.tile,selected.reach,tile=>!blocked(tile.x,tile.y,items),clear)};
   }
-  return {...selected,inRange,step:combatApproachCache.step};
+  return {...selected,inRange,covered,step:combatApproachCache.step};
 }
 function combatTargetHint(){
   const guide=combatTargetGuidance();
   if(!guide)return '';
   if(!combatGear.equippedWeapon)return 'Equip a weapon to strike';
-  if(guide.inRange)return guide.name+' is in reach';
+  if(guide.covered)return 'Cover blocks your shot · '+(guide.step?'Step onto the gold tile':'Find another angle');
+  if(guide.inRange)return combatGear.equippedWeapon==='shortbow'?'Clear shot at '+guide.name:guide.name+' is in reach';
   return 'Out of reach · '+(guide.step?'Step onto the gold tile':'No clear approach');
 }
 function drawCombatSelection(){
   const guide=combatTargetGuidance();if(!guide)return;
   const {tile,inRange}=guide,[x,y]=point(tile.x+.5,tile.y+.5,1);
-  ctx.save();ctx.strokeStyle=inRange?'#a4eee0':'#ffd18c';ctx.lineWidth=1.5;
+  ctx.save();ctx.strokeStyle=inRange&&!guide.covered?'#a4eee0':'#ffd18c';ctx.lineWidth=1.5;
   ctx.beginPath();ctx.ellipse(x,y,17,8,0,0,Math.PI*2);ctx.stroke();
   for(const side of [-1,1]){
     ctx.beginPath();ctx.moveTo(x+side*22,y-4);ctx.lineTo(x+side*18,y);ctx.lineTo(x+side*22,y+4);ctx.stroke();
@@ -4495,13 +4502,21 @@ function draw(time){
     const reading=!step&&!route.length&&readingAt(readingSession,currentRoom,player.cx,player.cy,combatNow());
     const meditating=!reading&&playerMeditating()&&!cast&&!miningSwing;
     const foe=vaultCoopState?(window.towerVaultCoop?.targetPosition()??{x:6,y:5}):combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
+    if(combatGear.equippedWeapon==='shortbow'){
+      if(pose.ready&&!step&&!combatMovePreview?.pending)faceCombatTarget(foe);
+      const shotAt=hunting.encounter?.nextPlayerAt??vaultCoopState?.self?.nextStrikeAt;
+      if(pose.ready&&!needsLearningPoints()&&Number.isFinite(shotAt)&&pose.attack===null&&pose.casting===null&&shotAt>combatNow()&&shotAt-combatNow()<=shortbowDrawMs){
+        pose.bowDraw=reducedMotion.matches?.8:Math.max(.15,1-(shotAt-combatNow())/shortbowDrawMs);
+      }
+      pose.lunge=0;
+    }
     const thrust=enemy?pose.lunge-pose.recoil:0;
     const veiled=wearsVeilCloak(wardrobe)&&outfitMagic.veilUntil>combatNow()&&!player.inCombat&&!routineControlled();
     ctx.save();if(veiled)ctx.globalAlpha=.40;
     const bodyX=x+Math.sign(enemyX-x)*thrust+(player.direction==='left'?1:-1)*pose.dodge;
     const bodyY=y+Math.sign(enemyY-y)*thrust+pose.dodge*.25;
     const spriteOptions={shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time};
-    sprite(ctx,bodyX,bodyY,avatar,spriteOptions);
+    sprite(ctx,bodyX,bodyY,avatar,{...spriteOptions,visibilityOutline:!veiled});
     if(!veiled&&!spriteOptions.shadowstep)playerBody={x:bodyX,y:bodyY,options:spriteOptions};
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
     if(undead){const [ux,uy]=point(player.x+1.25,player.y+1.25);drawUndeadAlly(ctx,ux,uy,undead,time,reducedMotion.matches,{attackAge:combatNow()-(undead.lastStrikeAt??0),flipped:player.direction==='left'});}
@@ -4619,6 +4634,7 @@ function draw(time){
     window.drawAbilityBursts?.(ctx,point,abilityBursts,currentRoom,time,reducedMotion.matches);
   }
   if(moonSightActive(familiarState,currentRoom,combatNow()))drawMoonSight(time);
+  if(vaultCoopState&&combatArt.coopArrow)drawShortbowArrow(ctx,point,combatArt.coopArrow.shot,time-combatArt.coopArrow.at,reducedMotion.matches);
   if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawNightOwls(time);
   drawWoodEffects(time);
@@ -5407,6 +5423,9 @@ function use(item){
     if(!woodcutting.axeOwned&&currentRoom!=='logging'){note('Get your free axe from the woodcutter at Timber Hollow.');return;}
   }
   if(unavailable())return;
+  if(combatGear.equippedWeapon==='shortbow'&&currentRoom==='clearing'&&item.type==='wildboar'&&!item.trackedPrey&&Math.hypot(player.cx-item.x,player.cy-item.y)<=playerMeleeReach('shortbow')){
+    startMonsterEncounter(huntEnemies.boar);return;
+  }
   if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
   cancelFishing();
   const start=startPosition(),[w,d]=dimensions(item);
@@ -9779,7 +9798,7 @@ window.towerVisitSafe=()=>{
 };
 window.towerBankFeedback=message=>showTransaction('Home safe',[{icon:'◈',text:message}]);
 window.towerForgeHooks={
-  state:()=>({mining,huntingLoot,woodcutting}),
+  state:()=>({mining,huntingLoot,woodcutting,combatGear,stats:playerStats}),
   ready:()=>currentRoom===quarryRoom&&!unavailable()&&!miningCut&&besideDeposit({x:player.cx,y:player.cy},quarryForge),
   change:(action,body)=>serverGameplay(action,body),
   feedback:message=>showTransaction('Quarry forge',[{icon:'♨',text:message}])
@@ -9824,7 +9843,7 @@ window.towerVaultCoopHooks={
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
  face:faceCombatTarget,targetHint:combatTargetHint,
  enableSound:()=>combatAudio.enable(combatSoundEnabled),counterSound:()=>combatAudio.play('counter'),
- strike:tile=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();},
+ strike:(tile,arrow)=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();if(arrow)combatArt.coopArrow={shot:arrow,at:combatArt.strikeAt};},
  cast:(tile,kind)=>{faceCombatTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},
  previewDodge,dodge:confirmDodge,
  victory:()=>{combatArt.victoryAt=performance.now();},
@@ -9837,7 +9856,7 @@ window.towerVaultCoopHooks={
    const facing=combatFacing(cue.position,cue.target);
    if(facing)Object.assign(peer,facing);
   }
-  if(cue.strike)peer.raidStrikeAt=performance.now();
+  if(cue.strike){peer.raidStrikeAt=performance.now();if(cue.arrow)peer.arrow={shot:cue.arrow,at:peer.raidStrikeAt};}
   if(cue.cast){peer.raidCastAt=performance.now()-(cue.castAge??0);peer.raidCastKind=cue.castKind??null;peer.raidStrikeAt=performance.now();}
  }
 };

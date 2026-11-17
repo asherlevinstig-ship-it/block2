@@ -5,11 +5,12 @@ import {vaultSpillwayTiles,vaultScreen} from './vault-mechanisms.js';
 
 // Shared geometry and attack footprints. Rendering and server damage use the same cells.
 export const dungeonRooms=['depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'];
-export const isCombatArena=room=>dungeonRooms.includes(room)||room==='millCellar'||room==='crystaldeep';
+export const isCombatArena=room=>dungeonRooms.includes(room)||room==='millCellar'||room==='crystaldeep'||room==='clearing';
 export const dungeonMobTypes=['crystalGuardian','depthsSkitter','depthsWarden','depthsSeer','depthsSentinel','depthsColossus'];
 export const isDungeonMob=type=>dungeonMobTypes.includes(type);
 export const dungeonCover=[{x:4,y:3},{x:3,y:6}];
 export function dungeonFloor(room,x,y,mechanism){
+ if(room==='clearing')return x>=0&&x<12&&y>=0&&y<10;
  if(room==='millCellar')return cellarFloor(x,y);
  if(!dungeonRooms.includes(room))return true;
  if(room==='depthsVault'&&mechanism==='spillway'&&vaultSpillwayTiles.some(tile=>tile.x===x&&tile.y===y))return true;
@@ -76,6 +77,18 @@ export function arenaInDanger(e,move,tile=arenaPlayer(e)){
  if(move.shape==='bolt')return Math.hypot(tile.x-target.x,tile.y-target.y)<.75;
  if(move.shape==='arc')return Math.hypot(tile.x-enemy.x,tile.y-enemy.y)<=1.8;
  return lineDistance(tile,enemy,target)<.6&&Math.hypot(tile.x-enemy.x,tile.y-enemy.y)<=Math.hypot(target.x-enemy.x,target.y-enemy.y)+.7;
+}
+export function projectileCover(encounter,from,to){
+ const cover=encounter.arenaRoom==='clearing'?(encounter.arenaSolids??[]):
+  encounter.arenaRoom==='depthsVault'&&encounter.vaultMechanism==='screen'?[...dungeonCover,vaultScreen]:dungeonCover;
+ const dx=to.x-from.x,dy=to.y-from.y,length=dx*dx+dy*dy;
+ if(!length)return null;
+ let first=null,nearest=1;
+ for(const tile of cover){
+  const t=((tile.x-from.x)*dx+(tile.y-from.y)*dy)/length;
+  if(t>0&&t<nearest&&lineDistance(tile,from,to)<.65){first=tile;nearest=t;}
+ }
+ return first;
 }
 export function arenaBehindCover(e,move,tile=arenaPlayer(e)){
  if(move.shape!=='bolt'||e.brainVersion===2&&!move.blockable)return false;

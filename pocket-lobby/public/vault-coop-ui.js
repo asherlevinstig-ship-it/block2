@@ -49,7 +49,7 @@ export function initializeVaultCoop(api){
     if(delta)popup((delta>0?'+':'−')+Math.abs(delta)+' HP',member.position,delta>0?'#94f4b4':'#ff8c9e');
     if(blocked>0)popup('Shield absorbed '+blocked,member.position,'#8ef4e2',1);
    }
-   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,target:m.attackTarget,position:m.attackPosition,castAge:Math.max(0,raid.observedAt-m.castAt)});}
+   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,target:m.attackTarget,position:m.attackPosition,arrow:m.arrow,castAge:Math.max(0,raid.observedAt-m.castAt)});}
   }
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
   if(result.state&&result.receipt&&raid?.status==='victory'&&!result.state.vaultCoop&&result.state.depthsRun?.cleared===3)api.reward?.(result.state);
@@ -77,8 +77,8 @@ export function initializeVaultCoop(api){
    const result=await api.change({kind,id:raid?.id??api.state().party,slot:kind==='shadowstep'?undefined:slot,tile:kind==='shadowstep'?slot:undefined,mechanism:kind==='mechanism'?slot:undefined,target,ally:$('coopAlly').value});
    accept(result);
    if(dialog.open)dialog.close();
-   const landed=raid?.members.find(m=>m.id===raid.self?.id)?.attackTarget;
-   if(kind==='strike')api.strike(landed??aim);
+   const member=raid?.members.find(m=>m.id===raid.self?.id),landed=member?.attackTarget;
+   if(kind==='strike')api.strike(landed??aim,member?.arrow);
    if(kind==='power')api.cast(landed,null);
    if(kind==='sanctuary')api.cast(null,kind);
    if(kind==='faultbreaker')api.cast(raid.origin,kind);
@@ -144,7 +144,7 @@ export function initializeVaultCoop(api){
  $('coopSpillway').onclick=()=>send('mechanism','spillway');
  $('coopScreen').onclick=()=>send('mechanism','screen');
  $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};const dodge=()=>{api.enableSound?.();if(raid?.status==='battle'&&(raid.self?.nextDodgeAt??0)<=api.now())api.previewDodge?.();return send('dodge');};$('coopDodge').onclick=dodge;$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
- $('coopStrike').onclick=()=>{api.enableSound?.();autoAttack=!autoAttack;if(autoAttack)send('strike');else render();};
+ $('coopStrike').onclick=()=>{api.enableSound?.();autoAttack=!autoAttack;if(autoAttack&&api.now()>=(raid?.self?.nextStrikeAt??0))send('strike');else render();};
  document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();dodge();}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});
  const timer=setInterval(async()=>{
   render();if(document.hidden||!active()||api.state().room!=='depthsVault'||busy||Date.now()-lastRequest<(raid?.status==='waiting'?2000:500))return;lastRequest=Date.now();

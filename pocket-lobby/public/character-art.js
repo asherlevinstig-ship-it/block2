@@ -94,7 +94,7 @@ const skinSource=new Map([
  ['224,199,151',2],['167,123,80',0]
 ]);
 export function finishCharacterFace(pixels,width,height,appearance,selection){
-  const tone=skinPalette[appearance.skinTone??0];
+  const tone=skinPalette[appearance.skinTone??0]?.map(rgb);
   const face=appearance.faceStyle??(appearance.gender==='female'?'soft':'classic');
   const at=(x,y)=>(y*width+x)*4,front=selection.row<2;
   const skin=[],eyes=[],features=[];
@@ -102,7 +102,7 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
     for(let x=0;x<width;x++){
       const i=at(x,y);
       if(!pixels[i+3])continue;
-      const [r,g,b]=pixels.subarray(i,i+3);
+      const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
       const pupil=r===49&&g===89&&b===104;
       if(front&&y<height*.46){
         if(pupil)eyes.push({x,y});
@@ -111,20 +111,19 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
       const shade=skinSource.get(r+','+g+','+b);
       if(shade===undefined)continue;
       if(front&&y<height*.48)skin.push({x,y,shade});
-      if(tone)pixels.set([...rgb(tone[shade]),255],i);
+      if(tone)pixels.set(tone[shade],i);
     }
   }
   // Closed-eye frames have no pupil markers. Preserve the blink and meditation.
   if(!eyes.length||!skin.length||!front||selection.state==='blink'||selection.state==='meditate')return;
-  const colors=(tone??['#b97956','#d79e6c','#f6d0a0','#ffe5bf']).map(rgb);
-  const white=rgb('#fff0d7'),ink=rgb('#262033'),brow=rgb(face==='angular'?'#3b2a30':'#634136'),catchlight=rgb('#5d6488');
-  const blush=colors[2].map((v,i)=>Math.round(v*.62+[232,118,118][i]*.38)),lip=colors[0].map((v,i)=>Math.round(v*.55+[190,84,92][i]*.45));
+  const colors=tone??['#b97956','#d79e6c','#f6d0a0','#ffe5bf'].map(rgb);
+  const white=rgb('#fff1d9'),ink=rgb('#211d30');
   const eyeTop=Math.min(...eyes.map(p=>p.y)),eyeBottom=Math.max(...eyes.map(p=>p.y));
   const facePixels=skin.filter(p=>p.y>=eyeTop-4&&p.y<=eyeBottom+5);
   const mask=new Set([...facePixels,...features].map(p=>at(p.x,p.y)));
   const draw=(x,y,color)=>{
     const i=at(x,y);
-    if(x>=0&&x<width&&y>=0&&y<height&&mask.has(i))pixels.set([...color,255],i);
+    if(x>=0&&x<width&&y>=0&&y<height&&mask.has(i))pixels.set(color,i);
   };
   const left=Math.min(...eyes.map(p=>p.x)),right=Math.max(...eyes.map(p=>p.x));
   const center=(left+right)/2,look=selection.row===1?1:-1;
@@ -132,8 +131,7 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
     const far=(p.x-center)*look<-3;
     const jaw=p.y>=eyeBottom+3;
     // Clean planes read better at game size: a shaded far side, the fringe's shadow and a chin line.
-    let shade=far||p.y<=eyeTop-3||p.y>=eyeBottom+5?1:2;
-    if(face==='angular'&&jaw)shade=far?0:1;
+    const shade=far||p.y===eyeTop-4||p.y>=eyeBottom+5||face==='angular'&&jaw?1:2;
     draw(p.x,p.y,colors[shade]);
   }
   for(const p of features){
@@ -148,32 +146,20 @@ export function finishCharacterFace(pixels,width,height,appearance,selection){
   const groups=cut?[eyes.filter(p=>p.x<cut),eyes.filter(p=>p.x>=cut)]:[eyes];
   for(const group of groups){
     const x=Math.round(group.reduce((sum,p)=>sum+p.x,0)/group.length),y=Math.min(...group.map(p=>p.y));
+    // Keep the pupil solid across two atlas rows and leave a skin row above it.
+    // Separate brows and catchlights merge with the eyes at gameplay zoom.
     const start=face==='soft'?y-1:y;
-    const end=face==='angular'?y:y+1;
-    for(let dy=start;dy<=end;dy++){
+    for(let dy=start;dy<=start+1;dy++){
       draw(x,dy,ink);
       draw(x+look,dy,ink);
       draw(x-look,dy,white);
     }
-    // Soft eyes are three pixels tall, so one can carry a catchlight without thinning the eye.
-    if(face==='soft')draw(x,start,catchlight);
-    const eyebrowY=start-2;
-    draw(x-look,eyebrowY,brow);
-    draw(x,eyebrowY,brow);
-    if(face==='angular'){
-      draw(x+look,eyebrowY,brow);
-      draw(x+look*2,eyebrowY+1,brow);
-      draw(x+look*3,eyebrowY+1,brow);
-    }
-    if(face==='soft')draw(x,eyeBottom+2,blush);
+    if(face==='soft')draw(x-look,start+2,colors[3]);
   }
 
   const mouthX=Math.round(center+look*2),mouthY=eyeBottom+4;
-  const mouth=face==='soft'?lip:colors[0];
-  draw(mouthX,mouthY,mouth);
-  draw(mouthX+look,mouthY,mouth);
-  if(face==='soft')draw(mouthX+look*2,mouthY-1,colors[0]);
-  if(face==='angular')draw(mouthX-look,mouthY,colors[0]);
+  draw(mouthX,mouthY,colors[0]);
+  if(face!=='soft')draw(mouthX+look,mouthY,colors[0]);
 }
 // Each pose moves the shoulders and hips relative to the planted foot line.
 // Values are in atlas pixels, before the sprite is scaled for the map.
@@ -186,7 +172,7 @@ const dodgeStances=[
   {lean:-3,crouch:5,spread:2},{lean:-10,crouch:9,spread:3},
   {lean:-8,crouch:6,spread:4},{lean:-3,crouch:2,spread:2}
 ];
-const swordTools=new Set(['trainingSword','ironSword','duelistBlade','vampiricSword','wardenSword']);
+const swordTools=new Set(['trainingSword','ironSword','duelistBlade','vampiricSword','wardenSword','warAxe']);
 
 function stanceOffset(stance,y,pivotY){
   return {
@@ -347,7 +333,7 @@ export function tintTowerPixel(r,g,b,a,appearance={}){
   const choices=[null,appearance.outfit??0,appearance.trousers??0,appearance.boots??0,appearance.hair??0];
   const color=(PALETTES[g][choices[g]]??PALETTES[g][0])[Math.min(2,b)];return [...color,a];
 }
-function drawTool(ctx,kind,angle,x,y){
+function drawTool(ctx,kind,angle,x,y,draw=0){
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
   ctx.save();ctx.translate(x,y);ctx.rotate(angle);
   if(!['basicAxe','basicPick','copperPick','ironPick','runicPick','huntingSpear','breakerSpear'].includes(kind))ctx.scale(.84,.84);
@@ -357,6 +343,18 @@ function drawTool(ctx,kind,angle,x,y){
     const metal=kind==='runicPick'?'#b7a2f4':kind==='copperPick'?'#dfa46c':kind==='ironPick'?'#e0edf2':'#b7d3dc';
     p(-9,-19,18,3,'#344459');p(-8,-18,16,2,metal);p(-10,-16,3,3,metal);p(7,-16,3,3,'#dcebf0');
     if(kind==='runicPick'){p(-5,-19,1,4,'#deffff');p(2,-18,1,3,'#deffff');p(-1,-13,3,2,'#a5e8f5');p(-1,-8,3,1,'#c5a9ff');}
+  }else if(kind==='shortbow'){
+    ctx.rotate(-angle);if(angle>0)ctx.scale(-1,1);
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();ctx.moveTo(-5,-24);ctx.lineTo(2,-20);ctx.lineTo(7,-12);ctx.lineTo(3,-4);ctx.lineTo(-4,1);
+    ctx.lineWidth=4;ctx.strokeStyle='#442b30';ctx.stroke();
+    ctx.lineWidth=2;ctx.strokeStyle='#d79a57';ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-5,-24);ctx.lineTo(-5-draw*8,-12);ctx.lineTo(-4,1);ctx.lineWidth=1;ctx.strokeStyle='#fff0c8';ctx.stroke();
+    if(draw){p(-6-draw*8,-13,13+draw*8,1,'#e7ce9e');p(7,-14,4,3,'#d5ece8');}
+  }else if(kind==='warAxe'){
+    p(-2,-24,4,30,'#302938');p(-1,-23,2,27,'#bd8857');
+    p(-7,-24,16,8,'#2a3a4b');p(1,-27,10,14,'#526d83');
+    p(4,-26,8,12,'#cbdce1');p(10,-24,3,8,'#f6edcd');p(-3,-23,6,6,'#c89657');
   }else if(kind==='basicAxe'){
     p(-1,-17,2,22,'#3c3440');p(0,-17,1,21,'#bc8b59');p(-5,-18,10,6,'#334459');p(0,-18,6,6,'#a6c3cd');p(4,-17,2,4,'#e9e8d0');
   }else if(['huntingSpear','breakerSpear'].includes(kind)){
@@ -408,7 +406,7 @@ const carriedWeaponStyles={
     quickfang:{length:10,width:3,case:'#403051',edge:'#b091d4',metal:'#d1b5ee',grip:'#624174',guard:7}
   };
 function drawCarriedEquipment(ctx,kind,anchor){
-  if(['huntingSpear','breakerSpear'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
+  if(['huntingSpear','breakerSpear','warAxe','shortbow'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
   const dagger=['quickDagger','quickfang'].includes(kind);
 
@@ -796,23 +794,28 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     }
     const carried=options.sheathed&&!options.weapon?carriedTowerEquipment(meta,x,y,options):null;
     if(carried&&!options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
-    if(options.weapon&&options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
+    if(options.weapon&&options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy,options.pose?.bowDraw);
     const left=Math.round(x-meta.pivot[0]*meta.scale),top=Math.round(y-meta.pivot[1]*meta.scale);
     const w=width*meta.scale,h=height*meta.scale;
     if(options.visibilityOutline){
+      const pad=2;
       if(!outlines.has(image)){
         const mask=createCanvas(width,height),maskCtx=mask.getContext('2d');
         maskCtx.drawImage(image,0,0);
-        maskCtx.globalCompositeOperation='source-in';maskCtx.fillStyle='#17233a';
+        maskCtx.globalCompositeOperation='source-in';maskCtx.fillStyle='#172338';
         maskCtx.fillRect(0,0,width,height);
-        outlines.set(image,mask);
+        const outlined=createCanvas(width+2*pad,height+2*pad),outlineCtx=outlined.getContext('2d');
+        outlineCtx.globalAlpha=.8;
+        for(const [dx,dy] of [[pad,0],[-pad,0],[0,pad],[0,-pad]])outlineCtx.drawImage(mask,pad+dx,pad+dy);
+        outlineCtx.globalAlpha=1;
+        outlineCtx.drawImage(image,pad,pad);
+        outlines.set(image,outlined);
       }
-      const mask=outlines.get(image);
-      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])ctx.drawImage(mask,left+dx,top+dy,w,h);
-    }
-    ctx.drawImage(image,left,top,w,h);
+      const spread=pad*meta.scale;
+      ctx.drawImage(outlines.get(image),left-spread,top-spread,w+spread*2,h+spread*2);
+    }else ctx.drawImage(image,left,top,w,h);
     if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
-    if(options.weapon&&!options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy);
+    if(options.weapon&&!options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy,options.pose?.bowDraw);
     if(reaction.shieldPulse!==null&&reaction.shieldPulse!==undefined){
       const progress=reaction.shieldPulse;
       ctx.save();ctx.globalAlpha*=Math.max(0,1-progress);ctx.strokeStyle='#a0f8e8';ctx.lineWidth=1.2;

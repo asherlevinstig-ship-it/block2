@@ -1,3 +1,4 @@
+import {canUseWeapon,weaponCatalog} from './hunting.js';
 import {pickaxes,miningLevel,miningFinds} from './mining.js';
 export const quarryForge={x:9,y:7};
 export const barProducts={
@@ -7,6 +8,25 @@ export const barProducts={
 export function barArt(id){
  const color=barProducts[id].color;
  return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m10 39 8-20 30-4 9 20-30 13z" fill="'+color+'" stroke="#344858" stroke-width="2"/><path d="m18 19 12 16 27 0M30 35l-3 13" fill="none" stroke="#f0e6ce" stroke-width="2"/><path d="m10 39 20-4-3 13z" fill="#674f4c" opacity=".4"/></svg>';
+}
+export const shortbowIngredients={timber:6,copperBar:1};
+export const shortbowRecipe='6 timber + 1 Copper Bar';
+export function shortbowCraftReason(state){
+ if(state.combatGear.ownedWeapons.includes('shortbow'))return 'Already crafted · Equip it from Inventory.';
+ if(!canUseWeapon(state.stats,'shortbow'))return 'Needs Agility 2.';
+ if(state.woodcutting.timber<shortbowIngredients.timber||(state.huntingLoot.copperBar??0)<shortbowIngredients.copperBar)return 'Bring '+shortbowRecipe+'.';
+ return '';
+}
+export const warAxeIngredients={ironBar:4,timber:8};
+export const warAxeRecipe=Object.entries(warAxeIngredients).map(([key,n])=>n+' '+(key==='timber'?'timber':'Iron Bars')).join(' + ');
+export function warAxeCraftReason(state){
+ if(state.combatGear.ownedWeapons.includes('warAxe'))return 'Already crafted · Equip it from Inventory.';
+ if(!canUseWeapon(state.stats,'warAxe')){
+  const {strength,agility}=weaponCatalog.warAxe;
+  return 'Needs Strength '+strength+' and Agility '+agility+'.';
+ }
+ if((state.huntingLoot.ironBar??0)<warAxeIngredients.ironBar||state.woodcutting.timber<warAxeIngredients.timber)return 'Bring '+warAxeRecipe+'.';
+ return '';
 }
 export const pickaxeIngredients=id=>({[pickaxes[id].bar]:pickaxes[id].bars,timber:pickaxes[id].timber,...pickaxes[id].materials});
 export const forgeMaterialName=id=>id==='timber'?'timber':barProducts[id]?.name??miningFinds[id]?.name??id;

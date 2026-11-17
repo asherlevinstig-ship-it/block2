@@ -6,6 +6,21 @@ import {normalizeState} from '../server/player-state.mjs';import {protectFishing
 function player(name='A'){return normalizeState({avatar:{name,outfit:0,hair:0},location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2,routeChoice:'safe'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword','quickfang'],equippedWeapon:'ironSword'},magic:{picks:['fire','ice','storm'],unlocked:['fire:sword','ice:shield','fire:renewal','storm:sword'],slots:{q:'ice:shield',e:'fire:renewal'}}});}
 function party(){const r={id:'AAAABBBB',leader:'a',status:'waiting',expiresAt:2000000,hp:420,max:420,members:{},adds:[]},a=player(),b=player('B');b.position={x:9,y:6};actVaultParty(r,a,'a',{kind:'join'},1000);actVaultParty(r,b,'b',{kind:'join'},1000);return {r,a,b};}
 const act=(r,s,id,kind,at=2000,extra={})=>actVaultParty(r,s,id,{kind,...extra},at,()=>.5);
+test('a Vault archer draws before firing and a blocked arrow spends one AP',()=>{
+ const {r,a}=party(),m=r.members.a;
+ a.combatGear.ownedWeapons.push('shortbow');a.combatGear.equippedWeapon='shortbow';a.actionPoints.value=3;
+ Object.assign(m,{weapon:'shortbow',attackInterval:1800});a.position={x:3,y:3};
+ act(r,a,'a','start',2000);
+ r.origin={x:6,y:3};
+ assert.throws(()=>act(r,a,'a','strike',2899),/recover/);
+ const hp=r.hp;
+ const blocked=act(r,a,'a','strike',2900);
+ assert.match(blocked.text,/Cover blocked/);assert.equal(r.hp,hp);assert.equal(a.actionPoints.value,2);
+ assert.deepEqual(publicVaultParty(r,'a',2900).members.find(member=>member.id===m.id).arrow,{from:{x:3,y:3},to:{x:4,y:3},blocked:true});
+ a.position={x:3,y:5};r.origin={x:6,y:3};
+ assert(act(r,a,'a','strike',4800).hit>0);assert.equal(a.actionPoints.value,1);
+});
+
 test('the spillway opens a real combat tile and survives a save on that tile',()=>{
  const s=player();
  applyGameplayAction(s,'depthsVaultMechanism',{id:'spillway'},1000);

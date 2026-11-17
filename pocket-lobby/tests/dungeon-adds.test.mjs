@@ -23,6 +23,25 @@ test('weapon target kills only the add, consumes the strike clock and gives no c
  const event=huntingTurn(e,100,s.stats,'attack',6000,()=>.5,'ironSword');assert(event.addKill);assert.equal(event.outcome,'fighting');assert.equal(event.encounter.health,e.health);assert.equal(event.encounter.addKills,1);assert.equal(event.encounter.nextPlayerAt,7200);assert.equal(event.encounter.combatTarget,'leader');assert.equal(event.enemyTile.x,5);assert(!event.encounter.adds.some(b=>b.id===a.id));
 });
 
+test('War Axe cleaves one nearby active add and spends one AP for the swing',()=>{
+ const s=fighter(),e=wave(s);
+ s.combatGear.ownedWeapons.push('warAxe');s.combatGear.equippedWeapon='warAxe';
+ s.actionPoints.value=2;
+ e.nextPlayerAt=6000;
+ const [near,far]=e.adds;
+ Object.assign(near,{x:6,y:4,health:12,thinkAt:7000});
+ Object.assign(far,{x:9,y:7,thinkAt:7000});
+ e.nextBoarAt=7000;e.arenaLockedFor=7000;e.brainNextThinkAt=7000;
+ e.arenaPlayer={x:5,y:5};e.arenaEnemy={x:6,y:5};e.combatTarget='leader';e.manualTarget=true;
+ const events=advanceServerCombat(s,6000,()=>.5);
+ const hit=events.find(event=>event.action==='attack');
+ assert.deepEqual(hit.splash,[{id:near.id,x:6,y:4,damage:12,killed:true}]);
+ assert.equal(s.actionPoints.value,1);
+ assert.equal(s.hunting.encounter.addKills,1);
+ assert.equal(s.hunting.encounter.adds.find(a=>a.id===far.id).health,far.health);
+ assert.equal(s.hunting.encounter.nextPlayerAt,7550);
+});
+
 test('powers damage and burn their selected add while shields still protect the player',()=>{
  const s=fighter(),e=wave(s),a=e.adds[1];s.stats.strengthXp=s.stats.agilityXp=s.stats.vitalityXp=0;e.combatTarget=a.id;const initial=a.health;const hit=castEssencePower(s,6000,'q');assert.equal(hit.encounter.health,e.health);assert(hit.damage>0);assert(hit.encounter.adds.find(b=>b.id===a.id).health<initial);assert(hit.encounter.adds.find(b=>b.id===a.id).burn);assert.equal(hit.encounter.burn,undefined);assert(s.vitals.mana<100);
  s.hunting.encounter=hit.encounter;const ward=castEssencePower(s,6100,'e');assert(ward.encounter.magicWard>0);assert.equal(ward.encounter.health,e.health);
