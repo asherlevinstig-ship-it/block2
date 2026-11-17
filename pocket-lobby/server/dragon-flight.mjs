@@ -1,5 +1,5 @@
 import {activeMount} from '../public/mounts.js';
-import {withinDragonFlightRange,dragonFlightDuration,dragonHoverLandingMs} from '../public/dragon-flight.js';
+import {withinDragonFlightRange,dragonFlightDuration,dragonHoverLandingMs,dragonGlideArrival} from '../public/dragon-flight.js';
 import {moonwood} from '../public/moonwood.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 
@@ -27,8 +27,21 @@ function clearLandingTile({location:room,adventure},{x,y}){
 
 export function descendDragonHover(state,now){
  const flight=state.mounts?.flight;
- if(flight?.hover&&flight.landAt===null){flight.landAt=now+dragonHoverLandingMs;return true;}
+ if(flight?.hover&&flight.landAt===null){
+  flight.landAt=(flight.travelAt===undefined?now:Math.max(now,dragonGlideArrival(flight)))+dragonHoverLandingMs;
+  return true;
+ }
  return false;
+}
+
+export function glideDragonHover(state,tile,now){
+ const flight=state.mounts?.flight;
+ if(!flight?.hover||flight.landAt!==null||state.location!==flight.room)throw new Error('Hover with Cinderwing before choosing a flight destination.');
+ if(now<dragonGlideArrival(flight))throw new Error('Wait for Cinderwing to reach its destination.');
+ const from=flight.to;
+ if(!withinDragonFlightRange(from,tile)||!clearLandingTile(state,tile))throw new Error('Choose a clear tile within nine tiles.');
+ const dx=tile.x-from.x,dy=tile.y-from.y;
+ state.mounts.flight={...flight,from,to:{x:tile.x,y:tile.y},travelAt:now,direction:dx-dy>=0?'right':'left',back:dx+dy<0};
 }
 
 export function settleDragonFlight(state,now){

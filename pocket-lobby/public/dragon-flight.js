@@ -17,14 +17,20 @@ export function withinDragonFlightRange(from,to){
  return distance>0&&distance<=dragonFlightRules.range;
 }
 export const dragonFlightDuration=(from,to)=>3000+Math.round(Math.hypot(to.x-from.x,to.y-from.y)*150);
+export const dragonGlideDuration=(from,to)=>500+Math.round(Math.hypot(to.x-from.x,to.y-from.y)*160);
+export const dragonGlideArrival=flight=>flight.travelAt===undefined?flight.startedAt+hoverClimbMs:
+ flight.travelAt+dragonGlideDuration(flight.from,flight.to);
 
 export function normalizeDragonFlight(flight){
  if(!canRideHere(flight?.room)||!Number.isSafeInteger(flight.startedAt)||flight.startedAt<0)return null;
  if(flight.hover===true){
-  if(!isFlightTile(flight.from)||flight.to?.x!==flight.from.x||flight.to?.y!==flight.from.y||
-    (flight.landAt!==null&&(!Number.isSafeInteger(flight.landAt)||flight.landAt<flight.startedAt+dragonHoverLandingMs)))return null;
-  const tile={x:flight.from.x,y:flight.from.y};
-  return {room:flight.room,from:tile,to:{...tile},startedAt:flight.startedAt,landAt:flight.landAt,hover:true,
+  const moving=flight.travelAt!==undefined;
+  if(!isFlightTile(flight.from)||!isFlightTile(flight.to)||
+    (moving?(!withinDragonFlightRange(flight.from,flight.to)||!Number.isSafeInteger(flight.travelAt)||flight.travelAt<flight.startedAt+hoverClimbMs)
+     :(flight.to.x!==flight.from.x||flight.to.y!==flight.from.y))||
+    (flight.landAt!==null&&(!Number.isSafeInteger(flight.landAt)||flight.landAt<(moving?dragonGlideArrival(flight):flight.startedAt)+dragonHoverLandingMs)))return null;
+  return {room:flight.room,from:{x:flight.from.x,y:flight.from.y},to:{x:flight.to.x,y:flight.to.y},
+   startedAt:flight.startedAt,landAt:flight.landAt,hover:true,...(moving?{travelAt:flight.travelAt}:{}),
    direction:flight.direction==='left'?'left':'right',back:flight.back===true};
  }
  if(!withinDragonFlightRange(flight.from,flight.to)||flight.landAt!==flight.startedAt+dragonFlightDuration(flight.from,flight.to))return null;
@@ -36,14 +42,15 @@ const ease=value=>value*value*(3-2*value);
 export function dragonFlightPose(flight,now){
  if(!flight)return null;
  if(flight.hover){
-  const descending=flight.landAt!==null;
+  const descending=flight.landAt!==null&&now>=flight.landAt-dragonHoverLandingMs;
   const descentAt=descending?flight.landAt-dragonHoverLandingMs:now;
   const climb=ease(clamp((Math.min(now,descentAt)-flight.startedAt)/hoverClimbMs));
   const progress=descending?clamp((now-descentAt)/dragonHoverLandingMs):clamp((now-flight.startedAt)/hoverClimbMs);
   const height=dragonFlightRules.height*climb*(descending?1-ease(progress):1);
-  return {room:flight.room,...flight.from,height,progress,overCanopy:height>=dragonFlightRules.canopy,
+  const travel=flight.travelAt===undefined?0:ease(clamp((now-flight.travelAt)/dragonGlideDuration(flight.from,flight.to)));
+  return {room:flight.room,x:flight.from.x+(flight.to.x-flight.from.x)*travel,y:flight.from.y+(flight.to.y-flight.from.y)*travel,height,progress,overCanopy:height>=dragonFlightRules.canopy,
    direction:flight.direction,back:flight.back,hover:true,
-   phase:descending?(progress<1?'landing':'landed'):progress<1?'takeoff':'hovering'};
+   phase:descending?(progress<1?'landing':'landed'):progress<1?'takeoff':flight.travelAt!==undefined&&travel<1?'glide':'hovering'};
  }
  const progress=clamp((now-flight.startedAt)/(flight.landAt-flight.startedAt));
  const travel=ease(clamp((progress-.08)/.86));

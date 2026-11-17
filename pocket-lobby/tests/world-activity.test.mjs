@@ -55,10 +55,15 @@ test('the room relays the takeoff clock and the authoritative landing tile',asyn
  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(hover),meta.playerId);
  await publishWorldActivity(env,meta.playerId,ground,hover,4);
  assert.equal(publicPeer(meta).flight.landAt,null);
- const descent=structuredClone(hover);
+ const glide=structuredClone(hover),destination={x:11,y:3};
+ applyGameplayAction(glide,'dragonGlide',{tile:destination},now+7500);
+ sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(glide),meta.playerId);
+ await publishWorldActivity(env,meta.playerId,hover,glide,5);
+ assert.deepEqual(publicPeer(meta).flight.to,destination);
+ const descent=structuredClone(glide);
  applyGameplayAction(descent,'dragonLand',{},now+9000);
  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(descent),meta.playerId);
- await publishWorldActivity(env,meta.playerId,hover,descent,5);
+ await publishWorldActivity(env,meta.playerId,glide,descent,6);
  assert.equal(publicPeer(meta).flight.landAt,descent.mounts.flight.landAt);
 });
 

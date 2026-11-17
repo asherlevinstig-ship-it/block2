@@ -353,7 +353,7 @@ export async function handlePlayerApi(request,env){
     const flight=JSON.parse(row.state_json).mounts?.flight;
     if(path==='/api/player/gameplay/dragonLand'&&!flight||path==='/api/player/gameplay/dragonFlight'&&row.last_request===body.operation)return json(playerPacket(row));
     if(flight&&path==='/api/player/save'&&body.state?.location&&body.state.location!==flight.room)return json({error:'Wait until Cinderwing lands.'},400);
-    if(flight&&!['/api/player/save','/api/player/presence','/api/player/gameplay/dragonLand','/api/player/reconnect'].includes(path)&&!path.startsWith('/api/player/learning/'))return json({error:'Wait until Cinderwing lands.'},400);
+    if(flight&&!['/api/player/save','/api/player/presence','/api/player/gameplay/dragonLand','/api/player/gameplay/dragonGlide','/api/player/reconnect'].includes(path)&&!path.startsWith('/api/player/learning/'))return json({error:'Wait until Cinderwing lands.'},400);
     if(path==='/api/player/gift'){
       const previous=await readGift(env.TOWER_DB,id,body.operation);
       if(previous)return json({...playerPacket(row),gift:previous});

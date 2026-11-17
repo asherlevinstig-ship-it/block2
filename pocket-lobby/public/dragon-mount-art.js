@@ -74,7 +74,8 @@ export function drawDragonMount(ctx,x,y,{direction,back,moving,time,reduced,flig
  if(!flight){
   ctx.fillStyle='#15122372';ctx.beginPath();ctx.ellipse(-3,1,36,8,0,0,Math.PI*2);ctx.fill();
  }
- const flightBob=flight?.phase==='hovering'&&!reduced?Math.round(Math.sin(time/230)*2):0;
+ const steadyHover=flight?.hover&&(flight.phase==='hovering'||flight.phase==='glide');
+ const flightBob=steadyHover&&!reduced?Math.round(Math.sin(time/230)*2):0;
  ctx.translate(0,-bob-flightBob);
  const tail=[[-13,-16],[-25,-11],[-39,-9],[-50,-13+tailSwing],[-57,-23+tailSwing]];
  line(tail,palette.ink,9);line(tail,palette.shade,6);

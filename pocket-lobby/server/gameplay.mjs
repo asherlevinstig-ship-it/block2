@@ -1,4 +1,4 @@
-import {startDragonFlight,settleDragonFlight,descendDragonHover} from './dragon-flight.mjs';
+import {startDragonFlight,settleDragonFlight,descendDragonHover,glideDragonHover} from './dragon-flight.mjs';
 import {normalizeMounts,dragonUnlocked,canRideMount} from '../public/mounts.js';
 import {libraryAction} from './library.mjs';
 import {recordShopPurchase} from './shop-licences.mjs';
@@ -76,6 +76,7 @@ function location(state,rooms){
 const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','cinderRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
+  if(action==='dragonGlide'){glideDragonHover(state,body.tile,now);return;}
   if(action==='dragonLand'){
     if(descendDragonHover(state,now))return;
     if(state.mounts?.flight&&!settleDragonFlight(state,now))throw new Error('Cinderwing is still landing.');

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dragonFlightPose,withinDragonFlightRange} from '../public/dragon-flight.js';
+import {dragonFlightPose,dragonGlideArrival,withinDragonFlightRange} from '../public/dragon-flight.js';
 import {activeMount,canRideHere,legendaryDragon} from '../public/mounts.js';
 import {ashenStagRules,ashenStagSighting,ashenChargePath,ashstepCloakId} from '../public/ashen-stag.js';
 import {actVaultParty,advanceVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';
@@ -223,6 +223,30 @@ test('Cinderwing holds altitude across saves until the rider requests a landing'
  assert.equal(loaded.mounts.flight,undefined);
  assert.deepEqual(loaded.position,tile);
  assert.equal(loaded.actionPoints.value,4);
+});
+
+test('Cinderwing glides between hover points and can queue a landing at the next destination',()=>{
+ const first={x:9,y:6},second={x:10,y:3},third={x:11,y:3};
+ const state=normalizeState({location:'willowbank',position:first,mounts:{sightings:3,selected:true},actionPoints:{value:4}});
+ applyGameplayAction(state,'dragonFlight',{hover:true},1000);
+ assert.throws(()=>applyGameplayAction(state,'dragonGlide',{tile:second},1100),/reach its destination/);
+ assert.throws(()=>applyGameplayAction(state,'dragonGlide',{tile:{x:9,y:5}},2000),/clear tile/);
+ applyGameplayAction(state,'dragonGlide',{tile:second},2000);
+ const flight=normalizeState(state).mounts.flight,arrival=dragonGlideArrival(flight);
+ const mid=dragonFlightPose(flight,(2000+arrival)/2),landmark=dragonFlightPose(flight,arrival+10000);
+ assert.equal(mid.phase,'glide');
+ assert.equal(mid.height,landmark.height);
+ assert(mid.y>second.y&&mid.y<first.y);
+ assert.deepEqual({x:landmark.x,y:landmark.y,phase:landmark.phase},{...second,phase:'hovering'});
+ applyGameplayAction(state,'dragonGlide',{tile:third},arrival);
+ assert.deepEqual(state.mounts.flight.from,second);
+ applyGameplayAction(state,'dragonLand',{},arrival+1);
+ const descent=normalizeState(state).mounts.flight;
+ assert.equal(dragonFlightPose(descent,arrival+1).phase,'glide');
+ assert.equal(dragonFlightPose(descent,dragonGlideArrival(descent)).phase,'landing');
+ assert(settleActivities(state,descent.landAt));
+ assert.deepEqual(state.position,third);
+ assert.equal(state.actionPoints.value,4);
 });
 
 test('Emberwood latch requires proximity, opens both directions, and persists through saves',()=>{

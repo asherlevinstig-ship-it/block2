@@ -4495,7 +4495,7 @@ function draw(time){
     drawDragonFlightGround(ctx,point,localFlight,{reduced:reducedMotion.matches});
     if(dragonFlight.landAt!==null)drawDragonLandingRing(ctx,point,dragonFlight.to);
   }
-  if(flightAim)for(const tile of flightAim.tiles){
+  for(const tile of flightAim?.tiles??hoverFlightTargets(worldNow)){
     if(tile.x===hover?.x&&tile.y===hover?.y)drawDragonLandingRing(ctx,point,tile);
     else surface(tile.x+.18,tile.y+.18,.64,.64,1,'#b1e9d13d','#d2ffe4');
   }
@@ -4841,6 +4841,8 @@ function pointer(e){
   const y=((e.clientY-p.top-p.y)/p.scale-centerY)/zoom+camY;
   const gx=Math.floor(((x-view.originX)/18+(y-view.originY)/9)/2);
   const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
+  const floor=inRoom(gx,gy)?{x:gx,y:gy}:null;
+  if(dragonFlight)return {tile:floor,door:null,item:null,shoalHit:false};
   const door=roomDoors[currentRoom].find(portal=>doorAvailable(portal)&&hitDoor(x,y,portal));
   let shoalHit=false;
   const fishingWater=moonfinPoolOpen()||fishingSession?.room===moonfinPool.room?moonfinPool.water:currentRoom==='pond'&&!fishingSession?pondShoalAt(combatNow()).water:null;
@@ -4852,7 +4854,6 @@ function pointer(e){
   const worldHit=crowdedRoom()&&hit?.item.type==='remotePlayer'
     ?hitboxes.findLast(h=>h.item.type!=='remotePlayer'&&inShape(x,y,h.shape)):null;
   const item=worldHit?.item??(crowdedRoom()&&(door||shoalHit)&&hit?.item.type==='remotePlayer'?null:hit?.item);
-  const floor=inRoom(gx,gy)?{x:gx,y:gy}:null;
   return {tile:shadowstepTargeting||flightAim?floor:door?.tile??floor,door,item:item??null,shoalHit};
 }
 let homeNavigationLearned=load('movement-learned',false);
@@ -9325,14 +9326,18 @@ $('resetRoom').onclick=()=>{
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
-  highlightTravelBadge(e.pointerType==='touch'||shadowstepTargeting||editing?null:p.door??p.item);
-  canvas.style.cursor=flightAim?(flightAim.tiles.some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):shadowstepTargeting?(shadowstepTargets().some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):p.item||p.door||p.shoalHit||(currentRoom==='creek'&&p.tile?.x===5&&p.tile.y===4&&player.cx<5)?'pointer':'crosshair';
+  highlightTravelBadge(e.pointerType==='touch'||shadowstepTargeting||editing||dragonFlight?null:p.door??p.item);
+  const flightTiles=flightAim?.tiles??(dragonFlight?hoverFlightTargets():null);
+  canvas.style.cursor=flightTiles?(flightTiles.some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):shadowstepTargeting?(shadowstepTargets().some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):p.item||p.door||p.shoalHit||(currentRoom==='creek'&&p.tile?.x===5&&p.tile.y===4&&player.cx<5)?'pointer':'crosshair';
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;highlightTravelBadge(null);});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
-  if(dragonFlight)return;
+  if(dragonFlight){
+    if(dragonFlight.hover&&dragonFlight.landAt===null)glideDragonTo(tile);
+    return;
+  }
   if(flightAim){launchDragonFlight(tile);return;}
   if(shadowstepTargeting){
     if(!tile||!shadowstepTargets().some(target=>target.x===tile.x&&target.y===tile.y)){
@@ -9367,10 +9372,11 @@ canvas.addEventListener('keydown',e=>{
     return;
   }
   const delta=arrows[e.key];
-  if(flightAim&&(delta||e.code==='Enter')){
+  const flightTiles=flightAim?.tiles??hoverFlightTargets();
+  if(flightTiles.length&&(delta||e.code==='Enter')){
     e.preventDefault();
-    if(e.code==='Enter'){launchDragonFlight(hover);return;}
-    const tile=hover??flightAim.tiles[0],x=tile.x+delta[0],y=tile.y+delta[1];
+    if(e.code==='Enter'){if(flightAim)launchDragonFlight(hover);else glideDragonTo(hover??flightTiles[0]);return;}
+    const tile=hover??flightTiles[0],x=tile.x+delta[0],y=tile.y+delta[1];
     if(inRoom(x,y))hover={x,y};
     return;
   }
@@ -10012,23 +10018,46 @@ function toggleDragonFlightAim(){
   if(unavailable())return;
   if(!currentDragon()){note('Mount Cinderwing before taking flight.');return;}
   if(step||route.length){note('Stop riding before choosing a landing tile.');return;}
-  const from={x:player.cx,y:player.cy},tiles=[],items=roomFurniture();
+  const tiles=dragonFlightTargets({x:player.cx,y:player.cy});
+  if(!tiles.length){note('No clear landing tiles nearby. Ride to an open spot first.');return;}
+  setFlightAim({tiles});
+  canvas.focus({preventScroll:true});
+  note('Choose a highlighted landing tile. Enter confirms the selected tile · Esc cancels.',7000);
+}
+function dragonFlightTargets(from){
+  const tiles=[],items=roomFurniture();
   for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     const tile={x,y};
     if(withinDragonFlightRange(from,tile)&&!blocked(x,y,items))tiles.push(tile);
   }
-  if(!tiles.length){note('No clear landing tiles nearby. Ride to an open spot first.');return;}
-  tiles.sort((a,b)=>Math.hypot(a.x-from.x,a.y-from.y)-Math.hypot(b.x-from.x,b.y-from.y));
-  setFlightAim({tiles});
-  canvas.focus({preventScroll:true});
-  note('Choose a highlighted landing tile. Enter confirms the selected tile · Esc cancels.',7000);
+  return tiles.sort((a,b)=>Math.hypot(a.x-from.x,a.y-from.y)-Math.hypot(b.x-from.x,b.y-from.y));
+}
+let hoverTargetFlight=null,hoverTargetTiles=[];
+function hoverFlightTargets(now=combatNow()){
+  if(!dragonFlight?.hover||dragonFlight.landAt!==null||dragonFlight.room!==currentRoom||now<dragonGlideArrival(dragonFlight))return [];
+  if(hoverTargetFlight!==dragonFlight){
+    hoverTargetFlight=dragonFlight;
+    hoverTargetTiles=dragonFlightTargets(dragonFlight.to);
+  }
+  return hoverTargetTiles;
+}
+async function glideDragonTo(tile){
+  if(serverActionBusy)return;
+  if(combatNow()<dragonGlideArrival(dragonFlight)){
+    note('Wait for Cinderwing to reach its destination.');return;
+  }
+  if(!hoverFlightTargets().some(target=>target.x===tile?.x&&target.y===tile?.y)){
+    note('Choose a highlighted tile within reach.');return;
+  }
+  try{await serverGameplay('dragonGlide',{tile});}
+  catch(error){note(error.message);}
 }
 async function startDragonHover(){
   if(unavailable()||!currentDragon())return;
   if(step||route.length){note('Stop riding before hovering.');return;}
   try{
     await serverGameplay('dragonFlight',{hover:true,direction:player.direction,back:player.back});
-    note('Cinderwing is hovering. Choose Land or press Y to come down.');
+    note('Click a highlighted tile to fly there. Choose Land or press Y to come down.',7000);
   }catch(error){note(error.message);}
 }
 async function landDragonHover(){
