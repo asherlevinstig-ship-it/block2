@@ -6,18 +6,28 @@ import {wildlifeRoom} from './wildlife.js';
 const ridingRooms=new Set(['outside','trail','grove','creek','pond','logging','clearing','shrine','ruins','quarry',overlookRoom,waystationRoom,wildlifeRoom,...ashenRooms,...watchRooms.filter(room=>room!=='starfall'),...willowmereRooms]);
 export const canRideHere=room=>ridingRooms.has(room);
 export const dragonFlightRules={range:9,height:82,canopy:57};
+const hoverClimbMs=950;
+export const dragonHoverLandingMs=1250;
+
+const isFlightTile=tile=>Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&tile.x>=0&&tile.y>=0;
 
 export function withinDragonFlightRange(from,to){
- if(![from,to].every(tile=>Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&tile.x>=0&&tile.y>=0))return false;
+ if(!isFlightTile(from)||!isFlightTile(to))return false;
  const distance=Math.hypot(to.x-from.x,to.y-from.y);
  return distance>0&&distance<=dragonFlightRules.range;
 }
 export const dragonFlightDuration=(from,to)=>3000+Math.round(Math.hypot(to.x-from.x,to.y-from.y)*150);
 
 export function normalizeDragonFlight(flight){
- if(!canRideHere(flight?.room)||!withinDragonFlightRange(flight.from,flight.to)||
-   !Number.isSafeInteger(flight.startedAt)||flight.startedAt<0||
-   flight.landAt!==flight.startedAt+dragonFlightDuration(flight.from,flight.to))return null;
+ if(!canRideHere(flight?.room)||!Number.isSafeInteger(flight.startedAt)||flight.startedAt<0)return null;
+ if(flight.hover===true){
+  if(!isFlightTile(flight.from)||flight.to?.x!==flight.from.x||flight.to?.y!==flight.from.y||
+    (flight.landAt!==null&&(!Number.isSafeInteger(flight.landAt)||flight.landAt<flight.startedAt+dragonHoverLandingMs)))return null;
+  const tile={x:flight.from.x,y:flight.from.y};
+  return {room:flight.room,from:tile,to:{...tile},startedAt:flight.startedAt,landAt:flight.landAt,hover:true,
+   direction:flight.direction==='left'?'left':'right',back:flight.back===true};
+ }
+ if(!withinDragonFlightRange(flight.from,flight.to)||flight.landAt!==flight.startedAt+dragonFlightDuration(flight.from,flight.to))return null;
  return {room:flight.room,from:{x:flight.from.x,y:flight.from.y},to:{x:flight.to.x,y:flight.to.y},startedAt:flight.startedAt,landAt:flight.landAt};
 }
 
@@ -25,6 +35,16 @@ const clamp=value=>Math.max(0,Math.min(1,value));
 const ease=value=>value*value*(3-2*value);
 export function dragonFlightPose(flight,now){
  if(!flight)return null;
+ if(flight.hover){
+  const descending=flight.landAt!==null;
+  const descentAt=descending?flight.landAt-dragonHoverLandingMs:now;
+  const climb=ease(clamp((Math.min(now,descentAt)-flight.startedAt)/hoverClimbMs));
+  const progress=descending?clamp((now-descentAt)/dragonHoverLandingMs):clamp((now-flight.startedAt)/hoverClimbMs);
+  const height=dragonFlightRules.height*climb*(descending?1-ease(progress):1);
+  return {room:flight.room,...flight.from,height,progress,overCanopy:height>=dragonFlightRules.canopy,
+   direction:flight.direction,back:flight.back,hover:true,
+   phase:descending?(progress<1?'landing':'landed'):progress<1?'takeoff':'hovering'};
+ }
  const progress=clamp((now-flight.startedAt)/(flight.landAt-flight.startedAt));
  const travel=ease(clamp((progress-.08)/.86));
  const climb=ease(clamp((progress-.07)/.25));

@@ -60,7 +60,7 @@ export function drawDragonMount(ctx,x,y,{direction,back,moving,time,reduced,flig
  const cycle=reduced?0:time/(moving?92:420);
  const stride=moving&&!flight&&!reduced?Math.round(Math.sin(cycle)*4):0;
  const bob=flight||reduced?0:Math.round((moving?Math.abs(Math.sin(cycle))*2:Math.sin(cycle)));
- const wing=flight?flightWing(flight,reduced):Math.round(Math.sin(cycle)*(moving?3:1));
+ const wing=flight?flightWing(flight,time,reduced):Math.round(Math.sin(cycle)*(moving?3:1));
  const rise=back?-6:2;
  const tuck=flight?5:0;
  const tailSwing=Math.round(Math.sin(cycle-.6)*(moving?3:1));
@@ -74,7 +74,8 @@ export function drawDragonMount(ctx,x,y,{direction,back,moving,time,reduced,flig
  if(!flight){
   ctx.fillStyle='#15122372';ctx.beginPath();ctx.ellipse(-3,1,36,8,0,0,Math.PI*2);ctx.fill();
  }
- ctx.translate(0,-bob);
+ const flightBob=flight?.phase==='hovering'&&!reduced?Math.round(Math.sin(time/230)*2):0;
+ ctx.translate(0,-bob-flightBob);
  const tail=[[-13,-16],[-25,-11],[-39,-9],[-50,-13+tailSwing],[-57,-23+tailSwing]];
  line(tail,palette.ink,9);line(tail,palette.shade,6);
  line([[-14,-18],[-26,-13],[-39,-11],[-49,-15+tailSwing]],palette.light,2);
@@ -99,11 +100,11 @@ export function drawDragonMount(ctx,x,y,{direction,back,moving,time,reduced,flig
  drawLeg(art,-16,-17-tuck,stride,true);
  drawLeg(art,13,-17-tuck,-stride,true);
  ctx.restore();
- const riderY=groundY-24-bob;
+ const riderY=groundY-24-bob-flightBob;
  drawRider(groundX-side*4,riderY);
 
  ctx.save();
- ctx.translate(groundX,groundY-bob);
+ ctx.translate(groundX,groundY-bob-flightBob);
  ctx.scale(side,1);
  ctx.lineJoin='round';
  ctx.lineCap='round';
@@ -115,8 +116,9 @@ export function drawDragonMount(ctx,x,y,{direction,back,moving,time,reduced,flig
  return riderY;
 }
 
-function flightWing({phase,progress},reduced){
+function flightWing({phase,progress,hover},time,reduced){
  if(reduced||phase==='landed')return 2;
+ if(hover)return Math.round(9+Math.sin(time/105)*10);
  if(phase==='takeoff')return Math.round(8+Math.sin(progress/.32*Math.PI*4)*9);
  if(phase==='landing')return Math.round(10+Math.sin((progress-.68)/.32*Math.PI)*5);
  return Math.round(12+Math.sin(progress*17)*2);
@@ -139,8 +141,10 @@ export function drawDragonFlightGround(ctx,point,pose,{reduced}){
   ctx.strokeStyle='#d5eddf';ctx.lineWidth=1.2;ctx.beginPath();
   ctx.moveTo(x,y-4);ctx.lineTo(x+7,y);ctx.lineTo(x,y+4);ctx.lineTo(x-7,y);ctx.closePath();ctx.stroke();
  }
- if(!reduced&&(pose.progress<.23||pose.progress>.88)){
-  const landing=pose.progress>.88,age=landing?(pose.progress-.88)/.12:pose.progress/.23;
+ const landing=pose.progress>.88&&(!pose.hover||pose.phase==='landing');
+ const takingOff=pose.progress<.23&&(!pose.hover||pose.phase==='takeoff');
+ if(!reduced&&(takingOff||landing)){
+  const age=landing?(pose.progress-.88)/.12:pose.progress/.23;
   ctx.fillStyle=landing?'#d4c394':'#cfad79';ctx.globalAlpha=Math.sin(age*Math.PI)*.65;
   for(let i=0;i<9;i++){
    const angle=i*Math.PI*2/9;

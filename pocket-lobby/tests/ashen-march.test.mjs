@@ -189,6 +189,7 @@ test('The flight button opens landing selection outdoors and stays hidden in the
   game.run('updateMountControl()');
   const button=game.nodes.get('quickFlight');
   assert.equal(button.hidden,room==='hub');
+  assert.equal(game.nodes.get('quickHover').hidden,room==='hub');
   if(room==='hub')continue;
   assert.equal(button.textContent,'Take flight');
   button.onclick();
@@ -197,6 +198,31 @@ test('The flight button opens landing selection outdoors and stays hidden in the
   button.onclick();
   assert.equal(game.read('flightAim'),null);
  }
+});
+
+test('Cinderwing holds altitude across saves until the rider requests a landing',()=>{
+ const tile={x:4,y:4};
+ const state=normalizeState({location:'outside',position:tile,mounts:{sightings:3,selected:true},actionPoints:{value:4}});
+ applyGameplayAction(state,'dragonFlight',{hover:true,direction:'left',back:true},1000);
+ const later=60000,loaded=normalizeState(state);
+ assert.equal(loaded.mounts.flight.landAt,null);
+ assert.deepEqual(loaded.mounts.flight,state.mounts.flight);
+ settleActivities(loaded,later);
+ const airborne=dragonFlightPose(loaded.mounts.flight,later);
+ assert.equal(airborne.phase,'hovering');
+ assert.equal(airborne.direction,'left');
+ assert.equal(airborne.back,true);
+ assert(airborne.overCanopy);
+ assert.throws(()=>applyGameplayAction(loaded,'dragonMount',{selected:false},later),/Wait until/);
+ applyGameplayAction(loaded,'dragonLand',{},later);
+ const descent=normalizeState(loaded).mounts.flight;
+ assert(descent.landAt>later);
+ assert.equal(dragonFlightPose(descent,later).height,airborne.height);
+ assert.equal(dragonFlightPose(descent,descent.landAt).height,0);
+ assert(settleActivities(loaded,descent.landAt));
+ assert.equal(loaded.mounts.flight,undefined);
+ assert.deepEqual(loaded.position,tile);
+ assert.equal(loaded.actionPoints.value,4);
 });
 
 test('Emberwood latch requires proximity, opens both directions, and persists through saves',()=>{

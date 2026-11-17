@@ -50,6 +50,16 @@ test('the room relays the takeoff clock and the authoritative landing tile',asyn
  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(ground),meta.playerId);
  await publishWorldActivity(env,meta.playerId,air,ground,3);
  const peer=publicPeer(meta);assert.equal(peer.flight,undefined);assert.deepEqual({x:peer.x,y:peer.y},to);
+ const hover=structuredClone(ground);
+ applyGameplayAction(hover,'dragonFlight',{hover:true},now+6000);
+ sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(hover),meta.playerId);
+ await publishWorldActivity(env,meta.playerId,ground,hover,4);
+ assert.equal(publicPeer(meta).flight.landAt,null);
+ const descent=structuredClone(hover);
+ applyGameplayAction(descent,'dragonLand',{},now+9000);
+ sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(descent),meta.playerId);
+ await publishWorldActivity(env,meta.playerId,hover,descent,5);
+ assert.equal(publicPeer(meta).flight.landAt,descent.mounts.flight.landAt);
 });
 
 test('Auto players can join fishing areas while private dungeons and job-board plans stay separate',async t=>{

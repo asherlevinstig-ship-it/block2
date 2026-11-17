@@ -1,4 +1,4 @@
-import {startDragonFlight,settleDragonFlight} from './dragon-flight.mjs';
+import {startDragonFlight,settleDragonFlight,descendDragonHover} from './dragon-flight.mjs';
 import {normalizeMounts,dragonUnlocked,canRideMount} from '../public/mounts.js';
 import {libraryAction} from './library.mjs';
 import {recordShopPurchase} from './shop-licences.mjs';
@@ -77,13 +77,14 @@ const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furnitu
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
   if(action==='dragonLand'){
+    if(descendDragonHover(state,now))return;
     if(state.mounts?.flight&&!settleDragonFlight(state,now))throw new Error('Cinderwing is still landing.');
     return;
   }
   if(state.mounts?.flight){
     if(!settleDragonFlight(state,now))throw new Error('Wait until Cinderwing lands.');
   }
-  if(action==='dragonFlight'){startDragonFlight(state,body.tile,now);return;}
+  if(action==='dragonFlight'){startDragonFlight(state,body,now);return;}
   if(action==='teacherDragon'){
     if(options.verifiedTeacher!==true)throw new Error('Cinderwing is available to verified LiveWeave teachers.');
     available(state);

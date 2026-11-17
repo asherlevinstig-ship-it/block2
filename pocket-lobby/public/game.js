@@ -4491,7 +4491,10 @@ function draw(time){
   const wildlifeNow=currentRoom==='willowbank'?combatNow():null;
   const crossing=wildlifeNow===null?null:willowbankDeer(wildlifeNow);
   if(crossing?.tracks)drawWillowbankTracks({surface});
-  if(localFlight){drawDragonFlightGround(ctx,point,localFlight,{reduced:reducedMotion.matches});drawDragonLandingRing(ctx,point,dragonFlight.to);}
+  if(localFlight){
+    drawDragonFlightGround(ctx,point,localFlight,{reduced:reducedMotion.matches});
+    if(dragonFlight.landAt!==null)drawDragonLandingRing(ctx,point,dragonFlight.to);
+  }
   if(flightAim)for(const tile of flightAim.tiles){
     if(tile.x===hover?.x&&tile.y===hover?.y)drawDragonLandingRing(ctx,point,tile);
     else surface(tile.x+.18,tile.y+.18,.64,.64,1,'#b1e9d13d','#d2ffe4');
@@ -7868,13 +7871,16 @@ function cancelSelection(){selection=null;editStatus('Select a piece to get star
 var fieldJournalOpen=false;
 function updateMountControl(state=window.playerCloud?.initial){
   const flight=$('quickFlight');
+  const riding=!!window.activeMount?.(state)&&currentRoom===state.location;
+  const hovering=dragonFlight?.hover&&dragonFlight.landAt===null;
   if(flight){
-    flight.hidden=!dragonFlight&&(!window.activeMount?.(state)||currentRoom!==state.location);
-    flight.disabled=!!dragonFlight;
-    flight.textContent=dragonFlight?'In flight':flightAim?'Cancel flight':'Take flight';
+    flight.hidden=!dragonFlight&&!riding;
+    flight.disabled=!!dragonFlight&&!hovering;
+    flight.textContent=hovering?'Land':dragonFlight?.hover?'Landing…':dragonFlight?'In flight':flightAim?'Cancel flight':'Take flight';
     flight.setAttribute('aria-pressed',String(!!flightAim));
-    flight.title='Choose a landing tile · Y';
+    flight.title=hovering?'Land Cinderwing · Y':'Choose a landing tile · Y';
   }
+  $('quickHover').hidden=!riding||!!dragonFlight||!!flightAim;
   const button=$('quickMount');
   if(!button)return;
   button.hidden=!!dragonFlight||!window.dragonUnlocked?.(state?.mounts)||!window.canRideMount?.(state)||state.location!==currentRoom;
@@ -8541,6 +8547,7 @@ $('combatDodge').onclick=()=>combatAction('dodge');
 $('quickDodge').onclick=$('combatDodge').onclick;
 $('quickMount').onclick=toggleDragon;
 $('quickFlight').onclick=toggleDragonFlightAim;
+$('quickHover').onclick=startDragonHover;
 for(const id of ['combatRune','dungeonRune','quickRune'])$(id).onclick=()=>combatAction('runeBurst');
 for(const id of ['combatGuard','dungeonGuard','quickGuard'])$(id).onclick=()=>combatAction('guard');
 $('quickFlee').onclick=$('combatFlee').onclick;
@@ -10000,6 +10007,7 @@ function setFlightAim(aim){
 }
 function toggleDragonFlightAim(){
   if(flightAim){setFlightAim(null);note('Flight cancelled.');return;}
+  if(dragonFlight?.hover&&dragonFlight.landAt===null){landDragonHover();return;}
   if(dragonFlight){note('Cinderwing is already in flight.');return;}
   if(unavailable())return;
   if(!currentDragon()){note('Mount Cinderwing before taking flight.');return;}
@@ -10014,6 +10022,19 @@ function toggleDragonFlightAim(){
   setFlightAim({tiles});
   canvas.focus({preventScroll:true});
   note('Choose a highlighted landing tile. Enter confirms the selected tile · Esc cancels.',7000);
+}
+async function startDragonHover(){
+  if(unavailable()||!currentDragon())return;
+  if(step||route.length){note('Stop riding before hovering.');return;}
+  try{
+    await serverGameplay('dragonFlight',{hover:true,direction:player.direction,back:player.back});
+    note('Cinderwing is hovering. Choose Land or press Y to come down.');
+  }catch(error){note(error.message);}
+}
+async function landDragonHover(){
+  if(serverActionBusy)return;
+  try{await serverGameplay('dragonLand');}
+  catch(error){note(error.message);}
 }
 async function launchDragonFlight(tile){
   if(!flightAim||unavailable())return;
@@ -10033,14 +10054,14 @@ function applyDragonFlight(state){
   if(before&&state.location===currentRoom&&before.room===currentRoom&&state.position){
     const {x,y}=state.position;
     Object.assign(player,{x,y,cx:x,cy:y});
-    const facing=combatFacing(before.from,before.to);
+    const facing=before.hover?{direction:before.direction,back:before.back}:combatFacing(before.from,before.to);
     if(facing)Object.assign(player,facing);
   }
 }
 function finishDragonFlightWhenDue(){
-  if(flightLandingBusy||combatNow()<dragonFlight.landAt||performance.now()<flightRetryAt||!window.playerCloud?.gameplay)return;
+  if(dragonFlight.landAt===null||flightLandingBusy||combatNow()<dragonFlight.landAt||performance.now()<flightRetryAt||!window.playerCloud?.gameplay)return;
   flightLandingBusy=true;
-  serverGameplay('dragonLand').then(()=>note('Cinderwing lands on the bank.')).catch(error=>{
+  serverGameplay('dragonLand').then(()=>note('Cinderwing lands.')).catch(error=>{
     flightRetryAt=performance.now()+800;
     note(error.message);
   }).finally(()=>{flightLandingBusy=false;});
