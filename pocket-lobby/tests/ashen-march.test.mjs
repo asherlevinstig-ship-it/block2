@@ -1,5 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {crossesWillowbankChannel,dragonFlightPose} from '../public/dragon-flight.js';
+import {activeMount,legendaryDragon} from '../public/mounts.js';
+import {ashenStagRules,ashenStagSighting,ashenChargePath,ashstepCloakId} from '../public/ashen-stag.js';
+import {actVaultParty,advanceVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';
+import {arenaMoveEvent} from '../public/dungeon-arena.js';
+import {addClothingToOutfit,outfitAppearance} from '../public/wardrobe.js';
+import {coopDanger} from '../public/vault-coop.js';
+import {testDatabase} from './db-helper.mjs';
+import {skillXpForLevel} from '../public/skill-curve.js';
 import {ashenAreas,ashenRooms,ashenLatch,cinderBrazier} from '../public/ashen-march.js';
 import {moonwood} from '../public/moonwood.js';
 import {reachableMove,roomBoxes,validRoomTile} from '../public/shared-world.js';
@@ -26,6 +35,125 @@ test('Ashen March routes, spawn points, and interaction sites are walkable',()=>
   assert(pvpRooms.has(room));
   assert(huntEnemyForRoom(room));
  }
+});
+
+test('Ashen Stag tracks move to Emberwood, with a ruin to bait on both routes',()=>{
+ const road=ashenStagSighting(1000),wood=ashenStagSighting(ashenStagRules.stopMs+1000);
+ assert.equal(road.room,'brokenRoad');assert.equal(wood.room,'emberwood');assert.equal(road.id,wood.id);
+ assert.equal(ashenStagSighting(2*ashenStagRules.stopMs+1000).id,road.id+1);
+ for(const site of [road,wood]){
+  assert(validRoomTile(site.room,site.x,site.y,roomBoxes(site.room)));
+  const path=ashenChargePath(site.room,site,{x:7,y:site.y});
+  assert.deepEqual(path.crash,{x:8,y:site.y});
+  assert.deepEqual(path.end,{x:7,y:site.y});
+ }
+ assert.equal(ashenChargePath('brokenRoad',road,{x:4,y:4}).crash,null);
+});
+
+test('two hunters share a locked charge, a flank opening and independent cloak claims',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const tank=normalizeState({location:'brokenRoad',position:{x:7,y:4},actionPoints:{value:5}});
+ const mage=normalizeState({location:'brokenRoad',position:{x:7,y:2},actionPoints:{value:5},
+  stats:{magicKnowledgeXp:skillXpForLevel(3)},combatGear:{ownedWeapons:['runewoodStaff'],equippedWeapon:'runewoodStaff'}});
+ for(const [id,s] of [['tank',tank],['mage',mage]])sql.prepare('INSERT INTO tower_players VALUES (?,?,1,?,?)').run(id,JSON.stringify(s),'initial',1000);
+ const row=id=>sql.prepare('SELECT * FROM tower_players WHERE player_id=?').get(id);
+ const created=await writeVaultParty(db,row('tank'),{kind:'create',operation:'create'},1000),id=created.raid.id;
+ assert.equal(created.raid.hunt,'ashenStag');
+ await writeVaultParty(db,row('mage'),{kind:'join',id,operation:'join'},1100);
+ await writeVaultParty(db,row('tank'),{kind:'start',id,operation:'start'},1200);
+ const {raid}=await readVaultParty(db,id,'tank',1300);
+ const a=normalizeState(JSON.parse(row('tank').state_json)),b=normalizeState(JSON.parse(row('mage').state_json));
+ assert.equal(a.vaultCoop.hunt,'ashenStag');
+ const impact=raid.landsAt;
+ advanceVaultParty(raid,raid.warningAt);
+ assert.deepEqual(raid.charge.crash,{x:8,y:4});
+ assert(coopDanger(raid,{x:7,y:4}));assert(!coopDanger(raid,{x:7,y:5}));
+ a.position={x:7,y:5};
+ actVaultParty(raid,a,'tank',{kind:'tick'},impact-50);
+ advanceVaultParty(raid,impact);
+ assert.equal(raid.members.tank.hp,100);
+ assert.equal(raid.exposedUntil,impact+ashenStagRules.crashMs);
+ assert.deepEqual(raid.origin,{x:7,y:4});
+ const baseline=structuredClone(raid),caster=structuredClone(b);delete baseline.exposedUntil;
+ const regular=actVaultParty(baseline,caster,'mage',{kind:'strike'},impact+1).hit;
+ const bolt=actVaultParty(raid,b,'mage',{kind:'strike'},impact+1);
+ assert.equal(bolt.hit,Math.ceil(regular*1.25));
+ assert.match(bolt.text,/Rune marked/);
+ actVaultParty(raid,a,'tank',{kind:'strike'},impact+2);
+ raid.hp=5;
+ assert.match(actVaultParty(raid,b,'mage',{kind:'runeBurst'},impact+3).text,/Rune Burst/);
+ assert.equal(raid.status,'victory');
+ for(const [key,s] of [['tank',a],['mage',b]]){
+  const reward=actVaultParty(raid,s,key,{kind:'claim'},impact+4);
+  assert(reward.cloak);assert(s.wardrobe.owned.includes(ashstepCloakId));
+  assert.equal(normalizeState(s).hunting.ashenSighting,0);assert.equal(s.vaultCoop,undefined);
+  assert.throws(()=>actVaultParty(raid,s,key,{kind:'claim'},impact+5));
+ }
+});
+
+test('wearing Ashstep rewards a perfect dodge with a short movement boost',()=>{
+ const site=ashenStagSighting(1000),s=normalizeState({location:site.room,position:{x:7,y:4}});
+ s.wardrobe.owned.push(ashstepCloakId);
+ addClothingToOutfit(s.wardrobe,s.wardrobe.active,ashstepCloakId);s.avatar=outfitAppearance(s.wardrobe,s.avatar);
+ assert.equal(normalizeState(s).avatar.outfit,17);
+ const raid={id:'ABCD1234',hunt:'ashenStag',room:site.room,sighting:site.id,sightingUntil:site.until,origin:{x:site.x,y:site.y},leader:'a',status:'waiting',members:{},adds:[]};
+ actVaultParty(raid,s,'a',{kind:'join'},1000);actVaultParty(raid,s,'a',{kind:'start'},1200);
+ const impact=raid.landsAt;
+ actVaultParty(raid,s,'a',{kind:'dodge'},impact-120);
+ advanceVaultParty(raid,impact);
+ assert.equal(raid.members.a.hp,100);
+ assert.equal(publicAshstep(raid),impact+ashenStagRules.ashstepMs);
+ const encounter={arenaVersion:1,brainVersion:2,arenaRoom:'depthsGallery',arenaPlayer:{x:5,y:5},arenaEnemy:{x:7,y:5},ashstepUntil:publicAshstep(raid)};
+ const state={location:'depthsGallery',hunting:{encounter},health:100};
+ const moved=arenaMoveEvent(state,{x:6,y:5},impact+1);
+ assert.equal(moved.encounter.arenaStepAt,impact+1+240*ashenStagRules.stepScale);
+});
+const publicAshstep=raid=>raid.members.a.ashstepUntil;
+
+test('Cinderwing is earned from three distinct claimed hunts and rides outdoors only',()=>{
+ const s=normalizeState({location:'brokenRoad'});
+ assert.throws(()=>applyGameplayAction(s,'dragonMount',{selected:true}),/claiming three/);
+ for(let sighting=0;sighting<legendaryDragon.sightings;sighting++){
+  const raid={id:'ABCD1234',hunt:'ashenStag',room:'brokenRoad',sighting,status:'victory',members:{a:{id:'A',damage:5,hp:100,build:{},pos:{x:5,y:4}}},adds:[],expiresAt:1e8};
+  s.vaultCoop={id:raid.id,hunt:raid.hunt};
+  const reward=actVaultParty(raid,s,'a',{kind:'claim'},1000+sighting);
+  assert.equal(reward.dragonSightings,sighting+1);
+  assert.equal(reward.dragon,sighting===legendaryDragon.sightings-1);
+  assert.throws(()=>actVaultParty(raid,s,'a',{kind:'claim'},1001+sighting));
+ }
+ applyGameplayAction(s,'dragonMount',{selected:true});
+ const loaded=normalizeState(s);
+ assert.equal(activeMount(loaded),'cinderwing');
+ for(const patch of [{location:'hub'},{location:'starfall'},{controlMode:'auto'},{vaultCoop:{}},{fishingCast:{}}])assert.equal(activeMount({...loaded,...patch}),null);
+ assert.equal(protectFishingState(normalizeState(),structuredClone(loaded)).mounts,undefined);
+ const indoor={...loaded,location:'hub'};
+ applyGameplayAction(indoor,'dragonMount',{selected:false});assert(!indoor.mounts.selected);
+ assert.throws(()=>applyGameplayAction(indoor,'dragonMount',{selected:true}),/outdoors/);
+});
+
+test('Cinderwing crosses the channel while the saved player stays at launch until landing',()=>{
+ const from={x:9,y:6},to={x:10,y:3};
+ const s=normalizeState({location:'willowbank',position:from,mounts:{sightings:3,selected:true},actionPoints:{value:4}});
+ assert(crossesWillowbankChannel(from,to));
+ for(const tile of [{x:8,y:9},{x:12,y:3},{x:15,y:3},{x:11,y:1}]){
+  assert.throws(()=>applyGameplayAction(s,'dragonFlight',{tile},1000),/clear tile/);
+ }
+ applyGameplayAction(s,'dragonFlight',{tile:to},1000);
+ const flight=s.mounts.flight;
+ assert.deepEqual(s.position,from);
+ assert.equal(s.actionPoints.value,4);
+ assert.deepEqual(normalizeState(s).mounts.flight,flight);
+ const pose=dragonFlightPose(flight,(flight.startedAt+flight.landAt)/2);
+ assert(pose.overCanopy);assert(pose.y<from.y&&pose.y>to.y);
+ assert.equal(dragonFlightPose(flight,flight.startedAt).height,0);
+ assert.equal(dragonFlightPose(flight,flight.landAt).height,0);
+ assert.throws(()=>applyGameplayAction(s,'dragonLand',{},flight.landAt-1),/still landing/);
+ assert.throws(()=>applyGameplayAction(s,'dragonMount',{selected:false},flight.landAt-1),/Wait until/);
+ assert.deepEqual(protectFishingState(s,{...structuredClone(s),position:to}).position,from);
+ assert(settleActivities(s,flight.landAt));
+ assert.deepEqual(s.position,to);assert.equal(s.mounts.flight,undefined);
+ applyGameplayAction(s,'dragonLand',{},flight.landAt+10);
+ assert.equal(s.actionPoints.value,4);
 });
 
 test('Emberwood latch requires proximity, opens both directions, and persists through saves',()=>{

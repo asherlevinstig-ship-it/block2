@@ -1,3 +1,4 @@
+import {ashenStagRules,ashenStagRoom,ashenStagObstacles} from './ashen-stag.js';
 import {cellarFloor} from './mill-cellar.js';
 import {moonbackSite} from './moonback.js';
 import {floodCrossingOpen} from './flooded-chamber.js';
@@ -79,7 +80,7 @@ export function arenaInDanger(e,move,tile=arenaPlayer(e)){
  return lineDistance(tile,enemy,target)<.6&&Math.hypot(tile.x-enemy.x,tile.y-enemy.y)<=Math.hypot(target.x-enemy.x,target.y-enemy.y)+.7;
 }
 export function projectileCover(encounter,from,to){
- const cover=encounter.arenaRoom==='clearing'?(encounter.arenaSolids??[]):
+ const cover=ashenStagRoom(encounter.arenaRoom)?ashenStagObstacles(encounter.arenaRoom).map(([x,y])=>({x,y})):encounter.arenaRoom==='clearing'?(encounter.arenaSolids??[]):
   encounter.arenaRoom==='depthsVault'&&encounter.vaultMechanism==='screen'?[...dungeonCover,vaultScreen]:dungeonCover;
  const dx=to.x-from.x,dy=to.y-from.y,length=dx*dx+dy*dy;
  if(!length)return null;
@@ -108,7 +109,7 @@ export function arenaMoveEvent(state,tile,now,scenery=[],stamina=state.hunting?.
  if(state.location==='depthsGate'&&tile.x===8&&!floodCrossingOpen(state.depthsRun,tile.x,tile.y))return null;
  const foe=arenaEnemy(e);if(tile.x===foe.x&&tile.y===foe.y||(e.adds??[]).some(a=>a.x===tile.x&&a.y===tile.y))return null;
  if(e.brainVersion===2&&stamina<ARENA_STEP_COST)return null;
- const next={...e,arenaPlayer:{x:tile.x,y:tile.y},arenaStepAt:now+(e.buildRelics?.includes('guardianMantle')?300:240)};
+ const next={...e,arenaPlayer:{x:tile.x,y:tile.y},arenaStepAt:now+(e.buildRelics?.includes('guardianMantle')?300:240)*(now<(e.ashstepUntil??0)?ashenStagRules.stepScale:1)};
  if(e.brainVersion===2){Object.assign(next,{stamina:stamina-ARENA_STEP_COST,staminaAt:now,brainStepsSinceAttack:(e.brainStepsSinceAttack??0)+1,brainPlayerHistory:[...(e.brainPlayerHistory??[]),{dx:tile.x-from.x,dy:tile.y-from.y,at:now}].slice(-4)});}
  state.position={...next.arenaPlayer};
  return {action:'move',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting',tile:next.arenaPlayer};

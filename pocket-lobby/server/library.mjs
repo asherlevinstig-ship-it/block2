@@ -1,12 +1,17 @@
-import {skillBooks,normalizeLibrary,besideLibraryBooks,magicKnowledgeLevel,readingDuration,bookCooldown} from '../public/library.js';
+import {skillBooks,normalizeLibrary,besideLibraryBooks,magicKnowledgeLevel,readingDuration,bookCooldown,runewoodStaffLevel} from '../public/library.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 export function libraryAction(state,action,body,now){
- if(!['libraryRead','libraryFinish'].includes(action))return false;
+ if(!['libraryRead','libraryFinish','libraryStaff'].includes(action))return false;
  if(state.characterCreated===false||state.controlMode==='auto'||state.plan||state.report||state.health<=0||state.hunting?.encounter||state.hunting?.recoveryUntil||state.fishingCast||state.timberCut||state.miningCut||state.bedRest||state.campRest||state.gambling?.round?.status==='playing')throw new Error('Finish your activity and take control before reading.');
  if(!besideLibraryBooks(state))throw new Error('Walk beside a bookshelf or reading desk in the Library.');
  const library=normalizeLibrary(state.library);
- if(action==='libraryFinish'){
+ if(action==='libraryStaff'){
+  if(library.reading)throw new Error('Finish your current book first.');
+  if(magicKnowledgeLevel(state)<runewoodStaffLevel)throw new Error('Reach Magic Knowledge 3 to claim the Runewood Staff.');
+  if(library.staffClaimed||state.combatGear.ownedWeapons.includes('runewoodStaff'))throw new Error('You already claimed the Runewood Staff.');
+  state.combatGear.ownedWeapons.push('runewoodStaff');library.staffClaimed=true;
+ }else if(action==='libraryFinish'){
   const r=library.reading;
   if(!r||body.id!==r.id)throw new Error('This reading session has already ended.');
   if(now<r.until)throw new Error('Keep reading until the page is complete.');

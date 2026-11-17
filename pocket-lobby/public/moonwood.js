@@ -50,7 +50,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#303645','#443f56','#a38a77'],authored:[['wildtree',1,2],['wildtree',6,2],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from one of three fishing posts and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',2,0],['wildtree',0,8],['wildrock',2,7],['wildbloom',2,9],['wildbloom',3,3]]}
   };
-  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:38,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:stonebackArtHeight,moonbackStag:moonbackArtHeight,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
+  const heights={...ashenPropHeights,ashenLatch:22,keeperMarker:32,keeperCrate:24,keeperLedger:38,waystationSign:37,waystationAwning:42,waystationFire:31,waystationSupplies:43,...riverPropHeights,...watchPropHeights,...dungeonHeights,galleryEncounter:48,galleryCrack:26,runeCoffer:17,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,submergedCache:20,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,trailCamp:24,timberTree:51,wildboar:22,stonebackBeetle:stonebackArtHeight,ashenStag:moonbackArtHeight,moonbackStag:moonbackArtHeight,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:60,moonbloom:29,fishingPost:26};
   Object.assign(heights,cellarHeights);
   heights.crystalGuardian=65;heights.crystalCluster=42;
   heights.oreDeposit=28;
@@ -431,7 +431,7 @@ export const moonwood=(()=>{
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
-    if(type==='moonbackStag'){drawMoonbackStag(item,time,{point,polygon,rect,surface,reduced,pose});return;}
+    if(type==='moonbackStag'||type==='ashenStag'){drawMoonbackStag(item,time,{point,polygon,rect,surface,reduced,pose});return;}
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
     if(type==='restAltar'){
       part(.12,.12,.76,.76,0,7,stone);part(.22,.22,.56,.56,7,12,['#a3cfc0','#486b70','#71968c']);

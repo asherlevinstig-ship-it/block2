@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {advanceServerCombat} from '../server/activities.mjs';
 import {normalizeState} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 import {skillBooks,readingDuration,magicKnowledgeLevel} from '../public/library.js';
@@ -14,6 +15,33 @@ test('Library has a shared walkable entrance, shelves and a route back to the lo
  assert(validRoomTile('library',1,5,boxes));assert(!validRoomTile('library',4,1,boxes));
  assert(reachableMove('library',{x:1,y:5},{x:4,y:2},boxes,30));
  assert.equal(autoRoomPath('hub','library',s)[0].to,'library');assert.equal(autoRoomPath('library','outside',s)[0].to,'hub');
+});
+
+test('Magic Knowledge 3 unlocks a one-time Library staff reward',()=>{
+ const s=make();
+ assert.throws(()=>act(s,'libraryStaff'),/Magic Knowledge 3/);
+ s.stats.magicKnowledgeXp=skillXpForLevel(3);
+ act(s,'libraryStaff');
+ assert(s.combatGear.ownedWeapons.includes('runewoodStaff'));assert.equal(s.actionPoints.value,4);
+ s.combatGear.ownedWeapons=s.combatGear.ownedWeapons.filter(id=>id!=='runewoodStaff');
+ assert.throws(()=>act(normalizeState(s),'libraryStaff'),/already claimed/);
+});
+
+test('Runewood bolts wait for mana and Rune Burst consumes the target mark once',()=>{
+ const s=make({location:'clearing',position:{x:6,y:3},stats:{magicKnowledgeXp:skillXpForLevel(3)},
+  combatGear:{ownedWeapons:['runewoodStaff'],equippedWeapon:'runewoodStaff'},vitals:{mana:0,manaAt:1000}});
+ act(s,'fight',{},1000);
+ assert(!advanceServerCombat(s,2999,()=>.5).some(event=>event.action==='attack'));
+ const bolt=advanceServerCombat(s,3000,()=>.5).find(event=>event.action==='attack');
+ assert(bolt.runeMarked);assert.equal(s.vitals.mana,2);assert.equal(s.actionPoints.value,3);
+ const body={combatId:s.combatId,input:'runeBurst'};
+ assert.throws(()=>act(s,'combat',body,3001),/12 mana/);
+ s.vitals.mana=30;
+ act(s,'combat',body,3100);
+ assert(s.combatReceipt.events.some(event=>event.runeConsumed&&event.damage>0));
+ assert.equal(s.actionPoints.value,2);assert.equal(s.vitals.mana,18);
+ assert.equal(s.hunting.encounter.runeMarkUntil,undefined);
+ assert.throws(()=>act(s,'combat',body,3101),/bolt/);
 });
 
 test('Reading pays one AP, requires the full duration and grants knowledge exactly once',()=>{

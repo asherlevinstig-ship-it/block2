@@ -13,7 +13,7 @@ export const ashenAreas={
  emberwood:{number:'31',name:'The Emberwood',region:'Ashen March',badge:'ASHEN MARCH · HOSTILE',floor:'Ash woodland',
   description:'Follow the amber lamps. Give the Ashback room, then reach the old latch to link this trail with the Broken Road.',
   center:[6,7],palette:['#49454b','#605059','#bd9a6f'],landmark:['stonebackBeetle',6,5,5,5],
-  authored:[['ashenSnag',1,1],['ashenBurntTree',3,2],['ashenBurntTree',8,2],['ashenSnag',10,1],['riverLantern',8,5],['watchMushroom',4,6],['watchMushroom',8,8],['riverLantern',3,7],['watchRock',8,7],['ashenLatch',ashenLatch.x,ashenLatch.y]]}
+  authored:[['ashenSnag',1,1],['ashenBurntTree',3,2],['ashenBurntTree',8,2],['ashenSnag',10,1],['riverLantern',8,5],['watchMushroom',4,6],['watchMushroom',8,8],['riverLantern',3,7],['ashenRuin',8,7],['ashenLatch',ashenLatch.x,ashenLatch.y]]}
 };
 export const ashenRooms=Object.keys(ashenAreas);
 export const ashenMapPositions={cinderwatch:[110,1290],brokenRoad:[110,1405],emberwood:[365,1405]};

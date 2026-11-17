@@ -1,3 +1,4 @@
+import {legendaryDragon} from './mounts.js';
 import {shieldRules} from './hunting.js';
 import {sanctuaryRules} from './style-abilities.js';
 import {vaultMechanisms} from './vault-mechanisms.js';
@@ -7,8 +8,8 @@ import {drawArenaTelegraph} from './dungeon-art.js';
 export function initializeVaultCoop(api){
  const entry=document.createElement('button');entry.id='vaultCoopEntry';entry.className='vault-coop-entry';entry.textContent='Co-op Vault · Form or join a party';entry.hidden=true;
  const panel=document.createElement('section');panel.id='vaultCoopPanel';panel.className='vault-coop-panel';panel.hidden=true;panel.setAttribute('aria-label','Shared Vault Guardian fight');
- panel.innerHTML='<header><b id="coopPhaseName">Co-op Vault</b><span id="coopBossHealth"></span></header><progress id="coopBossBar" max="420" value="420"></progress><p id="coopWarning"></p><p id="coopCounter" hidden></p><p id="coopTeamOpening" hidden></p><p id="coopHint"></p><div id="coopMembers"></div><div id="coopTargets"></div><p id="coopTargetHint" hidden></p><label class="coop-ally">Support target <select id="coopAlly"><option value="">Yourself</option></select></label><div class="coop-actions"><button id="coopStrike" type="button">Attack · 1 AP</button><button id="coopLoose" type="button" hidden>Loose arrow · 1 AP</button><button id="coopDodge" type="button">Dodge · Free</button><button id="coopGuard" type="button" hidden>Guard · B</button><button id="coopTaunt" type="button">Taunt · 1 AP</button><button id="coopQ" type="button">Q ability · 1 AP</button><button id="coopE" type="button">E ability · 1 AP</button><button id="coopSpillway" type="button">Open spillway</button><button id="coopScreen" type="button">Raise stone screen</button><button id="coopStart" type="button">Awaken Guardian</button><button id="coopClaim" type="button">Claim Vault victory</button><button id="coopLeave" type="button">Retreat to Gallery</button></div><p id="coopFeedback" role="status"></p>';
- const dialog=document.createElement('dialog');dialog.id='vaultCoopDialog';dialog.className='game-window vault-coop-dialog';dialog.innerHTML='<button class="close" type="button" aria-label="Close co-op party">×</button><div class="eyebrow">ONE GUARDIAN · SHARED HEALTH · UP TO FOUR PLAYERS</div><h2>Face the Vault together.</h2><p>The party leader starts the fight once everyone has joined. One player can Taunt; allies clear adds, interrupt the charged volley, or ward and heal each other.</p><p>Weapons and outfits stay locked. This is a live Play-mode fight. Retreat before leaving your browser.</p><button id="coopCreate" type="button" class="primary">Create a party</button><label>Join with a party code<input id="coopCode" maxlength="8" placeholder="8-character code" autocomplete="off"></label><button id="coopJoin" type="button">Join party</button><p id="coopJoinError" role="status"></p>';
+ panel.innerHTML='<header><b id="coopPhaseName">Co-op Vault</b><span id="coopBossHealth"></span></header><progress id="coopBossBar" max="420" value="420"></progress><p id="coopWarning"></p><p id="coopCounter" hidden></p><p id="coopTeamOpening" hidden></p><p id="coopHint"></p><div id="coopMembers"></div><div id="coopTargets"></div><p id="coopTargetHint" hidden></p><label class="coop-ally">Support target <select id="coopAlly"><option value="">Yourself</option></select></label><div class="coop-actions"><button id="coopStrike" type="button">Attack · 1 AP</button><button id="coopLoose" type="button" hidden>Loose arrow · 1 AP</button><button id="coopRune" type="button" hidden>Rune Burst · X</button><button id="coopDodge" type="button">Dodge · Free</button><button id="coopGuard" type="button" hidden>Guard · B</button><button id="coopTaunt" type="button">Taunt · 1 AP</button><button id="coopQ" type="button">Q ability · 1 AP</button><button id="coopE" type="button">E ability · 1 AP</button><button id="coopSpillway" type="button">Open spillway</button><button id="coopScreen" type="button">Raise stone screen</button><button id="coopStart" type="button">Awaken Guardian</button><button id="coopClaim" type="button">Claim Vault victory</button><button id="coopLeave" type="button">Retreat to Gallery</button></div><p id="coopFeedback" role="status"></p>';
+ const dialog=document.createElement('dialog');dialog.id='vaultCoopDialog';dialog.className='game-window vault-coop-dialog';dialog.innerHTML='<button class="close" type="button" aria-label="Close co-op party">×</button><div class="eyebrow">ONE GUARDIAN · SHARED HEALTH · UP TO FOUR PLAYERS</div><h2>Face the Vault together.</h2><p>The party leader starts the fight once everyone has joined. One player can Taunt; allies clear adds, interrupt the charged volley, or ward and heal each other.</p><p id="coopDragonProgress" hidden></p><p>Weapons and outfits stay locked. This is a live Play-mode fight. Retreat before leaving your browser.</p><button id="coopCreate" type="button" class="primary">Create a party</button><label>Join with a party code<input id="coopCode" maxlength="8" placeholder="8-character code" autocomplete="off"></label><button id="coopJoin" type="button">Join party</button><p id="coopJoinError" role="status"></p>';
  document.getElementById('scene').append(entry,panel);document.body.append(dialog);const $=id=>document.getElementById(id);
  const impact=document.createElement('progress');impact.id='coopImpact';impact.max=1;impact.setAttribute('aria-label','Time until attack lands');$('coopWarning').after(impact);
  const details=document.createElement('button');details.id='coopDetails';details.type='button';details.textContent='Party & support';panel.querySelector('header').after(details);panel.dataset.compact=String(window.matchMedia('(max-width:900px)').matches);details.onclick=()=>{panel.dataset.compact=String(panel.dataset.compact!=='true');render();};
@@ -25,11 +26,12 @@ export function initializeVaultCoop(api){
    if(raid.lastAttack&&raid.lastAttack.at!==old?.lastAttack?.at)attackFx={...raid.lastAttack,time:performance.now(),attackShape:raid.lastAttack.shape,attackTile:raid.lastAttack.target};
    if(old?.phase!==raid.phase)attackFx=null;
    if(raid.status==='victory'&&old?.status!=='victory'){
-    autoAttack=false;api.victory();popup('GUARDIAN DEFEATED',raid.origin??{x:6,y:5},'#ffe6a6');
+    autoAttack=false;api.victory();popup(raid.hunt==='ashenStag'?'ASHEN STAG DEFEATED':'GUARDIAN DEFEATED',raid.origin??{x:6,y:5},'#ffe6a6');
    }
    if(raid.lastExposedHit&&raid.lastExposedHit.at!==old?.lastExposedHit?.at){
     const hit=raid.lastExposedHit;popup('EXPOSED HIT −'+hit.damage,hit.tile,'#fff1a8',1);
    }
+   if(raid.lastAttack?.crash&&raid.lastAttack.at!==old?.lastAttack?.at)popup('FLANK EXPOSED',raid.lastAttack.crash,'#ffc278');
    if(old&&raid.faultbreaker?.until!==old.faultbreaker?.until&&raid.faultbreaker)popup('ARMOUR BROKEN',raid.origin,'#ffd28a',1);
    for(const add of old?.adds??[]){
     const current=raid.adds.find(a=>a.id===add.id),damage=add.hp-(current?.hp??0);
@@ -53,9 +55,10 @@ export function initializeVaultCoop(api){
     if(delta)popup((delta>0?'+':'−')+Math.abs(delta)+' HP',member.position,delta>0?'#94f4b4':'#ff8c9e');
     if(blocked>0)popup(member.lastHit?.guardBroken?'Guard broken':member.lastHit?.perfectBlock?'Perfect block · '+blocked:'Shield absorbed '+blocked,member.position,member.lastHit?.guardBroken?'#ffa281':'#8ef4e2',1);
    }
-   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,guardUntil:m.guardUntil,target:m.attackTarget,position:m.attackPosition,arrow:m.arrow,castAge:Math.max(0,raid.observedAt-m.castAt)});}
+   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500||m.runeBurstAt>0&&m.runeBurstAt!==before?.runeBurstAt&&raid.observedAt-m.runeBurstAt<900,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,guardUntil:m.guardUntil,target:m.attackTarget,position:m.attackPosition,arrow:m.arrow,castAge:Math.max(0,raid.observedAt-m.castAt)});}
   }
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
+  if(result.receipt?.gold&&raid?.hunt==='ashenStag')api.huntReward?.(result.receipt);
   if(result.state&&result.receipt&&raid?.status==='victory'&&!result.state.vaultCoop&&result.state.depthsRun?.cleared===3)api.reward?.(result.state);
   render();
  }
@@ -69,7 +72,7 @@ export function initializeVaultCoop(api){
   render();
  }
  async function send(kind,slot,feedback){
-  if(['strike','dodge','guard','power','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind)&&raid?.status!=='battle'){feedback?.('The Vault fight is no longer active.');return;}
+  if(['strike','dodge','guard','runeBurst','power','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind)&&raid?.status!=='battle'){feedback?.('The Vault fight is no longer active.');return;}
   if(busy){
    if(['guard','dodge'].includes(kind)&&api.now()<raid.landsAt)queuedDefense={kind,deadline:raid.landsAt};
    else feedback?.('Wait for the current Vault action to finish.');
@@ -82,7 +85,7 @@ export function initializeVaultCoop(api){
    accept(result);
    if(dialog.open)dialog.close();
    const member=raid?.members.find(m=>m.id===raid.self?.id),landed=member?.attackTarget;
-   if(kind==='strike')api.strike(landed??aim,member?.arrow);
+   if(kind==='strike'||kind==='runeBurst')api.strike(landed??aim,member?.arrow);
    if(kind==='power')api.cast(landed,null);
    if(kind==='sanctuary')api.cast(null,kind);
    if(kind==='faultbreaker')api.cast(raid.origin,kind);
@@ -110,14 +113,14 @@ export function initializeVaultCoop(api){
   panel.dataset.danger=String(danger);
   impact.hidden=!warning;
   if(warning){const fill=Math.round(Math.max(0,Math.min(1,1-ms/move.tell))*40)/40;if(impact.value!==fill)impact.value=fill;}
-  const prompt=vaultWarningPrompt(move,ms,{
+  const prompt=raid.hunt==='ashenStag'&&move.id==='ashCharge'&&danger?(raid.charge?.crash?'Ruin lined up · Step sideways now':'Step out of the charge lane'):vaultWarningPrompt(move,ms,{
    danger,covered,canDodge,guardWindow:shieldRules.perfect,
    canGuard:selected==='boss'&&api.canGuard?.()&&now>=(raid.self?.nextGuardAt??0)&&(raid.self?.guardStamina??0)>=shieldRules.raiseCost+shieldRules.impactCost,
    guardRaised:selected==='boss'&&now<(raid.self?.guardUntil??0)
   });
   const style=warning?(covered?'cover':vaultWarningStyle(move)):'';
   if(panel.dataset.warning!==style)panel.dataset.warning=style;
-  const message=warning?move.name+' · '+(ms/1000).toFixed(1)+'s · '+prompt:'Next '+move.name+' · Prepare your next move';
+  const message=raid.hunt==='ashenStag'&&raid.exposedUntil>now?'Ruin struck · Flank exposed · '+((raid.exposedUntil-now)/1000).toFixed(1)+'s':warning?move.name+' · '+(ms/1000).toFixed(1)+'s · '+prompt:'Next '+move.name+' · Prepare your next move';
   if($('coopWarning').textContent!==message)$('coopWarning').textContent=message;
   const openFor=(raid.teamOpening?.until??0)-now,archer=api.usesBow?.();
   const prepare=warning&&raid.phase===1&&move.id===vaultTeamCounter.move&&archer&&raid.members.some(m=>m.id!==raid.self?.id&&m.hp>0&&m.guardCapable);
@@ -134,22 +137,27 @@ export function initializeVaultCoop(api){
   if($('coopCounter').textContent!==hint)$('coopCounter').textContent=hint;
  }
  function render(){
-  const s=api.state(),inVault=s.room==='depthsVault';entry.hidden=!inVault||s.solo||s.cleared!==2||active();panel.hidden=!inVault||!active();if(panel.hidden||!raid)return;
-  const detail=vaultPhaseDetails[(raid.phase??1)-1],battle=raid.status==='battle';panel.style.setProperty('--coop-color',detail.color);$('coopPhaseName').textContent=raid.status==='waiting'?'Party '+raid.id+' · '+raid.members.length+' / 4':'Phase '+raid.phase+' · '+detail.name;
+  const s=api.state(),inVault=s.room==='depthsVault',eligible=inVault?s.cleared===2:s.ashenHere;
+  entry.hidden=!eligible||s.solo||active();entry.textContent=s.ashen?'Ashen Stag · Form or join a hunt':'Co-op Vault · Form or join a party';
+  panel.hidden=!(inVault||s.ashen)||!active();if(panel.hidden||!raid)return;
+  const ash=raid.hunt==='ashenStag';
+  const detail=vaultPhaseDetails[(raid.phase??1)-1],battle=raid.status==='battle';panel.style.setProperty('--coop-color',detail.color);$('coopPhaseName').textContent=raid.status==='waiting'?'Party '+raid.id+' · '+raid.members.length+' / 4':ash?'Ashen Stag':'Phase '+raid.phase+' · '+detail.name;
   $('coopBossHealth').textContent=raid.hp+' / '+raid.max;$('coopBossBar').max=raid.max;$('coopBossBar').value=raid.hp;
   renderWarning(api.now());
-  if(!battle){$('coopCounter').hidden=true;$('coopWarning').textContent=raid.status==='waiting'?'Share the party code with friends in the Sunken Vault.':raid.status==='victory'?'Guardian defeated · Claim your reward, open the glowing chest, then bank your spoils at the exit.':raid.self?.tip??'The fight has ended. Retreat and prepare another expedition.';}
+  if(!battle){$('coopCounter').hidden=true;$('coopWarning').textContent=ash?(raid.status==='waiting'?'Share the code with players at this sighting.':raid.status==='victory'?'Ashen Stag defeated · Claim your reward.':'The hunt has ended.') :raid.status==='waiting'?'Share the party code with friends in the Sunken Vault.':raid.status==='victory'?'Guardian defeated · Claim your reward, open the glowing chest, then bank your spoils at the exit.':raid.self?.tip??'The fight has ended. Retreat and prepare another expedition.';}
   $('coopHint').textContent=battle?(raid.exposedUntil>api.now()&&raid.phase===1?'Core exposed · Strike now.':detail.hint):raid.status==='victory'?'Claiming secures your share for this expedition. Bank at the exit to keep your haul.':'Taunt draws the next attack. Current floor warnings stay locked. Move by clicking the floor.';
+  if(ash)$('coopHint').textContent=battle?'Bait Cinder Charge toward a ruin, then step sideways. A crash exposes the stag for bonus damage.':raid.status==='victory'?'Contributors earn gold and the Ashstep Cloak.':'Start when your party is ready.';
+  $('coopStart').textContent=ash?'Start the hunt':'Awaken Guardian';$('coopClaim').textContent=ash?'Claim hunt reward':'Claim Vault victory';$('coopLeave').textContent=ash?'Leave hunt':'Retreat to Gallery';
   if(selected!=='boss'&&!raid.adds.some(a=>a.id===selected))selected='boss';
   $('coopTargetHint').hidden=!battle;
   $('coopTargetHint').textContent=battle?(api.targetHint?.()??''):'';
   const key=JSON.stringify([raid.members,raid.adds,selected]);if(key!==lastKey){lastKey=key;$('coopMembers').replaceChildren();for(const m of raid.members){const tag=document.createElement('span');tag.textContent=m.name+' · '+m.hp+' HP';$('coopMembers').append(tag);}
    const ally=$('coopAlly').value;$('coopAlly').replaceChildren();for(const m of raid.members.filter(m=>m.hp>0)){const option=document.createElement('option');option.value=m.id;option.textContent=m.name+(m.id===raid.self?.id?' (you)':'');$('coopAlly').append(option);}if([...$('coopAlly').options].some(o=>o.value===ally))$('coopAlly').value=ally;else $('coopAlly').value=raid.self?.id??'';
-   $('coopTargets').replaceChildren();for(const target of [{id:'boss',name:'Guardian',hp:raid.hp},...raid.adds]){const b=document.createElement('button');b.type='button';b.textContent=target.name+' · '+target.hp;b.setAttribute('aria-pressed',String(selected===target.id));b.onclick=()=>chooseTarget(target.id);$('coopTargets').append(b);}
+   $('coopTargets').replaceChildren();for(const target of [{id:'boss',name:ash?'Ashen Stag':'Guardian',hp:raid.hp},...raid.adds]){const b=document.createElement('button');b.type='button';b.textContent=target.name+' · '+target.hp;b.setAttribute('aria-pressed',String(selected===target.id));b.onclick=()=>chooseTarget(target.id);$('coopTargets').append(b);}
   }
   const mechanism=vaultMechanisms[raid.vaultMechanism];
   if(mechanism)$('coopHint').textContent+=' '+mechanism.detail;
-  const canChoose=raid.status==='waiting'&&raid.leader&&!mechanism;
+  const canChoose=!ash&&raid.status==='waiting'&&raid.leader&&!mechanism;
   if(canChoose)$('coopHint').textContent='Choose one before awakening the Guardian. The spillway opens an east lane. The screen gives cover from charged bolts.';
   $('coopSpillway').hidden=$('coopScreen').hidden=!canChoose;
   $('coopSpillway').title=vaultMechanisms.spillway.detail;
@@ -159,6 +167,8 @@ export function initializeVaultCoop(api){
   for(const b of panel.querySelectorAll('button'))b.disabled=busy&&b.id!=='coopDodge';$('coopStrike').textContent=autoAttack?'Stop attacking':'Attack · 1 AP / hit';
   const guard=$('coopGuard'),now=api.now(),stamina=Math.floor(raid.self?.guardStamina??100),raised=now<(raid.self?.guardUntil??0);
   guard.hidden=!battle||!api.canGuard?.();guard.disabled=busy||raised||now<(raid.self?.nextGuardAt??0)||stamina<shieldRules.raiseCost;
+  const rune=$('coopRune');rune.hidden=!battle||!api.usesStaff?.();rune.disabled=busy||!api.canRune?.()||now>=(raid.self?.runeMarks?.[selected]??0);
+  rune.title=rune.disabled?'Requires a marked target, 12 mana and 1 AP':'Consume the rune mark · 12 mana and 1 AP';
   const loose=$('coopLoose'),drawLeft=Math.max(0,(raid.self?.nextStrikeAt??0)-now);
   loose.hidden=!battle||!api.usesBow?.()||autoAttack;loose.disabled=busy||drawLeft>0;
   loose.textContent=drawLeft>0?'Drawing · '+(drawLeft/1000).toFixed(1)+'s':'Loose arrow · 1 AP';
@@ -168,17 +178,28 @@ export function initializeVaultCoop(api){
   guard.title='Raise Iron Shield · 20 stamina';
   const box=panel.getBoundingClientRect(),scene=document.getElementById('scene').getBoundingClientRect(),bar=document.getElementById('essenceHotbar');let lower=Math.min(scene.bottom,window.innerHeight-10);if(bar&&!bar.hidden){const dock=bar.getBoundingClientRect();if(box.left<dock.right&&box.right>dock.left)lower=Math.min(lower,dock.top-12);}panel.style.maxHeight=Math.max(140,lower-box.top-8)+'px';
  }
- entry.onclick=()=>{if(!dialog.open)dialog.showModal();};dialog.querySelector('.close').onclick=()=>dialog.close();
+ const open=()=>{
+  if(dialog.open||entry.hidden)return;
+  const ash=api.state().ashen;
+  dialog.querySelector('.eyebrow').textContent=ash?'ASHEN MARCH · UP TO FOUR HUNTERS':'ONE GUARDIAN · SHARED HEALTH · UP TO FOUR PLAYERS';
+  dialog.querySelector('h2').textContent=ash?'Hunt the Ashen Stag':'Face the Vault together.';
+  dialog.querySelector('p').textContent=ash?'Create a party or join with a code. Bait the charge into a ruin to expose the stag’s flank.':'The party leader starts the fight once everyone has joined. One player can Taunt; allies clear adds, interrupt the charged volley, or ward and heal each other.';
+  const progress=$('coopDragonProgress'),count=api.dragonProgress?.()??0;
+  progress.hidden=!ash;
+  progress.textContent=api.dragonOwned?.()?'Cinderwing unlocked · Ride from Inventory.':'Cinderwing · '+count+' / '+legendaryDragon.sightings+' Ashen Stag sightings claimed';
+  dialog.showModal();
+ };entry.onclick=open;dialog.querySelector('.close').onclick=()=>dialog.close();
  $('coopCreate').onclick=()=>send('create');$('coopJoin').onclick=async()=>{const code=$('coopCode').value.trim().toUpperCase();if(!/^[A-F0-9]{8}$/.test(code)){$('coopJoinError').textContent='Enter the eight-character party code.';return;}raid={id:code,members:[],adds:[]};await send('join');};
  $('coopSpillway').onclick=()=>send('mechanism','spillway');
  $('coopScreen').onclick=()=>send('mechanism','screen');
  $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};const dodge=()=>{api.enableSound?.();if(raid?.status==='battle'&&(raid.self?.nextDodgeAt??0)<=api.now())api.previewDodge?.();return send('dodge');};$('coopDodge').onclick=dodge;
  const guard=()=>{if(api.canGuard?.()&&raid?.status==='battle'&&(busy||!$('coopGuard').disabled))send('guard');};$('coopGuard').onclick=guard;$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
+ $('coopRune').onclick=()=>{if(!$('coopRune').disabled)send('runeBurst');};
  $('coopLoose').onclick=()=>{api.enableSound?.();if(!$('coopLoose').disabled)send('strike');};
  $('coopStrike').onclick=()=>{api.enableSound?.();autoAttack=!autoAttack;if(autoAttack&&api.now()>=(raid?.self?.nextStrikeAt??0))send('strike');else render();};
- document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();dodge();}else if(event.code==='KeyB'&&api.canGuard?.()){event.preventDefault();guard();}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});
+ document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();dodge();}else if(event.code==='KeyX'&&api.usesStaff?.()){event.preventDefault();if(!$('coopRune').disabled)send('runeBurst');}else if(event.code==='KeyB'&&api.canGuard?.()){event.preventDefault();guard();}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});
  const timer=setInterval(async()=>{
-  render();if(document.hidden||!active()||api.state().room!=='depthsVault'||busy||Date.now()-lastRequest<(raid?.status==='waiting'?2000:500))return;lastRequest=Date.now();
+  render();if(document.hidden||!active()||!(api.state().room==='depthsVault'||api.state().ashen)||busy||Date.now()-lastRequest<(raid?.status==='waiting'?2000:500))return;lastRequest=Date.now();
   if(raid?.status==='battle'&&autoAttack&&api.now()>=(raid.self?.nextStrikeAt??0)){await send('strike');return;}
   await send('tick');
  },250);
@@ -188,6 +209,10 @@ export function initializeVaultCoop(api){
    const [x,y]=point(raid.origin.x+.5,raid.origin.y+.5,69);
    ctx.save();ctx.strokeStyle='#fff2a7';ctx.lineWidth=2;ctx.beginPath();
    ctx.moveTo(x-10,y+5);ctx.lineTo(x+1,y-6);ctx.moveTo(x+1,y+6);ctx.lineTo(x+11,y-5);ctx.stroke();ctx.restore();
+  }
+  if(raid.hunt==='ashenStag'&&raid.exposedUntil>now&&raid.origin){
+   const [x,y]=point(raid.origin.x+.5,raid.origin.y+.5,45);
+   ctx.save();ctx.strokeStyle='#ffbb75';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x-11,y+5);ctx.lineTo(x,y-7);ctx.lineTo(x+11,y+5);ctx.stroke();ctx.restore();
   }
   const fracture=raid.faultbreaker;
   if(raid.status==='battle'&&fracture?.until>now&&fracture.hits>0&&raid.origin){
@@ -219,5 +244,5 @@ export function initializeVaultCoop(api){
   }
   popups=popups.filter(p=>time-p.at<1100);for(const p of popups){const [x,y]=point(p.x+.5,p.y+.5,85+(p.lane??0)*15+(reduced?0:(time-p.at)/35));ctx.save();ctx.globalAlpha=Math.max(0,1-(time-p.at)/1100);if(p.perk||p.counter){const [fx,fy]=point(p.x+.5,p.y+.5,20);ctx.strokeStyle=p.counter||p.perk==='luck'?'#ffe49a':'#f48ca9';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(fx,fy,reduced?15:8+(time-p.at)/40,reduced?8:4+(time-p.at)/80,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=p.tint??(p.perk==='vampire'?'#ff9db5':'#ffddaa');ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(p.text,x,y);ctx.restore();}
  }
- return {active,render,draw,view:()=>raid,shotAt:()=>raid?.status==='battle'?raid.self?.nextStrikeAt:undefined,lastAttack:()=>attackFx,targetPosition,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:chooseTarget,power:slot=>send('power',slot),sanctuary:feedback=>send('sanctuary',undefined,feedback),faultbreaker:feedback=>send('faultbreaker',undefined,feedback),shadowstep:(tile,feedback)=>send('shadowstep',tile,feedback),dispose:()=>clearInterval(timer)};
+ return {active,open,render,draw,view:()=>raid,shotAt:()=>raid?.status==='battle'?raid.self?.nextStrikeAt:undefined,lastAttack:()=>attackFx,targetPosition,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:chooseTarget,power:slot=>send('power',slot),sanctuary:feedback=>send('sanctuary',undefined,feedback),faultbreaker:feedback=>send('faultbreaker',undefined,feedback),shadowstep:(tile,feedback)=>send('shadowstep',tile,feedback),dispose:()=>clearInterval(timer)};
 }

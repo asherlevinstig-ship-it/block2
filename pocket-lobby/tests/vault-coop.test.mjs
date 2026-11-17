@@ -118,6 +118,23 @@ test('the Bolt warning labels real blocking cover and shows covered floor cells'
  assert(tiles.some(([x,y,width,depth,z,fill])=>x===3.05&&y===5.05&&fill==='#82d5bb33'));
 });
 
+test('a co-op staff mark is personal and Rune Burst spends mana and AP',()=>{
+ const {r,a,b}=party(),caster=r.members.b;
+ b.combatGear.ownedWeapons.push('runewoodStaff');b.combatGear.equippedWeapon='runewoodStaff';b.actionPoints.value=3;
+ b.position={x:9,y:5};
+ Object.assign(caster,{weapon:'runewoodStaff',attackInterval:1500});
+ act(r,a,'a','start',2000);
+ assert.match(act(r,b,'b','strike',2200).text,/Rune marked/);
+ assert.equal(b.vitals.mana,92);assert.equal(b.actionPoints.value,2);
+ assert.equal(publicVaultParty(r,'a',2200).self.runeMarks.boss,undefined);
+ assert.equal(publicVaultParty(r,'b',2200).self.runeMarks.boss,7200);
+ const burst=act(r,b,'b','runeBurst',2250);
+ assert.match(burst.text,/Rune mark consumed/);assert(burst.hit>0);
+ assert.equal(b.vitals.mana,80);assert.equal(b.actionPoints.value,1);
+ assert.equal(publicVaultParty(r,'b',2250).self.runeMarks.boss,undefined);
+ assert.throws(()=>act(r,b,'b','runeBurst',2251),/bolt/);
+});
+
 test('the spillway opens a real combat tile and survives a save on that tile',()=>{
  const s=player();
  applyGameplayAction(s,'depthsVaultMechanism',{id:'spillway'},1000);

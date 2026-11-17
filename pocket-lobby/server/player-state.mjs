@@ -1,3 +1,5 @@
+import {normalizeMounts} from '../public/mounts.js';
+import {ashenStagRoom} from '../public/ashen-stag.js';
 import {normalizeCharacterLook} from '../public/character-look.js';
 import {normalizeLibrary} from '../public/library.js';
 import {overlookRoom,keeperFlags} from '../public/lantern-keepers.js';
@@ -111,7 +113,7 @@ export function normalizeState(input={}){
   adventure.millCellarClaimed=adventure.millCellarCleared&&adventure.millCellarClaimed;
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   const characterLook=normalizeCharacterLook(avatar);
-  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>16||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>17||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
   const combatGear=normalizeCombatGear(input.combatGear);
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
@@ -120,7 +122,7 @@ export function normalizeState(input={}){
   if(hunting.encounter&&!combatGear.equippedWeapon)throw new Error("Invalid unarmed encounter.");
   if(hunting.encounter&&(input.location!==huntEnemy(hunting.encounter).room||health===0))throw new Error("Invalid encounter location.");
   const depthsRun=normalizeDepthsRun(input.depthsRun,input.location,hunting.encounter);
-  if(input.vaultCoop!==undefined&&(!/^[A-F0-9]{8}$/.test(input.vaultCoop?.id??'')||input.location!=='depthsVault'||depthsRun?.cleared!==2||hunting.encounter||input.controlMode==='auto'))throw new Error('Invalid co-op Vault membership.');
+  if(input.vaultCoop!==undefined&&(!/^[A-F0-9]{8}$/.test(input.vaultCoop?.id??'')||!(input.vaultCoop.hunt==='ashenStag'?ashenStagRoom(input.location)&&!depthsRun:input.location==='depthsVault'&&depthsRun?.cleared===2)||hunting.encounter||input.controlMode==='auto'))throw new Error('Invalid co-op Vault membership.');
   let position=input.position;
   if(input.location==='willowbank'&&position){
     const boxes=roomBoxes('willowbank');
@@ -133,7 +135,7 @@ export function normalizeState(input={}){
   if(stats.cookingXp!==undefined&&(!Number.isSafeInteger(stats.cookingXp)||stats.cookingXp<0||stats.cookingXp>MAX_SKILL_XP))throw new Error('Invalid Cooking XP.');
   const state={
     ...(input.loadouts!==undefined?{loadouts:normalizeLoadouts(input.loadouts)}:{}),
-    ...(input.vaultCoop?{vaultCoop:{id:input.vaultCoop.id}}:{}),
+    ...(input.vaultCoop?{vaultCoop:{id:input.vaultCoop.id,...(input.vaultCoop.hunt==='ashenStag'?{hunt:'ashenStag'}:{})}}:{}),
     controlMode:input.controlMode??'play',...(input.autoSwitch===true?{autoSwitch:true}:{}),...(['required','complete'].includes(input.autoLesson)?{autoLesson:input.autoLesson}:{}),...(input.autoConfigured===true?{autoConfigured:true}:{}),...(input.pendingCharacterRules?{pendingCharacterRules:normalizeCharacterRules(input.pendingCharacterRules)}:{}),bank:normalizeBank(input.bank),
     ...(input.library?{library:normalizeLibrary(input.library)}:{}),...(input.styleAbilities?{styleAbilities:normalizeStyleAbilities(input.styleAbilities)}:{}),...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,...(input.equipmentEffects!==undefined?{equipmentEffects:normalizeEquipmentEffects(input.equipmentEffects)}:{}),vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp,stealthXp:stats.stealthXp,leadershipXp:stats.leadershipXp,huntingXp:stats.huntingXp,tradingXp:stats.tradingXp,explorationXp:stats.explorationXp,familiarConnectionXp:stats.familiarConnectionXp,kindnessXp:stats.kindnessXp,magicKnowledgeXp:stats.magicKnowledgeXp,evil:Number.isSafeInteger(stats.evil)&&stats.evil>=0?stats.evil:0},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     mining:normalizeMining(input.mining),woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
@@ -158,6 +160,7 @@ export function normalizeState(input={}){
   state.safeVersion=input.safeVersion;migrateHomeSafe(state);
   if((state.ownedFurniture.safe??0)>1)throw new Error('Invalid home safe count.');
   if((state.homeFurniture??[]).filter(item=>item.type==='safe').length>1||(state.homeFurniture??[]).some(item=>item.type==='safe'&&(!ownsHomeSafe(state)||!Number.isInteger(item.x)||!Number.isInteger(item.y))))throw new Error('Invalid home safe placement.');
+  if(input.mounts!==undefined)state.mounts=normalizeMounts(input.mounts);
   if(input.familiars!==undefined)state.familiars=normalizeFamiliars(input.familiars);
   if(input.magic!==undefined)state.magic=normalizeMagic(input.magic);
   state.meals=counts(input.meals);

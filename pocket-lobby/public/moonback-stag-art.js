@@ -1,12 +1,13 @@
 export const moonbackArtHeight=64;
 // Moonback Stag: a tall pale stag with glowing moon marks and a wide crown of antlers. It lowers the crown before a charge.
 export function drawMoonbackStag(item,time,{point,polygon,rect,surface,reduced,pose}){
+ const ash=item.type==='ashenStag';
  const {x,y}=item,[px,py]=point(x+.5,y+.5);
  const wind=pose.defeated?0:pose.windup??0,hit=pose.hit;
  const idle=reduced||pose.defeated?0:Math.round(Math.sin(time/470)*1.2);
  const dip=Math.round(wind*13),reach=Math.round(wind*5);
- const ink='#1f2c3d',fur=hit?'#c8d6cf':'#7f948f',shade=hit?'#9db0ad':'#566b72',light=hit?'#f1f7e6':'#bccbb6',ruff=hit?'#ffffff':'#d3dfc8';
- const horn='#efe8c0',hornShade='#b9b18c',glow=wind>.5?'#ffd587':'#e9f9c4';
+ const ink='#1f2c3d',fur=hit?'#e2bcb1':ash?'#6f4848':'#7f948f',shade=hit?'#9db0ad':ash?'#443445':'#566b72',light=hit?'#f1f7e6':ash?'#a36554':'#bccbb6',ruff=hit?'#ffffff':ash?'#cf9871':'#d3dfc8';
+ const horn=ash?'#c38a68':'#efe8c0',hornShade=ash?'#734954':'#b9b18c',glow=ash?'#ffac69':wind>.5?'#ffd587':'#e9f9c4';
  const shape=(pts,fill,edge)=>polygon(pts.map(([u,v])=>[px+u,py+v]),fill,edge);
  const body=(pts,fill,edge)=>shape(pts.map(([u,v])=>[u,v+idle]),fill,edge);
  const head=(pts,fill,edge)=>shape(pts.map(([u,v])=>[u+reach,v+dip+idle]),fill,edge);

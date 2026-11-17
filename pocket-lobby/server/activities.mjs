@@ -1,3 +1,4 @@
+import {settleDragonFlight} from './dragon-flight.mjs';
 import {rememberFallen,undeadStrike} from './necromancy.mjs';
 import {activeRaised} from '../public/necromancy.js';
 import {awardAbilityUse} from './ability-mastery.mjs';
@@ -16,14 +17,14 @@ import {awardFamiliarBond} from './familiar-progression.mjs';
 import {availableActionPoints} from '../public/action-points.js';
 import {requireActionPoint,spendActionPoint,stopForActionPoints,autoHasNoPoints} from './action-points.mjs';
 import {cinderPounce} from './familiars.mjs';
-import {initializeAdds,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds} from '../public/dungeon-adds.js';
+import {activeAdd,initializeAdds,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
 import {activateVeil,outfitVeilUntil,readyOutfitPower} from '../public/outfit-magic.js';
 import {combatStamina} from '../public/hunting.js';
 import {arenaEnemy,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
 import {combatSchedule} from './combat-schedule.mjs';
 import {enemyAttack} from '../public/hunting.js';
-import {useHunger,exertionDuration,isExhausted} from '../public/player-vitals.js';
+import {useHunger,exertionDuration,isExhausted,spendMana,manaAvailable} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {settleTrailCampRest} from './trail-camp.mjs';
@@ -35,11 +36,13 @@ import {castEssencePower} from './essences.mjs';
 import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
-import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,huntRespawnField,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary,bowDrawTime,playerMeleeReach} from '../public/hunting.js';
+import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,huntRespawnField,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary,bowDrawTime,playerMeleeReach,isRangedWeapon,weaponManaCost,runeStaffRules} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest,createDungeonEncounter,resolveDungeonEncounter} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 import {bloodPriceRules,activePreyTrail,preyTrail,ambushPrey,ambushPosition,styleAbilities,normalizeStyleAbilities} from '../public/style-abilities.js';
 import {moonbackRules,moonbackSighting} from '../public/moonback.js';
+import {ashenStagRules,ashstepCloakId} from '../public/ashen-stag.js';
+import {wornRareItem} from '../public/rare-loot.js';
 import {veilCloakId} from '../public/wardrobe.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -48,8 +51,11 @@ function idle(state){
 }
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
 export function applyAmbushOpening(state,enemy,now,random=Math.random){
+  const cost=weaponManaCost(state.combatGear.equippedWeapon);
+  if(cost&&manaAvailable(state.vitals,now)<cost)return;
   state.hunting.encounter.nextPlayerAt=now;
   const event=huntingTurn(state.hunting.encounter,state.health,state.stats,'attack',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments,1.5+(abilityMastery(state,'ambush').stage-1)*.15);
+  if(cost&&!event.outOfRange)spendMana(state,now,cost);
   const abilities=normalizeStyleAbilities(state.styleAbilities);
   abilities.readyAt.ambush=now+styleAbilities.ambush.cooldown;state.styleAbilities=abilities;
   awardAbilityUse(state,'ambush');
@@ -77,8 +83,8 @@ export function startCombatEncounter(state,enemy,now){
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths')||enemy.room==='millCellar'||enemy.room==='crystaldeep')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,...(enemy.room==="depthsVault"&&state.depthsRun?.vaultMechanism?{vaultMechanism:state.depthsRun.vaultMechanism}:{}),arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
   const drawMs=bowDrawTime(state.combatGear.equippedWeapon);
-  if(drawMs){
-    state.hunting.encounter.nextPlayerAt=now+drawMs;
+  if(drawMs)state.hunting.encounter.nextPlayerAt=now+drawMs;
+  if(isRangedWeapon(state.combatGear.equippedWeapon)){
     if(enemy.id==='boar'){
       const scenery=moonwood.layouts.clearing.scenery??[];
       Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:'clearing',arenaPlayer:{...state.position},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:scenery.filter(p=>p.type==='wildtree'||p.type==='wildrock').map(({x,y})=>({x,y}))});
@@ -89,7 +95,7 @@ export function startCombatEncounter(state,enemy,now){
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt||state.plan?.miningWork)state.hunting.encounter.tacticsAt=now;
 }
-const combatCostsPoint=event=>event.action==='attack'&&!event.outOfRange||['essence','outfitPower','familiar','styleAbility'].includes(event.action)||event.action==='flee'&&!!event.power;
+const combatCostsPoint=event=>['attack','runeBurst'].includes(event.action)&&!event.outOfRange||['essence','outfitPower','familiar','styleAbility'].includes(event.action)||event.action==='flee'&&!!event.power;
 function result(state,event,now,random=Math.random){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
   const room=state.location,heldBefore=state.depthsRun?depthsSpoils(state.depthsRun):null;
@@ -105,6 +111,7 @@ function result(state,event,now,random=Math.random){
   if(event.dodged)summary.dodges++;
   if(event.automaticDodge)summary.automaticDodges++;
   if(event.perfectDodge){
+    if(event.encounter&&wornRareItem(state,ashstepCloakId)){event.encounter.ashstepUntil=now+ashenStagRules.ashstepMs;event.ashstep=true;}
     summary.perfectDodges++;
     const familiar=state.familiars?.equipped;
     const abilities=state.styleAbilities;
@@ -241,7 +248,7 @@ export function advanceServerCombat(state,now,random=Math.random){
   if(autoHasNoPoints(state,now)){stopForActionPoints(state,now);return [];}
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
-    const {encounter,undeadDue,addsDue,tactic,automatic,due,warningAt}=combatSchedule(state);
+    const {encounter,undeadDue,addsDue,playerDue,tactic,automatic,due,warningAt}=combatSchedule(state);
     state.hunting.encounter=encounter;
     if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
     if(due>now)break;
@@ -262,9 +269,10 @@ export function advanceServerCombat(state,now,random=Math.random){
     }else if(due===addsDue)event=advanceDungeonAdds(state,due,random);
     else if(encounter.brainVersion===2&&due===encounter.brainNextThinkAt)event=brainThinkEvent(state,huntEnemy(encounter),enemyAttack(encounter),due);
     else{
-      const hasPoints=availableActionPoints(state.actionPoints)>0;
-      event=advanceHunt(hasPoints?encounter:{...encounter,nextPlayerAt:Number.MAX_SAFE_INTEGER},state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
-      if(!hasPoints&&event?.encounter)event.encounter.nextPlayerAt=encounter.nextPlayerAt;
+      const strikeDue=due===playerDue;
+      event=advanceHunt({...encounter,nextPlayerAt:strikeDue?playerDue:Number.MAX_SAFE_INTEGER},state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      if(event?.action==='attack'&&!event.outOfRange){const cost=weaponManaCost(state.combatGear.equippedWeapon);if(cost)spendMana(state,due,cost);}
+      if(!strikeDue&&event?.encounter)event.encounter.nextPlayerAt=encounter.nextPlayerAt;
     }
     if(!event)break;
     events.push(result(state,event,due,random));
@@ -277,6 +285,7 @@ export function advanceServerCombat(state,now,random=Math.random){
 }
 export function settleActivities(state,now,random=Math.random){
   let changed=settleHearth(state,now);
+  if(settleDragonFlight(state,now))changed=true;
   if(settleBedRest(state,now))changed=true;
   if(settleTrailCampRest(state,now))changed=true;
   if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0||changed;
@@ -338,11 +347,12 @@ export function activityAction(state,action,body,now,random){
     }
     if(enemy?.id==='millCustodian'&&(!state.adventure.millCellarFound||state.adventure.millCellarCleared))throw new Error('Choose another challenge. The cellar custodian has already been defeated.');
     const prey=sighting??{x:6,y:5};
-    const bowOpening=enemy?.id==='boar'&&bowDrawTime(state.combatGear.equippedWeapon)&&Math.hypot(state.position.x-prey.x,state.position.y-prey.y)<=playerMeleeReach(state.combatGear.equippedWeapon);
+    const bowOpening=enemy?.id==='boar'&&isRangedWeapon(state.combatGear.equippedWeapon)&&Math.hypot(state.position.x-prey.x,state.position.y-prey.y)<=playerMeleeReach(state.combatGear.equippedWeapon);
     if(!enemy||!bowOpening&&!adjacent(state,prey))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(!sighting&&(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy)))throw new Error('Invalid encounter. Wait for the creature to return.');
     if(body.ambush===true){
+      if(state.combatGear.equippedWeapon===runeStaffRules.weapon&&manaAvailable(state.vitals,now)<runeStaffRules.mana)throw new Error('Ambush with the staff needs 8 mana.');
       const abilities=normalizeStyleAbilities(state.styleAbilities);
       if(state.controlMode==='auto'||state.plan||!abilities.learned.includes('ambush')||(abilities.readyAt.ambush??0)>now||
         !ambushPrey.has(enemy.id)||!ambushPosition(state.position,sighting??{x:6,y:5})){
@@ -388,6 +398,16 @@ export function activityAction(state,action,body,now,random){
     if(state.hunting.encounter&&body.input==='move'){
       const e=arenaMoveEvent(state,body.tile,now,moonwood.layouts[state.location]?.scenery,combatStamina(state.hunting.encounter,state.stats,now,state.combatGear.moonwellCharmEquipped));
       if(e)events.push(result(state,e,now,random));
+    }
+    if(state.hunting.encounter&&body.input==='runeBurst'){
+      const e=state.hunting.encounter,weapon=state.combatGear.equippedWeapon,target=activeAdd(e)??e;
+      if(weapon!==runeStaffRules.weapon||now>=(target.runeMarkUntil??0))throw new Error('Land a Runewood Staff bolt on your target first.');
+      requireActionPoint(state);
+      if(manaAvailable(state.vitals,now)<runeStaffRules.burstMana)throw new Error('Rune Burst needs 12 mana.');
+      const event=huntingTurn(e,state.health,state.stats,'runeBurst',now,random,weapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      if(!event||event.outOfRange||event.arrow?.blocked)throw new Error('Move into range and find a clear shot for Rune Burst.');
+      spendMana(state,now,runeStaffRules.burstMana);
+      events.push(result(state,event,now,random));
     }
     if(state.hunting.encounter&&['dodge','flee','essence','guard'].includes(body.input)){
       if(body.input==='essence'){

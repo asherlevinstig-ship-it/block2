@@ -19,6 +19,7 @@ import {learningAction} from './learning.mjs';
 import {liveWeaveStudent,curriculumRequest} from './liveweave-questions.mjs';
 import {readFactions,changeFaction} from './factions.mjs';
 import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
+import {ashenStagRoom} from '../public/ashen-stag.js';
 import {readVaultParty,writeVaultParty} from './vault-coop.mjs';
 import {readTrailCamp,refuelTrailCamp} from './trail-camp.mjs';
 import {readOreDeposits,mineAction,writeOreStrike} from './mining.mjs';
@@ -245,6 +246,7 @@ export async function handlePlayerApi(request,env){
       const serverStart=env.SERVER_CHARACTER_STARTS===true;
       const legacy=serverStart?{}:{...body.legacy};migrateProgression(legacy);
       delete legacy.vaultCoop;
+      delete legacy.mounts;
       delete legacy.loadouts;delete legacy.chestItems;delete legacy.chestPurposes;delete legacy.publicRequests;
       delete legacy.actionPoints;delete legacy.autoDisconnected;delete legacy.learning;delete legacy.autoTravelReceipt;
       if(['moonbackStag','millCustodian'].includes(legacy.hunting?.encounter?.enemy))legacy.hunting={...legacy.hunting,encounter:null};
@@ -289,8 +291,10 @@ export async function handlePlayerApi(request,env){
     if(path==='/api/player/public-requests'&&request.method==='GET')return json({board:await readPublicRequests(env.TOWER_DB)});
     if(path==='/api/player/vault-coop'&&request.method==='GET'){
       const row=await read(env.TOWER_DB,id),state=row&&readPlayerState(row),code=new URL(request.url).searchParams.get('id')??state?.vaultCoop?.id;
-      if(state?.location!=='depthsVault'&&!state?.vaultCoop)return json({error:'Visit the Sunken Vault to view a co-op party.'},400);
-      return json({raid:(await readVaultParty(env.TOWER_DB,code,id)).public});
+      if(!state||state.location!=='depthsVault'&&!ashenStagRoom(state.location))return json({error:'Visit the Vault or the Ashen March to view a party.'},400);
+      const party=await readVaultParty(env.TOWER_DB,code,id);
+      if((party.raid.room??'depthsVault')!==state.location)return json({error:'Visit the party’s room first.'},400);
+      return json({raid:party.public});
     }
     if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
     if(path==='/api/player/hearth'&&request.method==='GET'){
@@ -334,6 +338,7 @@ export async function handlePlayerApi(request,env){
       return json(await readRankings(env.TOWER_DB,id,identity.account));
     }
     if(request.method!=="POST")return json({error:"Not found."},404);
+    if(path==='/api/player/gameplay/teacherDragon'&&!verifiedTeacher)return json({error:'Direct Cinderwing claims are available to verified LiveWeave teachers.'},403);
     if(path==='/api/player/teacher/teleport'&&!verifiedTeacher)return json({error:'Teleport is available to verified LiveWeave teachers.'},403);
     const body=await bodyOf(request);
     if(env.ESSENCES_PAUSED===true&&(
@@ -345,6 +350,10 @@ export async function handlePlayerApi(request,env){
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
     const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
+    const flight=JSON.parse(row.state_json).mounts?.flight;
+    if(path==='/api/player/gameplay/dragonLand'&&!flight||path==='/api/player/gameplay/dragonFlight'&&row.last_request===body.operation)return json(playerPacket(row));
+    if(flight&&path==='/api/player/save'&&body.state?.location&&body.state.location!==flight.room)return json({error:'Wait until Cinderwing lands.'},400);
+    if(flight&&!['/api/player/save','/api/player/presence','/api/player/gameplay/dragonLand','/api/player/reconnect'].includes(path)&&!path.startsWith('/api/player/learning/'))return json({error:'Wait until Cinderwing lands.'},400);
     if(path==='/api/player/gift'){
       const previous=await readGift(env.TOWER_DB,id,body.operation);
       if(previous)return json({...playerPacket(row),gift:previous});
@@ -480,7 +489,7 @@ export async function handlePlayerApi(request,env){
         const millRaid=gameplay==='cast'&&state.location==='millbrook'&&!state.fishingCast?await readMillRaid(env.TOWER_DB,now):undefined;
         const camp=(gameplay==='campRest'||gameplay==='cook'&&state.location===trailCamp.room)?await readTrailCamp(env.TOWER_DB):undefined;
         const priorCatch=state.fishingReceipt?.castId;
-        applyGameplayAction(state,gameplay,body,now,Math.random,{millRaid,camp});
+        applyGameplayAction(state,gameplay,body,now,Math.random,{millRaid,camp,verifiedTeacher});
         if(gameplay==='catch'&&state.fishingReceipt?.room==='pond'&&state.fishingReceipt.castId!==priorCatch)pondCatchAt=now;
         if(shared&&state.timberCut)state.timberCut.treeGeneration=shared.generation;
         if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);

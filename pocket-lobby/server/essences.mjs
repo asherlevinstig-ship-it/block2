@@ -4,6 +4,7 @@ import {combatBuild} from '../public/combat-builds.js';
 import {activeAdd,addEncounter,mergeAddEvent} from '../public/dungeon-adds.js';
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems,bladeSplash} from '../public/essences.js';
 import {arenaEnemy} from '../public/dungeon-arena.js';
+import {markedAbilityDamage} from '../public/hunting.js';
 import {spendMana} from '../public/player-vitals.js';
 import {combatStamina,huntEnemy,enemyAttack,transitionVaultPhase} from '../public/hunting.js';
 
@@ -86,12 +87,14 @@ function castSingleEssencePower(state,now,slot='q'){
     const enemy=huntEnemy(encounter);
     const armor=now<(encounter.exposedUntil??0)?0:enemy.shellArmor??0;
     const shatter=build.id==='spellweaver'&&encounter.chilledUntil>now;
-    event.damage=Math.min(next.health,Math.max(1,Math.round(value*(shatter?1.15:1))-armor));
+    const damage=Math.max(1,Math.round(value*(shatter?1.15:1))-armor);
+    event.damage=markedAbilityDamage(damage,encounter.runeMarkUntil,now);
     const roleHit=roleDamage(encounter,event.damage,now,{magic:true});event.damage=Math.min(next.health,roleHit.damage);event.wardAbsorbed=roleHit.wardAbsorbed;event.coreBonus=roleHit.coreBonus;
+    if(event.damage>0&&now<(encounter.runeMarkUntil??0)){delete next.runeMarkUntil;event.runeConsumed=true;}
     if(shatter){event.shatter=true;delete next.chilledUntil;}
     next.health-=event.damage;
     if(next.health===0){if(encounter.addActor)event.killedEncounter=next;event.encounter=null;event.outcome='victory';}
-    event.effect='dealt '+event.damage+' damage'+(event.shatter?' · Shatter!':'')+(event.wardAbsorbed?' · Rune Ward absorbed '+event.wardAbsorbed:'')+(event.coreBonus?' · Exposed core!':'');
+    event.effect='dealt '+event.damage+' damage'+(event.runeConsumed?' · Rune mark consumed':'')+(event.shatter?' · Shatter!':'')+(event.wardAbsorbed?' · Rune Ward absorbed '+event.wardAbsorbed:'')+(event.coreBonus?' · Exposed core!':'');
   }else if(form==='shield'){
     next.magicWard=value;next.magicWardUntil=now+5000;
     event.ward=value;

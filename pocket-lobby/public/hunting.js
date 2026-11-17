@@ -9,7 +9,9 @@ import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor,isCombatArena,projectileCover} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
+import {ashenStagMoves} from './ashen-stag.js';
 import {moonbackSite} from './moonback.js';
+export {ashenStagRoom,ashenStagSighting,ashenStagRules,ashstepCloakId} from './ashen-stag.js';
 export {moonbackRules,moonbackSite,moonbackSighting,nextMoonbackAt} from './moonback.js';
 
 export function staggerProfile(enemy){
@@ -63,6 +65,7 @@ export const huntEnemies={
   dusktusk:{...boar,id:'dusktusk',name:'Dusktusk Boar',health:90,damage:15,xp:[20,15,20]},
   crystalGuardian:{...beetle,id:'crystalGuardian',name:'Shardback Guardian',room:'crystaldeep',prop:'crystalGuardian',archetype:'armoured',health:185,damage:20,shellArmor:5,firstAttack:2800,respawn:120000,loot:'runicFragment',lootName:'Runic Fragment',sellPrice:20,xp:[40,25,40],masteryXp:25,tactic:'SHARDBACK GUARDIAN · Leave the marked stomp, dodge hurled stone, and punish its recovery. Victory opens the rich iron veins for two minutes.'},
   millCustodian:{id:'millCustodian',name:'Clockwork Custodian',room:'millCellar',prop:'cellarCustodian',archetype:'armoured',move:'wardenSlam',health:110,firstAttack:2400,interval:3400,damage:14,shellArmor:3,exposureMs:2000,loot:'stonebackShell',lootName:'Salvaged plating',sellPrice:45,xp:[22,18,25],masteryXp:15,tactic:'CLOCKWORK CUSTODIAN · Leave the marked slam, move behind a pillar to block thrown cogs, then punish its recovery.'},
+  ashenStag:{id:'ashenStag',name:'Ashen Stag',room:'brokenRoad',prop:'ashenStag',move:'moonrush',health:200,firstAttack:2500,interval:3600,damage:25,loot:'deer',lootName:'Forest deer',xp:[45,40,45]},
   moonbackStag:{id:'moonbackStag',name:'Moonback Stag',room:'grove',prop:'moonbackStag',move:'moonrush',health:132,firstAttack:2700,interval:3100,damage:17,loot:'deer',lootName:'Forest deer',sellPrice:24,xp:[35,30,35],masteryXp:20,tactic:'MOONRUSH · Watch the bright lane. Dodge just before the charge lands, then counter.'},
   thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
   cinderback:{...boar,id:'cinderback',room:'brokenRoad',name:'Cinderback',health:155,damage:21,firstAttack:1850,interval:2300,respawn:60000,xp:[42,30,42],masteryXp:22,tactic:'CINDERBACK · Watch for the charge and dodge late to counter.'},
@@ -74,7 +77,7 @@ export const huntEnemies={
   sealGuardian:{...beetle,id:'sealGuardian',prop:'depthsSentinel',room:'depthsTrial',name:'Thornblade Duelist',elite:true,archetype:'duelist',tactic:'THORNBLADE · Quick Slash has a second cut. Wait for Held Thornstrike’s final flash, then counter for extra damage.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
   depthsGuardian:{...beetle,id:'depthsGuardian',prop:'depthsColossus',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
-const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).filter(enemy=>!['moonbackStag','dusktusk'].includes(enemy.id)).map(enemy=>[enemy.room,enemy]));
+const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).filter(enemy=>!['moonbackStag','ashenStag','dusktusk'].includes(enemy.id)).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
 export function vaultPhase(encounter){
  if(encounter?.addActor||encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
@@ -131,10 +134,15 @@ const enemyMoves={
 };
 export const dungeonEnemyPreview=enemy=>enemy?.room.startsWith('depths')?smartProfile(enemy):enemy;
 export const bowDrawTime=weapon=>Object.hasOwn(weaponCatalog,weapon)?weaponCatalog[weapon].drawMs??0:0;
+export const runeStaffRules={weapon:'runewoodStaff',mana:8,burstMana:12,markMs:5000,bonus:.25,burstDamage:18};
+export const weaponManaCost=id=>id===runeStaffRules.weapon?runeStaffRules.mana:0;
+export const isRangedWeapon=id=>!!bowDrawTime(id)||id===runeStaffRules.weapon;
+export const markedAbilityDamage=(damage,until,now)=>now<until?Math.ceil(damage*(1+runeStaffRules.bonus)):damage;
 export const longbowSnare={duration:2500,delay:500};
 export const playerMeleeReach=weapon=>(Object.hasOwn(weaponCatalog,weapon)?weaponCatalog[weapon].range:0)||(['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45);
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   if(encounter?.addActor)return addKinds[encounter.addActor].move;
+  if(encounter?.enemy==='ashenStag'&&Object.hasOwn(ashenStagMoves,encounter.brainMove))return ashenStagMoves[encounter.brainMove];
   if(encounter?.brainVersion===2&&Object.hasOwn(smartAttacks,encounter.brainMove))return smartAttacks[encounter.brainMove];
   if(vaultPhase(encounter))enemy=huntEnemy(encounter);
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
@@ -180,6 +188,7 @@ export const weaponCatalog={
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
   wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
   ironSword:{name:'Iron Sword',damage:20,interval:1200,strength:2,agility:1,price:150,description:'A dependable blade with a steady rhythm.'},
+  runewoodStaff:{name:'Runewood Staff',damage:14,interval:1500,range:5.5,strength:1,agility:1,magicKnowledge:3,description:'Earned at the Tower Library. Rune bolts cost 8 mana and mark the target. Rune Burst or a damaging ability can consume the mark.'},
   shortbow:{name:'Hunting Shortbow',damage:13,interval:1800,drawMs:900,range:5,strength:1,agility:2,description:'A craftable bow with a 5-tile range. Draw before firing. Cover blocks arrows.'},
   cinderthornLongbow:{name:'Cinderthorn Longbow',rarity:'Rare',damage:20,interval:2400,drawMs:1500,range:7,strength:2,agility:4,description:'Rare Cinderback loot. A clear shot snares the target for 2.5 seconds. Cover stops arrows.'},
   warAxe:{name:'War Axe',damage:24,interval:1550,strength:3,agility:2,description:'Forged at Coppervein Quarry. A landed swing also deals half base damage to one nearby reinforcement.'},
@@ -209,7 +218,7 @@ export function weaponProfile(id,upgrade,enchantments={}){
 export const attackSeconds=ms=>String(ms/1000)+'s';
 export function canUseWeapon(stats,id){
   const weapon=weaponCatalog[id];
-  return !!weapon&&skillLevel(stats.strengthXp)>=weapon.strength&&skillLevel(stats.agilityXp)>=weapon.agility;
+  return !!weapon&&skillLevel(stats.strengthXp)>=weapon.strength&&skillLevel(stats.agilityXp)>=weapon.agility&&skillLevel(stats.magicKnowledgeXp)>=(weapon.magicKnowledge??1);
 }
 export function purchaseWeapon(state,id){
   const weapon=weaponCatalog[id];
@@ -265,9 +274,10 @@ export function normalizeCombatGear(input){
 const level=skillLevel;
 export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false,enchantments={},build=buildProfile()){
   const profile=weaponProfile(weapon,upgrade,enchantments);
+  const damageXp=weapon===runeStaffRules.weapon?stats.magicKnowledgeXp:stats.strengthXp;
   return {
     attackInterval:Math.round((profile?.interval??1100)*build.interval),
-    damage:Math.max(0,Math.round(((profile?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2))*build.weaponDamage)),
+    damage:Math.max(0,Math.round(((profile?.damage??0)+Math.min(30,(level(damageXp)-1)*2))*build.weaponDamage)),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
     staminaRegen:Math.min(25,12+(level(stats.agilityXp)-1)*1.5)+(charmEquipped?moonwellCharm.staminaRegen:0),
@@ -289,6 +299,7 @@ export function normalizeHunting(input={}){
   if(input.cinderbackRespawnAt!==undefined)result.cinderbackRespawnAt=time(input.cinderbackRespawnAt);
   if(input.ashbackRespawnAt!==undefined)result.ashbackRespawnAt=time(input.ashbackRespawnAt);
   if(input.beetleRespawnAt!==undefined)result.beetleRespawnAt=time(input.beetleRespawnAt);
+  if(input.ashenSighting!==undefined)result.ashenSighting=time(input.ashenSighting);
   if(input.moonbackSighting!==undefined)result.moonbackSighting=time(input.moonbackSighting);
   if(input.encounter){
     const enemy=input.encounter.enemy;
@@ -332,7 +343,7 @@ export function normalizeHunting(input={}){
       if(![30,40,50].includes(input.encounter.stoneguardReduction))throw new Error('Invalid Stoneguard protection.');
       result.encounter.stoneguardReduction=input.encounter.stoneguardReduction;
     }
-    for(const key of ['guardAt','guardUntil','nextGuardAt','snaredUntil','chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
+    for(const key of ['ashstepUntil','runeMarkUntil','guardAt','guardUntil','nextGuardAt','snaredUntil','chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
     if(input.encounter.arenaVersion!==undefined){
@@ -392,15 +403,15 @@ export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={},openingMultiplier=1){
-  const target=action==='attack'&&!encounter?.addActor&&activeAdd(encounter);
+  const target=['attack','runeBurst'].includes(action)&&!encounter?.addActor&&activeAdd(encounter);
   if(target&&now>=target.spawnAt){
     const event=mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments),now);
     return warAxeSweep(event,encounter,target,weapon,now);
   }
-  if(!['attack','enemy','flee','dodge','guard'].includes(action))throw new Error('Invalid combat action.');
+  if(!['attack','runeBurst','enemy','flee','dodge','guard'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':action==='guard'?'nextGuardAt':'nextFleeAt';
-  if(now<encounter[clock])return null;
+  if(action!=='runeBurst'&&now<encounter[clock])return null;
   const build=buildProfile(encounter.buildId,encounter.buildRelics),attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped,enchantments,build);
   const enemy=huntEnemy(encounter);
   const vault=enemy.id==='depthsGuardian'&&encounter.brainVersion===2;
@@ -425,16 +436,18 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(random()<attributes.escape){result.outcome='escaped';result.encounter=null;}
     return result;
   }
-  if(action==='attack'){
-    result.encounter.nextPlayerAt=now+attributes.attackInterval;
-    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2||bowDrawTime(weapon)?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2&&weapon!=='warAxe')result.encounter.nextPlayerAt=now+350;return result;}
-    if(bowDrawTime(weapon)){
+  if(action==='runeBurst'&&(weapon!==runeStaffRules.weapon||now>=(encounter.runeMarkUntil??0)))return null;
+  if(action==='attack'||action==='runeBurst'){
+    const staff=weapon===runeStaffRules.weapon,burst=action==='runeBurst';
+    if(!burst)result.encounter.nextPlayerAt=now+attributes.attackInterval;
+    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2||isRangedWeapon(weapon)?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(!burst&&encounter.brainVersion===2&&weapon!=='warAxe')result.encounter.nextPlayerAt=now+350;return result;}
+    if(isRangedWeapon(weapon)){
       const from=arenaPlayer(encounter),to=arenaEnemy(encounter);
       const cover=encounter.arenaVersion===1?projectileCover(encounter,from,to):null;
-      result.arrow={from,to:cover??to,blocked:!!cover,...(weapon==='cinderthornLongbow'?{longbow:true}:{})};
+      result.arrow={from,to:cover??to,blocked:!!cover,...(weapon==='cinderthornLongbow'?{longbow:true}:staff?{staff:true}:{})};
       if(cover)return result;
     }
-    result.damage=Math.ceil((attributes.damage+Math.floor(random()*5))*openingMultiplier);
+    result.damage=burst?runeStaffRules.burstDamage:Math.ceil((attributes.damage+Math.floor(random()*5))*openingMultiplier);
     const fractured=!encounter.addActor&&encounter.faultHits>0&&now<encounter.faultUntil&&enemy.shellArmor;
     if(fractured){
       result.damage=Math.ceil(result.damage*1.2);
@@ -450,7 +463,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.damage=Math.ceil(result.damage*(1+encounter.bloodlustPercent/100));
       result.bloodlust=true;
     }
-    if(now<(encounter.counterUntil??0)){
+    if(!burst&&now<(encounter.counterUntil??0)){
       const multiplier=encounter.counterPercent===undefined?counterMultiplier(weapon,upgrade,build,vault):encounter.counterPercent/100;
       result.counter=true;result.counterBonus=Math.ceil(result.damage*multiplier);result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
     }
@@ -458,7 +471,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(now<(encounter.staggerWeakUntil??0)){
       result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
     }
-    const roleHit=roleDamage(encounter,result.damage,now);result.damage=roleHit.damage;result.wardAbsorbed=roleHit.wardAbsorbed;result.recoveryOpening=result.recoveryOpening||roleHit.recoveryOpening;
+    if(burst)result.damage=markedAbilityDamage(result.damage,encounter.runeMarkUntil,now);
+    const roleHit=roleDamage(encounter,result.damage,now,{magic:staff});result.damage=roleHit.damage;result.wardAbsorbed=roleHit.wardAbsorbed;result.recoveryOpening=result.recoveryOpening||roleHit.recoveryOpening;
     result.encounter.health=Math.max(0,encounter.health-result.damage);
     if(result.encounter.health>0&&enemy.archetype==='caster'&&enemyAttack(encounter,enemy).shape==='bolt'&&now>=encounter.nextBoarAt-enemyAttack(encounter,enemy).tell&&now<encounter.nextBoarAt){
       const hits=(encounter.castDeadline===encounter.nextBoarAt?encounter.castHits??0:0)+1;result.encounter.castDeadline=encounter.nextBoarAt;result.encounter.castHits=hits;
@@ -477,6 +491,10 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
         result.encounter.nextBoarAt=Math.max(result.encounter.nextBoarAt,result.encounter.staggerUntil+enemyAttack(result.encounter,enemy).tell);
         if(enemy.shellArmor)result.encounter.exposedUntil=Math.max(result.encounter.exposedUntil??0,result.encounter.staggerWeakUntil);
       }
+    }
+    if(staff&&result.damage>0){
+      if(burst){delete result.encounter.runeMarkUntil;result.runeConsumed=true;}
+      else if(result.encounter.health>0){result.encounter.runeMarkUntil=now+runeStaffRules.markMs;result.runeMarked=true;}
     }
     if(weapon==='cinderthornLongbow'&&result.damage>0&&result.encounter.health>0&&now>=(encounter.snaredUntil??0)){
       result.encounter.snaredUntil=now+longbowSnare.duration;
@@ -598,6 +616,7 @@ export function enemyStatusEffects(encounter,now){
   if(!encounter)return [];
   const effects=[];
   if(encounter.burn&&now<encounter.burn.until)effects.push({kind:'fire',name:'Burning',color:essenceEffects.fire.color,remaining:encounter.burn.until-now,detail:encounter.burn.damage+' damage / sec'});
+  if(now<(encounter.runeMarkUntil??0))effects.push({kind:'rune',name:'Rune marked',color:'#b5aeff',remaining:encounter.runeMarkUntil-now,detail:'Next direct damaging ability +25%'});
   if(now<(encounter.snaredUntil??0))effects.push({kind:'snare',name:'Snared',color:'#a6ffd8',remaining:encounter.snaredUntil-now,detail:'Slower to move and prepare attacks'});
   if(now<(encounter.chilledUntil??0))effects.push({kind:'ice',name:'Chilled',color:essenceEffects.ice.color,remaining:encounter.chilledUntil-now,detail:'Next attack delayed'});
   if(now<(encounter.weakenedUntil??0))effects.push({kind:'shadow',name:essenceEffects.shadow.name,color:essenceEffects.shadow.color,remaining:encounter.weakenedUntil-now,detail:'Next hit −'+(encounter.weakenPercent??essenceEffects.shadow.reduction*100)+'%'});

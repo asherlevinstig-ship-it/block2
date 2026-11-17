@@ -27,14 +27,14 @@ function hubFraming(){
     x:(hubFrame.left+hubFrame.right)/2-(((left+right)/2-box.left-p.x)/p.scale-view.width/2)/framedZoom,
     y:(hubFrame.top+hubFrame.bottom)/2-(((top+bottom)/2-box.top-p.y)/p.scale-(view.height/2-4))/framedZoom};
 }
-function updateCamera(time,centerX,centerY){
+function updateCamera(time,centerX,centerY,follow=player){
   const {width,height}=view;let x=centerX,y=centerY;
   if(currentRoom==='hub'&&hubFramed&&!editing&&!player.inCombat){
     if(!hubFrameCamera||time-hubFrameAt>400){hubFrameCamera=hubFraming();hubFrameAt=time;}
     if(zoom!==hubFrameCamera.zoom)setZoom(hubFrameCamera.zoom,true);
     x=hubFrameCamera.x;y=hubFrameCamera.y;
   }else if(zoom>1&&!editing&&!player.inCombat&&depthsStageIndex(currentRoom)<0&&!window.millRaidClient?.active){
-    const [px,py]=point(player.x+.5,player.y+.5);
+    const [px,py]=point(follow.x+.5,follow.y+.5);
     x=Math.max(centerX/zoom,Math.min(width-(width-centerX)/zoom,px));
     y=Math.max(centerY/zoom,Math.min(height-(height-centerY)/zoom,py-16));
   }

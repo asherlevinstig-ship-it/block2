@@ -93,6 +93,7 @@ let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=!!savedPlayerState?.depthsRun?.rewardChests?.[savedPlayerState?.location];
 let vaultCoopState=savedPlayerState?.vaultCoop??null;
+let dragonFlight=savedPlayerState?.mounts?.flight??null,flightAim=null,flightLandingBusy=false,flightRetryAt=0;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
   ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
@@ -703,7 +704,8 @@ function receivePeers(peers){
   for(const peer of peers.slice(0,20)){
     if(!peer.id||!Number.isFinite(peer.x)||!Number.isFinite(peer.y))continue;
     keep.add(peer.id);const old=remotePeers.get(peer.id);
-    if(old)updatePeerPosition(old,{...peer,walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName},performance.now());
+    if(old?.flight&&!peer.flight){old.rx=peer.x;old.ry=peer.y;old.remoteMove=null;}
+    if(old)updatePeerPosition(old,{...peer,flight:peer.flight??null,mount:peer.mount??null,walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName},performance.now());
     else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now()});
     const actor=remotePeers.get(peer.id),cast=peer.abilityCast;
     if(peer.blink)beginShadowstep(actor,peer.blink);
@@ -764,14 +766,16 @@ function drawRemote(peer,time){
       events:{strikeAt:peer.raidStrikeAt??-10000,castAt:peer.raidCastAt??-10000,castKind:peer.raidCastKind,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000,...peer.reactionFx},reduced:reducedMotion.matches}):null;
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,guarding:(peer.guardUntil??0)>now,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  const mounted=peer.mount==='cinderwing'&&!peer.seat&&!raidPose&&!cast&&!chopping;
+  const drawRider=(rx,ry)=>sprite(ctx,rx,ry,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle:mounted?0:cycle,seated:mounted||!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,guarding:(peer.guardUntil??0)>now,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  const riderY=mounted?drawDragonMount(ctx,x,y,{direction:facing.direction,back:facing.back,time,moving,reduced:reducedMotion.matches},drawRider):(drawRider(x,y),y);
   if(peer.arrow)drawShortbowArrow(ctx,point,peer.arrow.shot,time-peer.arrow.at,reducedMotion.matches);
   if(peer.stoneguardUntil>now)window.drawStoneguard?.(ctx,x,y,time,peer.stoneguardUntil-now,reducedMotion.matches);
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
   if(peer.undead?.until>now){const [ux,uy]=point(peer.rx+1.25,peer.ry+1.25);drawUndeadAlly(ctx,ux,uy,peer.undead,time,reducedMotion.matches,{attackAge:now-(peer.undead.lastStrikeAt??0),flipped:peer.direction==='left'});}
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
-  const activity=reading?'Reading':meditating?'Meditating':chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
-  renderedActors.push({id:peer.id,name:peer.name,wanted:peer.wanted,activity,x,y:y-(peer.seat?30:meditating?35:43),familiar,familiarName:peer.familiarName});
+  const activity=mounted?'Cinderwing':reading?'Reading':meditating?'Meditating':chopping?(peer.mining?'Mining':'Chopping'):peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
+  renderedActors.push({id:peer.id,name:peer.name,wanted:peer.wanted,activity,x,y:riderY-(mounted||peer.seat?30:meditating?35:43),familiar,familiarName:peer.familiarName});
   ctx.restore();
 }
 function updateActorNameplates(){
@@ -1113,7 +1117,7 @@ function resetCombatArt(){
 }
 
 const routineControlled=()=>!!autoJourney||!!window.playerCloud?.initial?.plan||!!window.playerCloud?.initial?.report;
-const unavailable=()=>!!vaultCoopState||routineControlled()||serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
+const unavailable=()=>!!dragonFlight||!!vaultCoopState||routineControlled()||serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
 function combatRecapAction(report){
   if(hunting.recoveryUntil)return null;
   if(depthsRun&&depthsStageIndex(currentRoom)>=0){
@@ -1644,7 +1648,11 @@ function startMonsterEncounter(enemy,standGround=false,ambush=false,feedback=not
 function combatAction(action){
   if(routineControlled()){note('Use Take control to stop your routine.');return;}
   combatAudio.enable(combatSoundEnabled);
-  if(!player.inCombat||!['flee','dodge','guard'].includes(action))return;
+  if(!player.inCombat||!['flee','dodge','guard','runeBurst'].includes(action))return;
+  if(action==='runeBurst'){
+    if(combatGear.equippedWeapon!==runeStaffRules.weapon||!window.playerCloud?.gameplay)return;
+    sendServerCombat(action);return;
+  }
   if(action==='guard'){
     if(!canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon))return;
     const encounter=hunting.encounter,now=combatNow();
@@ -1670,7 +1678,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(!result)return;
   const action=result.action,enemy=huntEnemies[result.enemyId]??(result.targetId?Object.values(addKinds).find(a=>a.id===result.enemyId):null)??huntEnemy(hunting.encounter);
   const encounter=result.encounter??hunting.encounter;
-  if(playEffects&&(result.damage>0||result.arrow)&&(action==='attack'||result.power)){
+  if(playEffects&&(result.damage>0||result.arrow)&&(action==='attack'||action==='runeBurst'||result.power)){
     const tile=result.enemyTile??(encounter?.arenaVersion===1?combatTargetTile(encounter):null);
     faceCombatTarget(tile);
   }
@@ -1689,6 +1697,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   else if(result.bloodPriceBlocked)combatMessage+=' Blood Price absorbed '+result.bloodPriceBlocked+' damage.';
   if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
+  if(result.runeMarked)combatMessage+=' Rune marked · Rune Burst or damaging ability.';
+  if(result.runeConsumed&&action==='runeBurst')combatMessage='Rune Burst · '+result.damage+' damage.';
   if(result.guardRaised)combatMessage='Shield raised · Block a frontal hit.';
   if(result.guardBroken)combatMessage='Guard broken! '+result.guardBlocked+' damage blocked. Let your guard recover.';
   else if(result.perfectBlock)combatMessage='Perfect block · Counter ready!';
@@ -1704,6 +1714,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.wardBroken)combatMessage='Rune Ward broken! Strike the Channeler now · Damage +25% for 3 seconds.';
   else if(result.wardAbsorbed)combatMessage+=' Rune Ward absorbed '+result.wardAbsorbed+' damage · Defeat its Rune Wisp.';
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
+  if(result.ashstep)combatMessage+=' Ashstep · Move faster for 2.5s.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.packTactics&&playEffects)familiarReaction={id:result.packTactics.familiar,pose:'cast',at:performance.now()};
   if(result.perfectDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for '+(1.8+(currentCombatBuild().counterWindow??0)/1000).toFixed(1)+' seconds.'+(result.staminaRestored?' · +'+Math.floor(result.staminaRestored)+' stamina':'');
@@ -1909,6 +1920,13 @@ function updateCombatPanel(){
   $('quickDodge').disabled=$('combatDodge').disabled;$('quickFlee').disabled=$('combatFlee').disabled;
   $('quickDodge').textContent=timing&&!$('quickDodge').disabled?'Dodge now!':'Dodge';
   $('quickDodge').classList.toggle('dodge-ready',timing&&!$('quickDodge').disabled);
+  const staff=!!encounter&&combatGear.equippedWeapon===runeStaffRules.weapon;
+  const rune=staff&&now<((activeAdd(encounter)??encounter).runeMarkUntil??0);
+  for(const id of ['combatRune','dungeonRune','quickRune']){
+    const button=$(id);button.hidden=!staff||id==='quickRune'&&stage>=0;
+    button.disabled=!rune||needsLearningPoints()||manaAvailable(playerVitals,now)<runeStaffRules.burstMana||activityBusy||serverActionBusy;
+    button.title=rune?'Rune Burst · 1 AP and 12 mana':'Hit the target with a rune bolt first';
+  }
   const guard=!!encounter&&canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon);
   const raised=guard&&now<(encounter.guardUntil??0),guardReady=guard&&!raised&&(!encounter.nextGuardAt||now>=encounter.nextGuardAt)&&stamina>=shieldRules.raiseCost;
   for(const id of ['combatGuard','dungeonGuard','quickGuard']){
@@ -1919,7 +1937,8 @@ function updateCombatPanel(){
   }
   $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
-  $('combatCooldown').textContent=encounter?(bowDrawTime(combatGear.equippedWeapon)?'Next arrow ':'Next strike ')+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
+  const shotMana=weaponManaCost(combatGear.equippedWeapon),strikeAt=encounter&&(shotMana?manaReadyAt(playerVitals,encounter.nextPlayerAt,shotMana):encounter.nextPlayerAt);
+  $('combatCooldown').textContent=encounter?(shotMana?'Next rune bolt ':bowDrawTime(combatGear.equippedWeapon)?'Next arrow ':'Next strike ')+Math.max(0,(strikeAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
   $('combatLog').textContent=(encounter&&needsLearningPoints()?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments,currentCombatBuild());
@@ -2315,7 +2334,7 @@ function updateCombatMoment(time){
   if(routineControlled()){if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}return;}
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,vitals:playerVitals,stats:playerStats,combatGear,magic:magicState,characterRules});
-    const due=hunting.encounter?Math.min(addDueAt(hunting.encounter),hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,hunting.encounter.brainVersion===2?hunting.encounter.brainNextThinkAt:Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
+    const due=hunting.encounter?Math.min(addDueAt(hunting.encounter),(weaponManaCost(combatGear.equippedWeapon)?manaReadyAt(playerVitals,hunting.encounter.nextPlayerAt,weaponManaCost(combatGear.equippedWeapon)):hunting.encounter.nextPlayerAt),hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,hunting.encounter.brainVersion===2?hunting.encounter.brainNextThinkAt:Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
     const untilImpact=(hunting.encounter?.nextBoarAt??Infinity)-combatNow();
     if(player.inCombat&&!pendingCombatInputs.length&&combatNow()>=due&&time>=nextCombatPoll&&(untilImpact<=0||untilImpact>250))sendServerCombat();
     if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
@@ -2375,6 +2394,11 @@ const armoryFurniture=[
 let currentRoom='home',pendingFurniturePlacement=null,pendingFurnitureShopItem=null;
 const atHome=()=>currentRoom==='home';
 const canDecorate=()=>atHome();
+function ashenTrail(){
+ if(!ashenStagRoom(currentRoom)||!window.playerCloud?.gameplay||vaultCoopState)return null;
+ const sight=ashenStagSighting(combatNow());
+ return hunting.ashenSighting===sight.id?null:sight;
+}
 function moonbackHere(){
   const encounter=hunting.encounter;
   if(encounter?.enemy==='moonbackStag'&&encounter.moonbackRoom===currentRoom){
@@ -2424,7 +2448,8 @@ function roomFurniture(){
   if(currentRoom==='armory')return armoryFurniture;
   if(moonwood.has(currentRoom)){
     const enemy=huntEnemyForRoom(currentRoom);
-    const stag=moonbackHere(),tracked=dusktuskVisible();
+    const stag=moonbackHere(),tracked=dusktuskVisible(),ashRaid=window.towerVaultCoop?.view();
+    const ash=ashRaid?.hunt==='ashenStag'&&vaultCoopState&&ashRaid.room===currentRoom?{...ashRaid.origin,coopBoss:true,defeated:ashRaid.status==='victory'}:ashenTrail();
     const index=depthsStageIndex(currentRoom);
     const available=currentRoom==='millCellar'? !adventure.millCellarCleared:index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
     const lightProps=currentRoom==='depthsGallery'&&depthsRun?.cleared===2
@@ -2436,7 +2461,7 @@ function roomFurniture(){
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       if(item.type==='runeCoffer')return !!depthsRun?.finds?.includes('galleryCrack');
       return true;
-    }).map(item=>tracked&&item.type==='wildboar'?{...item,...window.preyTrail.site,trackedPrey:true}:item.type==='depthsColossus'&&window.towerVaultCoop?.encounter()?{...item,coopBoss:true,defeated:window.towerVaultCoop.view()?.status==='victory'}:item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(window.towerVaultCoop?.adds()??[]).map(a=>({type:a.kind==='wisp'?'depthsSeer':'depthsSkitter',x:a.x,y:a.y,coopAdd:a})),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
+    }).map(item=>tracked&&item.type==='wildboar'?{...item,...window.preyTrail.site,trackedPrey:true}:item.type==='depthsColossus'&&window.towerVaultCoop?.encounter()?{...item,coopBoss:true,defeated:window.towerVaultCoop.view()?.status==='victory'}:item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(window.towerVaultCoop?.adds()??[]).map(a=>({type:a.kind==='wisp'?'depthsSeer':'depthsSkitter',x:a.x,y:a.y,coopAdd:a})),...(currentRoom==='depthsGallery'&&depthsRun?.cleared===2&&depthsRun.encounter?[{type:'galleryEncounter',...dungeonEncounterSite}]:[]),...(ash&&(ash.coopBoss||ash.room===currentRoom)?[{...ash,id:'ashen-stag',type:'ashenStag',rot:0}]:[]),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -3080,7 +3105,7 @@ function object(item,highlight=false,time=0,weather=null) {
       drawOreDeposit(item,time,{point,polygon,ctx,reduced:reducedMotion.matches},{...oreState[item.id],broken:impact?.broken,find:impact?.find,bonus:impact?.bonus,hitAge:impact?combatNow()-impact.at:Infinity});return;
     }else if(isTimberTree(item)){
       drawTimberTree(item,time);
-    }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
+    }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||type==='ashenStag'||isDungeonMob(type)){
       const actorEncounter=item.coopBoss?window.towerVaultCoop?.encounter():item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const now=combatNow();
@@ -3099,18 +3124,23 @@ function object(item,highlight=false,time=0,weather=null) {
       }
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(facing.x+.5,facing.y+.5);
       const shift=(type==='wildboar'||type==='moonbackStag'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
-      const [mx,my]=isDungeonMob(type)?dungeonMobOffset(item,time):[0,0];
+      let [mx,my]=isDungeonMob(type)?dungeonMobOffset(item,time):[0,0];
+      const ashCharge=type==='ashenStag'&&!reducedMotion.matches&&window.towerVaultCoop?.lastAttack();
+      if(ashCharge?.destination&&time-ashCharge.time<320){
+        const [fromX,fromY]=point(ashCharge.origin.x+.5,ashCharge.origin.y+.5),travel=1-Math.max(0,time-ashCharge.time)/320;
+        mx=(fromX-bx)*travel;my=(fromY-by)*travel;
+      }
       ctx.save();ctx.translate(mx,my);ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25)*(item.add?.kind==='skitter'?.65:1),pose.squash*(item.add?.kind==='skitter'?.65:1));if(item.add&&combatNow()<item.add.spawnAt)ctx.globalAlpha*=.25;ctx.translate(-bx,-by);
       moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat||item.coopBoss?actorEncounter:null,pose});
       ctx.restore();
       if(!item.defeated){
-        const enemy=item.add?addKinds[item.add.kind]:roomEnemy();
+        const enemy=item.add?addKinds[item.add.kind]:type==='ashenStag'?huntEnemies.ashenStag:item.coopBoss?huntEnemies.depthsGuardian:roomEnemy();
         if(enemy){
           const summoning=item.add&&combatNow()<item.add.spawnAt;
-          const key=item.addId??'leader',selected=player.inCombat&&hunting.encounter?.combatTarget===key;
-          renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':type==='moonbackStag'&&!player.inCombat?'Rare sighting':'',
+          const key=item.addId??(type==='ashenStag'?'ashen-stag':'leader'),selected=player.inCombat&&hunting.encounter?.combatTarget===key;
+          renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':(type==='moonbackStag'||type==='ashenStag')&&!player.inCombat&&!item.coopBoss?'Rare sighting':'',
             x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.mobArtHeight(item)??moonwood.heights[type]??34)+8),
             action:summoning||player.inCombat&&hunting.encounter?.addsVersion!==1?null:()=>use(item)});
         }
@@ -3628,6 +3658,15 @@ function drawMoonwoodDetails(time){
       surface(x-dy*spread+.12,y+dx*spread+.04,.075,.10,.7,'#e7f1c5');
     }
   }
+  const ash=ashenTrail();
+  if(ash&&ash.room!==currentRoom){
+    const door=roomDoors[currentRoom].find(exit=>exit.to===ash.room&&doorAvailable(exit))??roomDoors[currentRoom].find(exit=>exit.to==='cinderwatch');
+    if(door){const {tile,inside}=door;
+      for(let i=0;i<5;i++){const x=tile.x+.48+(inside.x-tile.x)*(.38+i*.31),y=tile.y+.48+(inside.y-tile.y)*(.38+i*.31);
+        surface(x-.08,y-.10,.09,.17,.7,'#ffd2a1');surface(x+.04,y-.09,.07,.16,.7,'#e8a472');
+      }
+    }
+  }
   if(currentRoom==='pond'){
     const shoal=pondShoalAt(combatNow());
     fishingMoments.drawShoal(ctx,...point(shoal.water.x,shoal.water.y,.5),time,reducedMotion.matches);
@@ -3917,7 +3956,7 @@ function updateWorldLabels(time){
   const guidedDoor=nextExplorationDoor()??(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination());
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door)&&trailSignVisible(door,guidedDoor));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const clue=moonbackClue();
+  const clue=moonbackClue(),ash=ashenTrail();
   const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
   const poolCast=currentRoom===moonfinPool.room&&fishingSession?.room===moonfinPool.room;
   const poolBite=poolCast&&fishingMoments.phase(fishingSession,performance.now())==='bite';
@@ -3928,7 +3967,7 @@ function updateWorldLabels(time){
   const shopOwner=owner?.endsAt>combatNow()?owner.owner:null;
   const prey=trackedPreyTrail(),track=window.preyTrail?.tracks[prey?.step];
   const scout=scoutedKeeperClue();
-  const labelKey=key+'|'+(raiseReady?fallen.id:'')+'|'+(scout?.room??'')+'|'+(currentRoom===waystationRoom&&atHearth(player)?hearthBoard?.incoming[0]?.id??'':'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
+  const labelKey=key+'|'+(raiseReady?fallen.id:'')+'|'+(scout?.room??'')+'|'+(currentRoom===waystationRoom&&atHearth(player)?hearthBoard?.incoming[0]?.id??'':'')+'|'+(prey?.step??'')+'|'+(shopOwner??'')+'|'+(clue?.door.to??'')+'|'+(ash?.room??'')+'|'+poolLabel+'|'+(currentRoom===moonwood.trailCamp.room?campFirePhase():'')+'|'+(miningRooms.includes(currentRoom)?Object.entries(oreState).map(([id,s])=>id+':'+(s.readyAt>combatNow())).join(',')+miningLevel(mining)+mining.pickOwned:'');
   if(labelKey===worldLabelKey){positionWorldLabels(p);return;}
   worldLabelKey=labelKey;
   worldLabelAnchors=[];
@@ -3947,6 +3986,10 @@ function updateWorldLabels(time){
     worldLabelAnchors.push({label,text,x,y,kind,action,subtitle,mount});
     return label;
   };
+  if(ash&&ash.room!==currentRoom){
+    const door=roomDoors[currentRoom].find(exit=>exit.to===ash.room&&doorAvailable(exit))??roomDoors[currentRoom].find(exit=>exit.to==='cinderwatch');
+    if(door)add('Ashen Stag tracks',...point(door.inside.x+.5,door.inside.y+.5,17),'npc',()=>setExplorationDestination(ash.room),'Toward '+explorationName(ash.room));
+  }
   for(const door of doors){
     let anchor;
     if(currentRoom==='millCellar'&&door.to==='millbrook'||door.to==='millCellar')continue;
@@ -4165,19 +4208,19 @@ function selectedCombatTarget(){
   if(raid?.status==='battle'){
     const tile=window.towerVaultCoop.targetPosition(),add=raid.adds.find(a=>a.hp>0&&a.x===tile?.x&&a.y===tile?.y);
     if(!tile)return null;
-    return {tile,name:add?.name??'Vault Guardian',reach:playerMeleeReach(combatGear.equippedWeapon)};
+    return {tile,name:add?.name??(raid.hunt==='ashenStag'?'Ashen Stag':'Vault Guardian'),reach:playerMeleeReach(combatGear.equippedWeapon)};
   }
   if(!e||e.arenaVersion!==1)return null;
   const add=activeAdd(e);
   return {tile:combatTargetTile(e),name:add?addKinds[add.kind].name:huntEnemy(e).name,
-    reach:e.brainVersion===2||bowDrawTime(combatGear.equippedWeapon)?playerMeleeReach(combatGear.equippedWeapon):2.5};
+    reach:e.brainVersion===2||isRangedWeapon(combatGear.equippedWeapon)?playerMeleeReach(combatGear.equippedWeapon):2.5};
 }
 function combatTargetGuidance(){
   const selected=selectedCombatTarget();
   if(!selected)return null;
   const from={x:player.cx,y:player.cy},distance=Math.hypot(from.x-selected.tile.x,from.y-selected.tile.y);
   const inRange=distance<=selected.reach;
-  const bow=bowDrawTime(combatGear.equippedWeapon),arena=hunting.encounter??window.towerVaultCoop?.encounter();
+  const bow=isRangedWeapon(combatGear.equippedWeapon),arena=hunting.encounter??window.towerVaultCoop?.encounter();
   const clear=tile=>!bow||!arena||!projectileCover(arena,tile,selected.tile);
   const covered=inRange&&!clear(from);
   if(inRange&&!covered||!combatGear.equippedWeapon)return {...selected,inRange,step:null};
@@ -4373,8 +4416,16 @@ function drawAmbientActor(item,time){
 let frameWind=null;
 // Where the day stands on this map (null where there is no day-night cycle).
 let frameHour=null;
+function drawFlyingActor(pose,id,look,time,wanted){
+  const [x,y]=point(pose.x+.5,pose.y+.5,pose.height);
+  const riderY=drawDragonMount(ctx,x,y,{...pose,flight:pose,reduced:reducedMotion.matches,moving:true,time},
+    (rx,ry)=>sprite(ctx,rx,ry,look,{direction:pose.direction,back:pose.back,seated:true,cycle:0,time}));
+  renderedActors.push({id,name:look.name,activity:'Cinderwing',x,y:riderY-30,wanted});
+}
 function draw(time){
   const worldNow=combatNow();
+  const localFlight=dragonFlight?.room===currentRoom?window.dragonFlightPose?.(dragonFlight,worldNow):null;
+  const highFlights=[];
   const weather=outdoorWeather(currentRoom,worldNow);
   // One wind per frame for everything that bends: trees, reeds, flags, smoke and gusts.
   frameWind=reducedMotion.matches?null:window.towerWind?.for(currentRoom,worldNow)??null;
@@ -4389,7 +4440,7 @@ function draw(time){
   ctx.setTransform(worldRenderScale,0,0,worldRenderScale,0,0);
   ctx.clearRect(0,0,width,height);
   const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
-  ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);updateCamera(time,centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-camX,-camY);
+  ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);updateCamera(time,centerX,centerY,localFlight??player);ctx.scale(zoom,zoom);ctx.translate(-camX,-camY);
   const layer=currentRoom==='hub'&&!lobbyRoutesOpen()?'hubIntro':currentRoom;
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
   if(currentRoom==='hub')drawLobbyAmbience(time);
@@ -4440,17 +4491,22 @@ function draw(time){
   const wildlifeNow=currentRoom==='willowbank'?combatNow():null;
   const crossing=wildlifeNow===null?null:willowbankDeer(wildlifeNow);
   if(crossing?.tracks)drawWillowbankTracks({surface});
+  if(localFlight){drawDragonFlightGround(ctx,point,localFlight,{reduced:reducedMotion.matches});drawDragonLandingRing(ctx,point,dragonFlight.to);}
+  if(flightAim)for(const tile of flightAim.tiles){
+    if(tile.x===hover?.x&&tile.y===hover?.y)drawDragonLandingRing(ctx,point,tile);
+    else surface(tile.x+.18,tile.y+.18,.64,.64,1,'#b1e9d13d','#d2ffe4');
+  }
   drawOutdoorWeather(currentRoom,weather,{ctx,point,surface,rect,reduced:reducedMotion.matches});
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,wind:frameWind,hour:frameHour,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
   drawCombatSelection();
   if(enemy)drawCombatGroundFx({ctx,point,time,now:combatNow(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
-  if(currentRoom==='depthsVault')window.towerVaultCoop?.draw({ctx,point,surface,now:combatNow(),time,reduced:reducedMotion.matches});
+  if(currentRoom==='depthsVault'||vaultCoopState?.hunt==='ashenStag')window.towerVaultCoop?.draw({ctx,point,surface,now:combatNow(),time,reduced:reducedMotion.matches});
   drawDoorWelcome();
   drawFootprints(time,weather);
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
-  if(hover){
+  if(hover&&!flightAim&&!localFlight){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
     const valid=editing&&selection?canPlace({...selection,x:hover.x,y:hover.y}):!blocked(hover.x,hover.y);
     const homeHover=currentRoom==='home'&&!editing;
@@ -4478,7 +4534,11 @@ function draw(time){
     peer.lastFrame=time;
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
-  const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
+  const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>{
+    const flight=peer.flight?.room===currentRoom?window.dragonFlightPose?.(peer.flight,worldNow):null;
+    if(flight)drawDragonFlightGround(ctx,point,flight,{reduced:reducedMotion.matches});
+    return {type:'remotePlayer',x:flight?.x??peer.rx,y:flight?.y??peer.ry,peer,flight};
+  })];
   if(currentRoom==='outside')items.push(...courtyardLife(reducedMotion.matches?0:worldNow,frameHour));
   if(currentRoom==='hub'&&lobbyRoutesOpen())items.push(...lobbyLife(reducedMotion.matches?0:worldNow));
   if(crossing){
@@ -4501,6 +4561,11 @@ function draw(time){
   let playerBody=null,guardianOverlap=false,playerHearts=null;
   const drawPlayer = ()=>{
     if(homeBedRest&&atHome())return;
+    if(localFlight){
+      if(localFlight.overCanopy)highFlights.push({pose:localFlight,id:'self',look:avatar,wanted:!!window.playerCloud?.initial?.pvp?.wantedAt});
+      else drawFlyingActor(localFlight,'self',avatar,time,!!window.playerCloud?.initial?.pvp?.wantedAt);
+      return;
+    }
     const seat=player.seat,visual=combatRenderPosition(time);
     const [x,y]=seat?seatAnchor(seat):point(visual.x+.5,visual.y+.5,0);
     if(moonwood.has(currentRoom)&&lanternLit){
@@ -4509,6 +4574,8 @@ function draw(time){
       ctx.fillStyle=glow;ctx.fillRect(x-34,y-42,68,68);
     }
     if(!seat){
+      const ashstepUntil=hunting.encounter?.ashstepUntil??window.towerVaultCoop?.view()?.self?.ashstepUntil??0;
+      if(ashstepUntil>combatNow())surface(visual.x+.08,visual.y+.12,.84,.74,.24,'#ed9f6355','#ffbb84');
       surface(visual.x+.17,visual.y+.23,.71,.61,.2,'#43324452');
       surface(visual.x+.27,visual.y+.34,.50,.38,.3,'#43324462');
     }
@@ -4549,8 +4616,11 @@ function draw(time){
     const bodyY=y+Math.sign(enemyY-y)*thrust+pose.dodge*.25;
     const guarding=(hunting.encounter?.guardUntil??window.towerVaultCoop?.view()?.self?.guardUntil??0)>combatNow();
     const spriteOptions={guarding,shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time};
-    sprite(ctx,bodyX,bodyY,avatar,{...spriteOptions,visibilityOutline:!veiled});
-    if(!veiled&&!spriteOptions.shadowstep)playerBody={x:bodyX,y:bodyY,options:spriteOptions};
+    const mounted=!!currentDragon()&&!seat&&!cast&&!chopping&&!miningSwing&&!pose.armed&&!meditating;
+    const riderY=mounted?drawDragonMount(ctx,bodyX,bodyY,{direction:player.direction,back:player.back,moving:!!step,time,reduced:reducedMotion.matches},
+      (x,y)=>sprite(ctx,x,y,avatar,{...spriteOptions,cycle:0,seated:true,sheathed:false,visibilityOutline:!veiled})):bodyY;
+    if(!mounted)sprite(ctx,bodyX,bodyY,avatar,{...spriteOptions,visibilityOutline:!veiled});
+    if(!mounted&&!veiled&&!spriteOptions.shadowstep)playerBody={x:bodyX,y:bodyY,options:spriteOptions};
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
     if(undead){const [ux,uy]=point(player.x+1.25,player.y+1.25);drawUndeadAlly(ctx,ux,uy,undead,time,reducedMotion.matches,{attackAge:combatNow()-(undead.lastStrikeAt??0),flipped:player.direction==='left'});}
     if(hunting.encounter?.sanctuaryWard&&hunting.encounter.magicWardUntil>combatNow()){
@@ -4563,7 +4633,7 @@ function draw(time){
       ctx.fillStyle='#ff748f';ctx.fillRect(x-12,y+5,24*hunting.encounter.bloodShield/40,2);ctx.restore();
     }
     const familiar=scoutAnimationActive(time)?null:drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
-    renderedActors.push({id:'self',name:avatar.name,activity:reading?'Reading':'',wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:bodyX,y:y-(seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
+    renderedActors.push({id:'self',name:avatar.name,activity:mounted?'Cinderwing':reading?'Reading':'',wanted:!!window.playerCloud?.initial?.pvp?.wantedAt,x:bodyX,y:riderY-(mounted||seat?30:meditating?35:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     ctx.restore();
     if(veiled){
       ctx.save();ctx.strokeStyle='#a3e6eb';ctx.globalAlpha=reducedMotion.matches?.45:.38+.16*Math.sin(time/180);
@@ -4591,12 +4661,17 @@ function draw(time){
   };
   const depth=item=>item.type==='remotePlayer'?(item.peer.seat?depth(item.peer.seat)+.001:item.x+item.y+1):item.ambient?item.x+item.y+1:item.x+item.y+dimensions(item).reduce((a,b)=>a+b,0)-.55;
   items.sort((a,b)=>depth(a)-depth(b));
-  const visual=combatRenderPosition(time);
+  const visual=localFlight??combatRenderPosition(time);
   const playerDepth=player.seat?depth(player.seat)+.001:visual.x+visual.y+1;
   let drawn=false;hitboxes=[];
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
     if(item.ambient){drawAmbientActor(item,time);continue;}
+    if(item.type==='remotePlayer'&&item.flight){
+      if(item.flight.overCanopy)highFlights.push({pose:item.flight,id:item.peer.id,look:item.peer,wanted:item.peer.wanted});
+      else drawFlyingActor(item.flight,item.peer.id,item.peer,time,item.peer.wanted);
+      continue;
+    }
     if(item.type==='remotePlayer'){drawRemote(item.peer,time);const [px,py]=point(item.peer.rx+.5,item.peer.ry+.5);hitboxes.push({item,shape:[[px-9,py+3],[px+9,py+3],[px+9,py-38],[px-9,py-38]]});continue;}
     if(item.type==='wildAnimal'){drawWildAnimal(item,time);continue;}
     if(item.type==='willowbankBird'||item.type==='willowbankDeer'){
@@ -4646,6 +4721,7 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  for(const {pose,id,look,wanted} of highFlights)drawFlyingActor(pose,id,look,time,wanted);
   if(guardianOverlap&&playerBody){
     ctx.save();ctx.globalAlpha=.93;
     sprite(ctx,playerBody.x,playerBody.y,avatar,{...playerBody.options,visibilityOutline:true});
@@ -4679,7 +4755,7 @@ function draw(time){
   if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
   updateWorldFloats(time);
   for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
-  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,now:combatNow(),wind:frameWind,room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(currentRoom==='depthsVault'&&!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom),crowded:remotePeers.size>=16});}
+  if(window.scenePolish){const [px,py]=point(player.x+.5,player.y+.5);window.scenePolish.frame({time,now:combatNow(),wind:frameWind,room:currentRoom,view,zoom,camX,camY,px,py,inCombat:!!player.inCombat||(!!vaultCoopState&&window.towerVaultCoop?.view()?.status==='battle'),reduced:reducedMotion.matches,exploring:moonwood.has(currentRoom),crowded:remotePeers.size>=16});}
 }
 
 
@@ -4774,7 +4850,7 @@ function pointer(e){
     ?hitboxes.findLast(h=>h.item.type!=='remotePlayer'&&inShape(x,y,h.shape)):null;
   const item=worldHit?.item??(crowdedRoom()&&(door||shoalHit)&&hit?.item.type==='remotePlayer'?null:hit?.item);
   const floor=inRoom(gx,gy)?{x:gx,y:gy}:null;
-  return {tile:shadowstepTargeting?floor:door?.tile??floor,door,item:item??null,shoalHit};
+  return {tile:shadowstepTargeting||flightAim?floor:door?.tile??floor,door,item:item??null,shoalHit};
 }
 let homeNavigationLearned=load('movement-learned',false);
 function note(message,duration=3000){
@@ -5446,17 +5522,18 @@ function use(item){
   if(item.type==='willowLatch'&&player.cy>=7){note('The latch is on the Millbrook side. Take either trail around.');return;}
 
   if(item.type==='submergedCache'&&!floodgateOpen(depthsRun)){note('Pull the sluice lever to reach the lockbox.');return;}
-  if(vaultCoopState){if(item.coopAdd||item.type==='depthsColossus')window.towerVaultCoop?.target(item.coopAdd?.id??'boss');else note('Retreat from the co-op party before using another activity.');return;}
+  if(vaultCoopState){if(item.coopAdd||item.type==='depthsColossus'||item.type==='ashenStag')window.towerVaultCoop?.target(item.coopAdd?.id??'boss');else note('Retreat from the co-op party before using another activity.');return;}
   if(miningCut){stopMining().then(ok=>{if(ok)use(item);});return;}
   if(item.type==='wildAnimal'){selectWildAnimal(item.animalId);return;}
   if(player.inCombat&&hunting.encounter?.addsVersion===1&&(item.addId||item.type===huntEnemyForRoom(currentRoom)?.prop)){sendServerCombat('target',item.addId??'leader');return;}
+  if(item.type==='ashenStag'){window.towerVaultCoop?.open();return;}
   if(isTimberTree(item)){
     if(woodSession?.tree===item){note('Your chop is already in progress.');return;}
     if(treeState(item).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
     if(!woodcutting.axeOwned&&currentRoom!=='logging'){note('Get your free axe from the woodcutter at Timber Hollow.');return;}
   }
   if(unavailable())return;
-  if(bowDrawTime(combatGear.equippedWeapon)&&currentRoom==='clearing'&&item.type==='wildboar'&&!item.trackedPrey&&Math.hypot(player.cx-item.x,player.cy-item.y)<=playerMeleeReach(combatGear.equippedWeapon)){
+  if(isRangedWeapon(combatGear.equippedWeapon)&&currentRoom==='clearing'&&item.type==='wildboar'&&!item.trackedPrey&&Math.hypot(player.cx-item.x,player.cy-item.y)<=playerMeleeReach(combatGear.equippedWeapon)){
     startMonsterEncounter(huntEnemies.boar);return;
   }
   if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
@@ -5944,6 +6021,7 @@ function advanceAnimation(time){
   updateBedRestPanel(time);
   if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
   if(serverActionBusy||abilityTransition){draw(time);return;}
+  if(dragonFlight){finishDragonFlightWhenDue();draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);updateWildlifeGuide();
   if(trackedMoonTrail&&!openMoonTrail(trackedMoonTrail))setExplorationDestination(null);
@@ -6309,6 +6387,12 @@ async function eatMeal(id){
 const vaultedItem=(kind,id)=>!!(window.playerCloud?.initial??savedPlayerState)?.bank?.vault?.items?.[kind+':'+id];
 function bagEntries(){
   const entries=[];
+  const state=window.playerCloud?.initial,mount=state?.mounts,ownsDragon=window.dragonUnlocked?.(mount);
+  if(!ownsDragon&&state?.styleAbilities?.teacherAccess===true)entries.push({key:'mount:cinderwing',name:'Cinderwing',category:'gear',art:dragonMountArt(),quantity:1,
+    description:'Claim a legendary dragon with your verified teacher account.',stats:'Legendary mount · Teacher access',action:'Claim Cinderwing',disabled:unavailable(),run:claimTeacherDragon});
+  if(ownsDragon)entries.push({key:'mount:cinderwing',name:'Cinderwing',category:'gear',art:dragonMountArt(),quantity:1,equipped:mount.selected,
+    description:mount.teacherClaimed?'A legendary dragon claimed through teacher access. Ride it on outdoor routes.':'A legendary dragon earned by hunting the Ashen Stag. Ride it on outdoor routes.',stats:'Legendary mount · Faster outdoor movement',
+    action:mount.selected?'Dismiss dragon':'Ride dragon',disabled:unavailable()||!mount.selected&&!canRideHere(currentRoom),run:toggleDragon});
   for(const [id,item] of Object.entries(miningFinds))if(huntingLoot[id]>0)entries.push({key:'find:'+id,name:item.name,category:'materials',art:miningFindArt(id),quantity:huntingLoot[id],description:id==='uncutQuartz'?'An uncut mineral crystal, uncovered inside a broken deposit.':id==='ancientFossil'?'A trace of ancient life, preserved deep in quarry stone.':'A fragment of carved stone with a faint magical shimmer.',stats:'Rare mining find · '+item.price+' gold each',note:'Keep as a discovery or sell at the Trading Post. Luck improves discovery chances.'});
   if(mining.pickOwned)for(const id of ['basic',...mining.upgrades]){
     const pick=pickaxes[id],equipped=mining.equipped&&mining.pick===id;
@@ -6322,7 +6406,7 @@ function bagEntries(){
   const outfit=wardrobe.outfits.find(outfit=>outfit.id===bagOutfitTarget)??wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active);
   for(const id of combatGear.ownedWeapons.filter(id=>!vaultedItem('weapon',id))){
     const w=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),equipped=combatGear.equippedWeapon===id;
-    entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack · '+weaponStagger(id,combatGear.activeSwordUpgrade)+' stagger/hit',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Requires Strength '+w.strength+' · Agility '+w.agility+(w.rarity?' · Rare dungeon relic':''),run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
+    entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack · '+weaponStagger(id,combatGear.activeSwordUpgrade)+' stagger/hit',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':w.magicKnowledge?'Requires Magic Knowledge '+w.magicKnowledge:'Requires Strength '+w.strength+' · Agility '+w.agility+(w.rarity?' · Rare dungeon relic':''),run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods.filter(id=>!vaultedItem('rod',id))){
     const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel()+mealPatience(playerVitals,combatNow()),id,playerStats.luckXp,anglerQualityBonus({wardrobe}));
@@ -6385,6 +6469,19 @@ function renderBag(){
   const loadout=$('bagLoadout');loadout.replaceChildren();
   for(const [label,key] of [['Weapon','weapon:'+combatGear.equippedWeapon],['Rod','rod:'+fishingGear.equippedRod],['Armour',combatGear.equippedArmour?'armour:'+combatGear.equippedArmour:combatGear.stonebackVestEquipped?'vest':null],...(combatGear.moonwellCharmOwned?[['Charm','charm']]:[])]){
     const item=entries.find(item=>item.key===key),button=document.createElement('button');button.type='button';button.textContent=label+' · '+(item?.name??'None equipped');button.disabled=!item;button.onclick=()=>{bagCategory='gear';bagSelection=key;renderBag();};loadout.append(button);
+  }
+  const dragon=entries.find(item=>item.key==='mount:cinderwing');
+  if(dragon){
+    const button=document.createElement('button'),claim=dragon.action==='Claim Cinderwing';
+    button.type='button';button.id='bagDragonShortcut';
+    button.textContent=claim?'Claim Cinderwing':'Mount · Cinderwing';
+    button.disabled=claim&&dragon.disabled;
+    button.onclick=()=>{
+      bagCategory='gear';bagSelection=dragon.key;grid.scrollTop=0;
+      if(claim)claimTeacherDragon();
+      else{renderBag();$('bagAction').focus({preventScroll:true});}
+    };
+    loadout.append(button);
   }
   const picture=$('bagAvatar'),ink=picture.getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now(),vest:armourSelection(combatGear)});
   for(const category of ['all','gear','clothing','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).setAttribute('aria-pressed',String(category===bagCategory));
@@ -6635,6 +6732,7 @@ window.towerApplyMarketStall=(state,receipt)=>{
   if(receipt?.gold)showTransaction(receipt.kind==='claim'?'Stall proceeds collected':'Market purchase',[],receipt.kind==='claim'?receipt.gold:-receipt.gold);
 };
 function applyServerGameplay(state){
+  applyDragonFlight(state);
   vaultCoopState=state.vaultCoop??null;
   mining=normalizeMining(state.mining);miningCut=state.miningCut??null;miningReceipt=state.miningReceipt??null;
   receiveTrees(state.sharedTrees);
@@ -6659,6 +6757,7 @@ function applyServerGameplay(state){
   meals={...state.meals};
   const previousFamiliar=familiarState;
   familiarState=normalizeFamiliars(state.familiars);
+  updateMountControl(state);
   for(const id of familiarState.owned){
    const rank=familiarBond(familiarState,id);
    if(rank.rank>familiarBond(previousFamiliar,id).rank)showTransaction((familiarState.names[id]??familiars[id].name)+' · '+rank.name,[{icon:'✦',text:familiarTraining[id].tricks[rank.rank-2]}]);
@@ -7767,10 +7866,26 @@ function choose(item){
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
 var fieldJournalOpen=false;
+function updateMountControl(state=window.playerCloud?.initial){
+  const flight=$('quickFlight');
+  if(flight){
+    flight.hidden=!dragonFlight&&(!window.activeMount?.(state)||state.location!==window.dragonFlightRules?.room||currentRoom!==state.location);
+    flight.disabled=!!dragonFlight;
+    flight.textContent=dragonFlight?'In flight':flightAim?'Cancel flight':'Take flight';
+    flight.setAttribute('aria-pressed',String(!!flightAim));
+    flight.title='Choose a Willowbank landing tile · Y';
+  }
+  const button=$('quickMount');
+  if(!button)return;
+  button.hidden=!!dragonFlight||!window.dragonUnlocked?.(state?.mounts)||!window.canRideMount?.(state)||state.location!==currentRoom;
+  button.textContent=window.activeMount?.(state)&&!player.seat?'Dismount':'Ride dragon';
+}
 function updateFieldJournal(){
+  updateMountControl();
   const required=editing;
   const quickCombat=player.inCombat&&depthsStageIndex(currentRoom)<0;
   $('quickDodge').hidden=$('quickFlee').hidden=!quickCombat;
+  $('quickRune').hidden=!quickCombat||combatGear.equippedWeapon!==runeStaffRules.weapon;
   $('quickGuard').hidden=!quickCombat||!canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon);
   $('roomLayout').dataset.quickCombat=String(quickCombat);
   const open=fieldJournalOpen||required;
@@ -8003,6 +8118,11 @@ function currentActivityPrompt(){
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
     return {label:'YOUR NEXT STEP',title:'Meet the Tower Warden',text:'Speak to the Warden to begin your adventure.',action:'visitWarden'};
   }
+  const ash=ashenTrail();
+  if(ash&&!player.inCombat){
+    if(ash.room!==currentRoom)return {label:'ASHEN STAG TRACKS',title:'Follow the fresh tracks',text:'The stag crossed toward '+explorationName(ash.room)+'.',action:'ashenTracks'};
+    return {label:'ASHEN MARCH · ELITE HUNT',title:'Ashen Stag',text:'Form a party of up to four. Draw its charge into a ruin to expose its flank.',action:'vaultCoopEntry'};
+  }
   if(moonbackHere()&&!player.inCombat)return {label:'RARE SIGHTING',title:'Moonback Stag',text:'Approach the stag to fight. Watch the warning lane and dodge just before Moonrush lands.',action:'engageMoonback'};
   const clue=moonbackClue();
   if(clue)return {label:'MOONBACK TRAIL',title:'Follow the fresh tracks',text:'The trail leads toward '+explorationName(clue.door.to)+'. The stag moves quickly.',action:'moonbackTracks'};
@@ -8047,7 +8167,7 @@ function updateActivityPrompt(){
   const visible=!!prompt;
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
-  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal','engageMoonback','moonbackTracks','cellarGuardian','cellarChest'].includes(prompt.action)?$(prompt.action):null;
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal','engageMoonback','moonbackTracks','ashenTracks','cellarGuardian','cellarChest'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
   $('contextGuideSilverfin').hidden=!visible||currentRoom!=='pond'||!window.playerCloud?.readSilverfinWatch;
   $('contextGuideSecondChance').hidden=!prompt?.secondChance;
@@ -8071,7 +8191,7 @@ function updateActivityPrompt(){
   else if(prompt.action==='cellarGuardian')button.textContent='Approach · 1 AP / attack';
   else if(prompt.action==='cellarChest')button.textContent='Open the chest';
   else if(prompt.action==='engageMoonback')button.textContent='Approach · 1 AP / attack';
-  else if(prompt.action==='moonbackTracks')button.textContent='Follow tracks';
+  else if(prompt.action==='moonbackTracks'||prompt.action==='ashenTracks')button.textContent='Follow tracks';
   else button.textContent=$(prompt.action).textContent||prompt.title;
 }
 let fishTogetherSession=null,fishTogetherNotice='',fishTogetherExpiry=null;
@@ -8419,6 +8539,9 @@ $('courtyardPractice').onclick=openTrainingCourtyard;
 $('visitTraining').onclick=()=>{navigateHud('outside');note('Head outside and select the Training courtyard dummy.');};
 $('combatDodge').onclick=()=>combatAction('dodge');
 $('quickDodge').onclick=$('combatDodge').onclick;
+$('quickMount').onclick=toggleDragon;
+$('quickFlight').onclick=toggleDragonFlightAim;
+for(const id of ['combatRune','dungeonRune','quickRune'])$(id).onclick=()=>combatAction('runeBurst');
 for(const id of ['combatGuard','dungeonGuard','quickGuard'])$(id).onclick=()=>combatAction('guard');
 $('quickFlee').onclick=$('combatFlee').onclick;
 $('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';
@@ -8542,6 +8665,7 @@ $('contextGuideAction').onclick=()=>{
   else if(prompt.action==='cellarGuardian'){const item=roomFurniture().find(p=>p.type==='cellarCustodian');if(item)use(item);}
   else if(prompt.action==='cellarChest'){const item=roomFurniture().find(p=>p.type==='cellarChest');if(item)use(item);}
   else if(prompt.action==='moonbackTracks')followMoonbackTracks();
+  else if(prompt.action==='ashenTracks'){const ash=ashenTrail();if(ash)setExplorationDestination(ash.room);}
   else if(!$(prompt.action).disabled)$(prompt.action).onclick();
   updateActivityPrompt();
 };
@@ -9195,12 +9319,14 @@ $('resetRoom').onclick=()=>{
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
   highlightTravelBadge(e.pointerType==='touch'||shadowstepTargeting||editing?null:p.door??p.item);
-  canvas.style.cursor=shadowstepTargeting?(shadowstepTargets().some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):p.item||p.door||p.shoalHit||(currentRoom==='creek'&&p.tile?.x===5&&p.tile.y===4&&player.cx<5)?'pointer':'crosshair';
+  canvas.style.cursor=flightAim?(flightAim.tiles.some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):shadowstepTargeting?(shadowstepTargets().some(tile=>tile.x===hover?.x&&tile.y===hover?.y)?'pointer':'not-allowed'):p.item||p.door||p.shoalHit||(currentRoom==='creek'&&p.tile?.x===5&&p.tile.y===4&&player.cx<5)?'pointer':'crosshair';
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;highlightTravelBadge(null);});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door,shoalHit}=pointer(e);
+  if(dragonFlight)return;
+  if(flightAim){launchDragonFlight(tile);return;}
   if(shadowstepTargeting){
     if(!tile||!shadowstepTargets().some(target=>target.x===tile.x&&target.y===tile.y)){
       showHotbarFeedback('Choose a glowing purple tile within reach. Esc cancels.',0);
@@ -9223,6 +9349,7 @@ function waveHello(){
   note(avatar.name+' waves hello!');
 }
 document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&flightAim){setFlightAim(null);note('Flight cancelled.');return;}
   if(e.key==='Escape'&&shadowstepTargeting){setShadowstepTargeting(false);showHotbarFeedback('Shadowstep cancelled.');}
 });
 canvas.addEventListener('keydown',e=>{
@@ -9233,6 +9360,13 @@ canvas.addEventListener('keydown',e=>{
     return;
   }
   const delta=arrows[e.key];
+  if(flightAim&&(delta||e.code==='Enter')){
+    e.preventDefault();
+    if(e.code==='Enter'){launchDragonFlight(hover);return;}
+    const tile=hover??flightAim.tiles[0],x=tile.x+delta[0],y=tile.y+delta[1];
+    if(inRoom(x,y))hover={x,y};
+    return;
+  }
 
   if(!editing&&e.code==='Space'){
     e.preventDefault();
@@ -9247,14 +9381,17 @@ canvas.addEventListener('keydown',e=>{
 $('veilstep').onclick=useVeilstep;
 for(const id of Object.keys(outfitPowers))$(id).onclick=()=>useOutfitPower(id);
 document.addEventListener('keydown',e=>{
+  if(e.code==='KeyY'&&!e.repeat&&!$('quickFlight').hidden&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();toggleDragonFlightAim();return;}
+  if(e.code==='KeyM'&&!e.repeat&&!$('quickMount').hidden&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();toggleDragon();return;}
   const outfitPower=Object.keys(outfitPowers).find(id=>e.code==='Key'+outfitPowers[id].key&&wearsClothing(wardrobe,outfitPowers[id].item));
   if(outfitPower&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useOutfitPower(outfitPower);return;}
   if(e.code==='KeyV'&&wearsVeilCloak(wardrobe)&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useVeilstep();return;}
   if(e.code==='KeyG'&&familiarState.equipped&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useFamiliar();return;}
-  if(player.inCombat&&['Space','KeyF','KeyQ','KeyE','KeyB'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+  if(e.code==='KeyX'&&combatGear.equippedWeapon!==runeStaffRules.weapon)return;
+  if(player.inCombat&&['Space','KeyF','KeyQ','KeyE','KeyB','KeyX'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
     if(['KeyQ','KeyE'].includes(e.code)){e.preventDefault();if(!e.repeat)castEquippedEssence(e.code==='KeyQ'?'q':'e');return;}
     if(e.code==='Space'&&e.target.matches('button'))return;
-    e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':e.code==='KeyB'?'guard':'flee');return;
+    e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':e.code==='KeyB'?'guard':e.code==='KeyX'?'runeBurst':'flee');return;
   }
   if(!editing||e.target.matches('input')||document.querySelector('dialog[open]'))return;
   if(e.key.toLowerCase()==='r'){e.preventDefault();rotate();}
@@ -9430,6 +9567,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false,explore=!!depthsRun?.rewardChests?.[next]}={}){
+  if(flightAim)setFlightAim(null);
   if(['trail','pond','market'].includes(next))window.towerRefreshPublicRequests?.();
   if(next!==currentRoom&&window.playerCloud?.initial?.location!==next&&needsLearningPoints()){note('Travelling to another area costs 1 AP. Answer an MCQ to earn a point.');window.towerLearning?.open();return;}
   if(miningCut&&next!==currentRoom){stopMining().then(ok=>{if(ok)enterRoom(next,arrival,{automatic,explore});});return;}
@@ -9855,9 +9993,84 @@ window.towerMillRaidHooks={
  approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),
  float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
 };
+function setFlightAim(aim){
+  flightAim=aim;
+  hover=aim?.tiles[0]??null;hoverItem=null;
+  updateMountControl();
+}
+function toggleDragonFlightAim(){
+  if(flightAim){setFlightAim(null);note('Flight cancelled.');return;}
+  if(unavailable()||!currentDragon()||currentRoom!==dragonFlightRules.room)return;
+  if(step||route.length){note('Stop riding before choosing a landing tile.');return;}
+  const from={x:player.cx,y:player.cy},tiles=[],items=roomFurniture();
+  for(let y=2;y<view.rows-2;y++)for(let x=0;x<14;x++){
+    const tile={x,y};
+    if(crossesWillowbankChannel(from,tile)&&!blocked(x,y,items))tiles.push(tile);
+  }
+  if(!tiles.length){note('Ride closer to the riverside path to cross the channel.');return;}
+  tiles.sort((a,b)=>Math.hypot(a.x-from.x,a.y-from.y)-Math.hypot(b.x-from.x,b.y-from.y));
+  setFlightAim({tiles});
+  canvas.focus({preventScroll:true});
+  note('Choose a bright landing tile across the river. Enter confirms the selected tile · Esc cancels.',7000);
+}
+async function launchDragonFlight(tile){
+  if(!flightAim||unavailable())return;
+  if(!flightAim.tiles.some(spot=>spot.x===tile?.x&&spot.y===tile?.y)){note('Choose a clear, highlighted tile on the opposite bank.');return;}
+  setFlightAim(null);
+  try{await serverGameplay('dragonFlight',{tile});note('Cinderwing takes flight.');}
+  catch(error){note(error.message);}
+}
+function applyDragonFlight(state){
+  const before=dragonFlight;
+  dragonFlight=state.mounts?.flight??null;
+  if(dragonFlight){
+    if(flightAim)setFlightAim(null);
+    route=[];step=null;target=null;interaction=null;player.seat=null;
+    return;
+  }
+  if(before&&state.location===currentRoom&&before.room===currentRoom&&state.position){
+    const {x,y}=state.position;
+    Object.assign(player,{x,y,cx:x,cy:y});
+    const facing=combatFacing(before.from,before.to);
+    if(facing)Object.assign(player,facing);
+  }
+}
+function finishDragonFlightWhenDue(){
+  if(flightLandingBusy||combatNow()<dragonFlight.landAt||performance.now()<flightRetryAt||!window.playerCloud?.gameplay)return;
+  flightLandingBusy=true;
+  serverGameplay('dragonLand').then(()=>note('Cinderwing lands on the bank.')).catch(error=>{
+    flightRetryAt=performance.now()+800;
+    note(error.message);
+  }).finally(()=>{flightLandingBusy=false;});
+}
+function currentDragon(){
+  if(dragonFlight||player.inCombat||vaultCoopState||routineControlled()||player.seat||window.millRaidClient?.active)return null;
+  const state=window.playerCloud?.initial;
+  return state?.location===currentRoom?window.activeMount?.(state)??null:null;
+}
+async function claimTeacherDragon(){
+  if(unavailable()||window.playerCloud?.initial?.styleAbilities?.teacherAccess!==true)return;
+  try{
+    await serverGameplay('teacherDragon');
+    showTransaction('Cinderwing unlocked',[{icon:'✦',text:'Legendary mount · Ride from Inventory when outdoors'}]);
+    if($('inventoryDialog').open)renderBag();
+  }catch(error){note(error.message);}
+}
+async function toggleDragon(){
+  const mount=window.playerCloud?.initial?.mounts;
+  if(!window.dragonUnlocked?.(mount)||unavailable())return;
+  try{
+    const {state}=await serverGameplay('dragonMount',{selected:!mount.selected});
+    if(state.mounts.selected&&player.seat)player.seat=null;
+    note(state.mounts.selected?'Cinderwing is ready to ride.':'Cinderwing dismissed.');
+    if($('inventoryDialog').open)renderBag();
+    updateFieldJournal();
+  }catch(error){note(error.message);}
+}
 function playerStepMs(){
-  if(vaultCoopState)return COMBAT_STEP_MS*(currentCombatBuild().move??1);
-  return player.inCombat?COMBAT_STEP_MS:WALK_STEP_MS;
+  const ashstep=(hunting.encounter?.ashstepUntil??window.towerVaultCoop?.view()?.self?.ashstepUntil??0)>combatNow();
+  if(vaultCoopState){const stepMs=COMBAT_STEP_MS*(currentCombatBuild().move??1);return ashstep?Math.max(110,stepMs*ashenStagRules.stepScale):stepMs;}
+  return player.inCombat?(ashstep?COMBAT_STEP_MS*ashenStagRules.stepScale:COMBAT_STEP_MS):currentDragon()?legendaryDragon.stepMs:WALK_STEP_MS;
 }
 window.towerVaultCoopHooks={
  enemyReaction:hit=>recordEnemyReaction(combatArt,hit,performance.now()-Math.min(100,Math.max(0,combatNow()-hit.at))),
@@ -9874,11 +10087,16 @@ window.towerVaultCoopHooks={
   showTransaction('Vault Guardian defeated',[{icon:'✦',text:chest&&!chest.opened?'Open the glowing Vault chest to reveal your reward.':'Your expedition rewards are ready.'},{icon:'↗',text:'Then use Bank spoils & leave at the exit to secure your haul.'}]);
   worldLabelKey='';
  },
- now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
+ now:()=>combatNow(),state:()=>({room:currentRoom,ashen:ashenStagRoom(currentRoom),ashenHere:ashenTrail()?.room===currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
  face:faceCombatTarget,targetHint:combatTargetHint,
+ usesStaff:()=>combatGear.equippedWeapon===runeStaffRules.weapon,
+ canRune:()=>!needsLearningPoints()&&manaAvailable(playerVitals,combatNow())>=runeStaffRules.burstMana,
  usesBow:()=>!!bowDrawTime(combatGear.equippedWeapon),
  canGuard:()=>canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon),
+ dragonOwned:()=>window.dragonUnlocked?.(window.playerCloud?.initial?.mounts),
+ dragonProgress:()=>window.playerCloud?.initial?.mounts?.sightings??0,
+ huntReward:receipt=>{updateMountControl();showTransaction(receipt.dragon?'Legendary mount unlocked':'Ashen Stag defeated',[...(receipt.cloak?[{icon:'◆',text:'Ashstep Cloak · Added to Inventory'}]:[]),{icon:'✦',text:receipt.dragon?'Cinderwing · Ride from Inventory':'Cinderwing · '+receipt.dragonSightings+' / '+legendaryDragon.sightings+' sightings'}],receipt.gold);},
  enableSound:()=>combatAudio.enable(combatSoundEnabled),counterSound:()=>combatAudio.play('counter'),
  strike:(tile,arrow)=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();if(arrow)combatArt.coopArrow={shot:arrow,at:combatArt.strikeAt};},
  cast:(tile,kind)=>{faceCombatTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},

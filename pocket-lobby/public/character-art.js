@@ -1,4 +1,4 @@
-const JACKETS=[['#8d5941','#b8784a','#edaa66'],['#345768','#4b8198','#83bfd1'],['#873f60','#b85e7f','#e99bb2'],['#476447','#6d9565','#a6c595'],['#5e477d','#896bac','#bea6df'],['#202b40','#36445d','#64738b'],['#513868','#976bb9','#c399dc'],['#3c5041','#71865b','#a9b785'],['#683a37','#b15c4a','#dc9975'],['#303d70','#5964af','#9dabe3'],['#4f294b','#8c3e60','#cc7991'],['#283e36','#4c6a53','#8ca275'],['#29283f','#493d62','#9082b1'],['#252e48','#4b6686','#82bed0'],['#3e5751','#8e9d87','#e7d198'],['#343252','#7167af','#c8c5ff'],['#194d60','#39888b','#b0ebdc']];
+const JACKETS=[['#8d5941','#b8784a','#edaa66'],['#345768','#4b8198','#83bfd1'],['#873f60','#b85e7f','#e99bb2'],['#476447','#6d9565','#a6c595'],['#5e477d','#896bac','#bea6df'],['#202b40','#36445d','#64738b'],['#513868','#976bb9','#c399dc'],['#3c5041','#71865b','#a9b785'],['#683a37','#b15c4a','#dc9975'],['#303d70','#5964af','#9dabe3'],['#4f294b','#8c3e60','#cc7991'],['#283e36','#4c6a53','#8ca275'],['#29283f','#493d62','#9082b1'],['#252e48','#4b6686','#82bed0'],['#3e5751','#8e9d87','#e7d198'],['#343252','#7167af','#c8c5ff'],['#194d60','#39888b','#b0ebdc'],['#392938','#a15f49','#e6a472']];
 const TROUSERS=[['#273249','#3b4565','#626c88'],['#1e354d','#254764','#4b7592'],['#2b4036','#3d5949','#6e8c66'],['#202b40','#36445d','#64738b'],['#364434','#55634c','#77846b'],['#40372e','#69513d','#967950'],['#24273f','#35375c','#65688c'],['#211f32','#342d48','#695577'],['#302f2a','#514b3d','#82775c'],['#202333','#303144','#68667f'],['#453345','#71504a','#e6a574']];
 const BOOTS=[['#6c5948','#c2a280','#e4c9a4'],['#493a32','#956341','#c29164'],['#272a38','#3a3c50','#6d718b'],['#151d2c','#272e40','#929aab'],['#28382f','#3d5145','#82917a'],['#493226','#714a33','#bb8b56'],['#2d2c49','#4c4873','#b2a0d3'],['#221d2b','#33283a','#d3b87b'],['#342d29','#5a473a','#b99b6b'],['#202231','#303043','#a8abc0'],['#294859','#457286','#abebe9'],['#3c314d','#73516e','#d3b6d3'],['#352c4b','#725283','#f0cc80']];
 const HAIR=[['#463025','#704832','#b27d51'],['#242735','#383848','#696b7e'],['#642f24','#a15a39','#db9860'],['#9d713b','#d6ac60','#f4db95'],['#44364f','#7b638a','#b19abe']];
@@ -343,6 +343,8 @@ function drawTool(ctx,kind,angle,x,y,draw=0){
     const metal=kind==='runicPick'?'#b7a2f4':kind==='copperPick'?'#dfa46c':kind==='ironPick'?'#e0edf2':'#b7d3dc';
     p(-9,-19,18,3,'#344459');p(-8,-18,16,2,metal);p(-10,-16,3,3,metal);p(7,-16,3,3,'#dcebf0');
     if(kind==='runicPick'){p(-5,-19,1,4,'#deffff');p(2,-18,1,3,'#deffff');p(-1,-13,3,2,'#a5e8f5');p(-1,-8,3,1,'#c5a9ff');}
+  }else if(kind==='runewoodStaff'){
+    p(-2,-25,4,35,'#33293e');p(-1,-24,2,33,'#a17b54');p(-5,-29,10,7,'#443963');p(-4,-31,8,9,'#8b83ee');p(-1,-31,4,5,'#dedaff');p(-3,-22,6,2,'#d3aa73');
   }else if((kind==='shortbow'||kind==='cinderthornLongbow')){
     const long=kind==='cinderthornLongbow';
     ctx.rotate(-angle);if(angle>0)ctx.scale(-1,1);
@@ -409,7 +411,7 @@ const carriedWeaponStyles={
     quickfang:{length:10,width:3,case:'#403051',edge:'#b091d4',metal:'#d1b5ee',grip:'#624174',guard:7}
   };
 function drawCarriedEquipment(ctx,kind,anchor){
-  if(['huntingSpear','breakerSpear','warAxe','shortbow','cinderthornLongbow'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
+  if(['huntingSpear','breakerSpear','warAxe','shortbow','cinderthornLongbow','runewoodStaff'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
   const dagger=['quickDagger','quickfang'].includes(kind);
 
@@ -553,7 +555,7 @@ export function shapeTowerGarment(pixels,source,width,height,appearance,selectio
  if(boots.length){const by=Math.min(...boots.map(p=>p[1]));for(const [x,y] of boots){const i=at(x,y);let color=null;if(boot===8&&(y-by)%4===1)color='#bcaa7d';if(boot===6&&y>=by+5&&(y-by)%5===1&&x%3===0)color='#d0b5ed';if(boot===12&&y<by+5&&(x-cx+30)%5<2)color='#f0cc80';if(boot===5&&y===by+1)color='#e1b983';if(color)pixels.set([...rgb(color),255],i);}}
 }
 export function uniqueTowerOutfit(pixels,source,width,height,appearance,selection,armour){
-  const style=appearance.outfit,veil=style===13,hood=style===16||style===11||style===12||style===14||style===15||veil,plate=armour==='towerPlate',leather=armour==='scoutLeather';
+  const style=appearance.outfit,veil=style===13,hood=style===17||style===16||style===11||style===12||style===14||style===15||veil,plate=armour==='towerPlate',leather=armour==='scoutLeather';
   const gloves=armour==='prospectorsGloves';
   if(!hood&&!plate&&!leather&&!gloves&&appearance.boots!==11)return;
   const at=(x,y)=>(y*width+x)*4,put=(x,y,color)=>{if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],at(x,y));};
@@ -577,7 +579,7 @@ export function uniqueTowerOutfit(pixels,source,width,height,appearance,selectio
         if(edge&&source[i+3]===0)put(x,y,Math.abs(x-cx)>half-1?dark:mid);
       }
     }
-    const cut={11:{length:10,spread:7,split:true},12:{length:0,spread:1,asymmetric:true},13:{length:22,spread:11,torn:true},14:{length:5,spread:9,square:true},15:{length:18,spread:2,point:true},16:{length:4,spread:7,rain:true}}[style];
+    const cut={11:{length:10,spread:7,split:true},12:{length:0,spread:1,asymmetric:true},13:{length:22,spread:11,torn:true},14:{length:5,spread:9,square:true},15:{length:18,spread:2,point:true},16:{length:4,spread:7,rain:true},17:{length:13,spread:8,torn:true}}[style];
     if([11,12,15].includes(style))for(let dy=1;dy<=(style===15?7:4);dy++)for(let dx=-Math.ceil(((style===15?8:5)-dy)*.65);dx<=Math.ceil(((style===15?8:5)-dy)*.65);dx++){const x=Math.round(cx+dx),y=top-dy;if(x>=0&&x<width&&y>=0&&!source[at(x,y)+3])put(x,y,dx<0?dark:mid);}
     const shoulder=bottom+2,waist=legs.length?Math.min(...legs.map(p=>p[1])):shoulder+22,hem=Math.min(height-7,waist+cut.length),sway=selection.state==='walk'?Math.round(Math.sin(selection.frame*Math.PI/4)*2):0;
     for(let y=shoulder;y<=hem;y++){

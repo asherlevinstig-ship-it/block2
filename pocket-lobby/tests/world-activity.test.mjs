@@ -19,6 +19,39 @@ test('room relay broadcasts a committed outcome once and ignores client-forged a
  await room.webSocketMessage(ws,JSON.stringify({type:'activity',events:[{label:'+999999 gold'}]}));assert.equal(ws.sent.filter(m=>m.type==='activity').length,1);
  for(const key of ['playerId','sessionHash','credits','stats','fishStock'])assert(!Object.hasOwn(publicPeer(meta),key));
 });
+test('room relay shares mounted and dismounted poses without an activity receipt',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());const now=Date.now();
+ const meta={id:'public-id',playerId:'rider',room:'trail',x:4,y:5,name:'Rider',expiresAt:now+100000,lastAuthAt:now,windowAt:now,packets:0};
+ const ws={readyState:1,deserializeAttachment:()=>meta,serializeAttachment:value=>Object.assign(meta,value),send(){},close(){this.readyState=3;}};
+ const room=new SharedRoom({getWebSockets:()=>[ws],storage:{get:async()=>[],setAlarm:async()=>{}},blockConcurrencyWhile:fn=>fn()},{TOWER_DB:db});
+ const before=normalizeState({location:'trail',mounts:{sightings:3,selected:false}}),after=structuredClone(before);
+ applyGameplayAction(after,'dragonMount',{selected:true},now);
+ sql.prepare('INSERT INTO tower_players VALUES (?, ?, 2, ?, ?)').run(meta.playerId,JSON.stringify(after),'mount',now);
+ const env={SHARED_ROOMS:{idFromName:name=>name,get:()=>({fetch:request=>room.fetch(request)})}};
+ await publishWorldActivity(env,meta.playerId,before,after,2);
+ assert.equal(publicPeer(meta).mount,'cinderwing');
+ sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(before),meta.playerId);
+ await publishWorldActivity(env,meta.playerId,after,before,3);
+ assert.equal(publicPeer(meta).mount,undefined);
+});
+
+test('the room relays the takeoff clock and the authoritative landing tile',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());const now=Date.now(),from={x:9,y:6},to={x:10,y:3};
+ const meta={id:'public-id',playerId:'rider',room:'willowbank',...from,name:'Rider',expiresAt:now+100000,lastAuthAt:now,windowAt:now,packets:0};
+ const ws={readyState:1,deserializeAttachment:()=>meta,serializeAttachment:value=>Object.assign(meta,value),send(){},close(){this.readyState=3;}};
+ const room=new SharedRoom({getWebSockets:()=>[ws],storage:{get:async()=>[],setAlarm:async()=>{}},blockConcurrencyWhile:fn=>fn()},{TOWER_DB:db});
+ const before=normalizeState({location:'willowbank',position:from,mounts:{sightings:3,selected:true}}),air=structuredClone(before);
+ applyGameplayAction(air,'dragonFlight',{tile:to},now);
+ sql.prepare('INSERT INTO tower_players VALUES (?, ?, 2, ?, ?)').run(meta.playerId,JSON.stringify(air),'flight',now);
+ const env={SHARED_ROOMS:{idFromName:name=>name,get:()=>({fetch:request=>room.fetch(request)})}};
+ await publishWorldActivity(env,meta.playerId,before,air,2);
+ assert.deepEqual(publicPeer(meta).flight,air.mounts.flight);
+ const ground=structuredClone(air);applyGameplayAction(ground,'dragonLand',{},air.mounts.flight.landAt);
+ sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(ground),meta.playerId);
+ await publishWorldActivity(env,meta.playerId,air,ground,3);
+ const peer=publicPeer(meta);assert.equal(peer.flight,undefined);assert.deepEqual({x:peer.x,y:peer.y},to);
+});
+
 test('Auto players can join fishing areas while private dungeons and job-board plans stay separate',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const token='d'.repeat(64),id=await tokenHash(token),state=normalizeState({location:'pond',position:{x:4,y:5}});state.plan={source:'rules',kind:'queue'};
  const write=()=>sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(state),'save',Date.now());write();const env={TOWER_DB:db};

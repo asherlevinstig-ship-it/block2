@@ -1,11 +1,16 @@
-import {skillBooks,magicKnowledgeLevel,readingDuration} from './library.js';
+import {skillBooks,magicKnowledgeLevel,readingDuration,runewoodStaffLevel} from './library.js';
 import {skillProgress} from './skill-curve.js';
 export function initializeLibrary({cloud,hooks,doc=document}){
  const dialog=doc.createElement('dialog');dialog.id='libraryDialog';dialog.className='game-window library-window';dialog.setAttribute('aria-labelledby','libraryTitle');
- dialog.innerHTML=`<div class="modal-head"><span class="window-emblem" aria-hidden="true">✧</span><div><div class="eyebrow">TOWER LIBRARY</div><h2 id="libraryTitle">A little knowledge. A greater world.</h2></div><button class="close" type="button" aria-label="Close Library">×</button></div><div class="library-mastery"><div><span>MAGIC KNOWLEDGE</span><strong id="libraryRank"></strong></div><progress id="libraryXp"></progress><small id="libraryXpText"></small></div><p class="library-intro">Read, reflect, and grow your understanding of magic. Knowledge trains your stat; accepting an ability is always your choice.</p><div class="library-layout"><nav id="libraryBooks" aria-label="Skill books"></nav><article class="library-page"><div id="libraryBookArt" class="library-book-art" aria-hidden="true">✧</div><span id="libraryBookSubtitle" class="eyebrow"></span><h3 id="libraryBookName"></h3><p id="libraryPassage"></p><div id="libraryBookReward"></div><button id="libraryRead" class="primary" type="button"></button><progress id="libraryReading" max="12000" hidden aria-label="Reading progress"></progress><p id="libraryStatus" role="status"></p></article></div><small class="library-footnote">Stay at your reading spot until you finish. Moving away ends the session. Each book can be reread after one minute.</small>`;
+ dialog.innerHTML=`<div class="modal-head"><span class="window-emblem" aria-hidden="true">✧</span><div><div class="eyebrow">TOWER LIBRARY</div><h2 id="libraryTitle">A little knowledge. A greater world.</h2></div><button class="close" type="button" aria-label="Close Library">×</button></div><div class="library-mastery"><div><span>MAGIC KNOWLEDGE</span><strong id="libraryRank"></strong></div><progress id="libraryXp"></progress><small id="libraryXpText"></small></div><p class="library-intro">Read, reflect, and grow your understanding of magic. Knowledge trains your stat; accepting an ability is always your choice.</p><div class="library-layout"><nav id="libraryBooks" aria-label="Skill books"></nav><article class="library-page"><div id="libraryBookArt" class="library-book-art" aria-hidden="true">✧</div><span id="libraryBookSubtitle" class="eyebrow"></span><h3 id="libraryBookName"></h3><p id="libraryPassage"></p><div id="libraryBookReward"></div><button id="libraryRead" class="primary" type="button"></button><progress id="libraryReading" max="12000" hidden aria-label="Reading progress"></progress><p id="libraryStatus" role="status"></p></article></div><div class="library-mastery"><div><span>LIBRARY REWARD</span><strong>Runewood Staff</strong></div><button id="libraryStaff" type="button">Claim staff</button><small id="libraryStaffNote"></small></div><small class="library-footnote">Stay at your reading spot until you finish. Moving away ends the session. Each book can be reread after one minute.</small>`;
  doc.body.append(dialog);const $=id=>doc.getElementById(id);let selected='firstLight',busy=false,timer=0,frame=0,failed=null;
  function render(){
   const state=cloud.initial,level=magicKnowledgeLevel(state),progress=skillProgress(state.stats?.magicKnowledgeXp),reading=state.library?.reading;
+  const staff=$('libraryStaff'),owned=state.combatGear?.ownedWeapons?.includes('runewoodStaff');
+  const claimed=owned||state.library?.staffClaimed;
+  staff.disabled=busy||!!reading||claimed||level<runewoodStaffLevel;
+  staff.textContent=claimed?'Collected':level<runewoodStaffLevel?'Magic Knowledge '+runewoodStaffLevel:'Claim staff';
+  $('libraryStaffNote').textContent=owned?'Equip it from Inventory.':claimed?'Your Library reward has been claimed.':'Rune bolts mark enemies for Rune Burst or a damaging ability.';
   if(reading)selected=reading.book;
   $('libraryRank').textContent='Level '+level;$('libraryXp').max=progress.target;$('libraryXp').value=progress.progress;$('libraryXp').setAttribute('aria-label','Magic Knowledge level '+level+' progress');$('libraryXpText').textContent=progress.progress+' / '+progress.target+' XP to level '+(level+1);
   $('libraryBooks').replaceChildren();
@@ -33,6 +38,12 @@ export function initializeLibrary({cloud,hooks,doc=document}){
  $('libraryRead').onclick=async()=>{
   if(busy)return;if(cloud.initial.library?.reading){failed=null;await finish(cloud.initial.library.reading.id);return;}busy=true;render();$('libraryStatus').textContent='';
   try{await hooks.change('libraryRead',{book:selected});$('libraryStatus').textContent='Take a breath. Let the words sink in.';}
+  catch(error){$('libraryStatus').textContent=error.message;}
+  finally{busy=false;if(dialog.open)render();}
+ };
+ $('libraryStaff').onclick=async()=>{
+  if(busy)return;busy=true;render();
+  try{await hooks.change('libraryStaff',{});$('libraryStatus').textContent='Runewood Staff added to Inventory.';}
   catch(error){$('libraryStatus').textContent=error.message;}
   finally{busy=false;if(dialog.open)render();}
  };

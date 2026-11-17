@@ -1,3 +1,5 @@
+import {startDragonFlight,settleDragonFlight} from './dragon-flight.mjs';
+import {normalizeMounts,dragonUnlocked,canRideMount} from '../public/mounts.js';
 import {libraryAction} from './library.mjs';
 import {recordShopPurchase} from './shop-licences.mjs';
 import {abilityMastery} from '../public/ability-mastery.js';
@@ -74,6 +76,28 @@ function location(state,rooms){
 const pointActions=new Set(['depthsFloodCache','depthsEncounter','cook','furniture','vest','charm','enchant','bedRest','campRest','cinderRest','rest','riverRest','factionRest','emberMend','veil','familiarUse','familiarTame','familiarForage','gamble']);
 const journeyActions=new Set(['depthsEnter','depthsNext','depthsLeave','depthsSide','depthsSideReturn','depthsCacheEnter','depthsCacheLeave','bank','millCellarEnter','millCellarLeave']);
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random,options={}){
+  if(action==='dragonLand'){
+    if(state.mounts?.flight&&!settleDragonFlight(state,now))throw new Error('Cinderwing is still landing.');
+    return;
+  }
+  if(state.mounts?.flight){
+    if(!settleDragonFlight(state,now))throw new Error('Wait until Cinderwing lands.');
+  }
+  if(action==='dragonFlight'){startDragonFlight(state,body.tile,now);return;}
+  if(action==='teacherDragon'){
+    if(options.verifiedTeacher!==true)throw new Error('Cinderwing is available to verified LiveWeave teachers.');
+    available(state);
+    const mounts=normalizeMounts(state.mounts);
+    if(!dragonUnlocked(mounts))state.mounts={...mounts,teacherClaimed:true};
+    return;
+  }
+  if(action==='dragonMount'){
+    const mounts=normalizeMounts(state.mounts);
+    if(!dragonUnlocked(mounts))throw new Error('Earn Cinderwing by claiming three Ashen Stag sightings.');
+    if(typeof body.selected!=='boolean')throw new Error('Choose whether to summon or dismiss Cinderwing.');
+    if(body.selected&&!canRideMount(state))throw new Error('Finish your activity and take control outdoors to ride Cinderwing.');
+    state.mounts={...mounts,selected:body.selected};return;
+  }
   if(libraryAction(state,action,body,now))return;
   if(styleAbilityAction(state,action,body,now))return;
   if(action==='dungeonChestOpen'||action==='dungeonChestEquip'){
@@ -468,6 +492,8 @@ export function protectFishingState(previous,next){
   if(previous.chestItems)next.chestItems=previous.chestItems;else delete next.chestItems;
   if(previous.chestPurposes)next.chestPurposes=previous.chestPurposes;else delete next.chestPurposes;
   next.familiars=previous.familiars;
+  if(previous.mounts)next.mounts=structuredClone(previous.mounts);else delete next.mounts;
+  if(previous.mounts?.flight){next.location=previous.location;next.position={...previous.position};}
   if(previous.styleAbilities)next.styleAbilities=previous.styleAbilities;else delete next.styleAbilities;
   next.adventure={...next.adventure};for(const key of [...keeperFlags,...ashenFlags,...watchFlags,...willowbankFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
   if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');

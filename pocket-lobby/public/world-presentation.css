@@ -25,6 +25,9 @@
 .hud-bottom .hud-actionbar{grid-column:3}
 .hud-bottom .tool{min-width:48px;min-height:48px;padding:4px 6px;gap:4px}
 .hud-bottom .tool .hud-icon{height:23px;width:23px}
+.hud-bottom #quickFlight{min-width:80px;border-color:#78a998;color:#d3f4e8;font-weight:750;font-size:12px}
+.hud-bottom #quickFlight[aria-pressed=true]{background:#325d58;box-shadow:inset 0 0 0 1px #b9e9cf}
+.hud-bottom #quickMount{min-width:72px;border-color:#87664b;color:#ffe5a7;font-weight:750;font-size:12px}
 .hud-bottom .quick-combat{background:#273c51;border-color:#66859a;color:#f5e5bf;font-weight:750;font-size:12px;min-width:61px}
 .hud-bottom .quick-combat.dodge-ready{background:#436049;border-color:#b8d7a1}
 .shell:has(#roomLayout[data-journal=true]) .quick-combat,.shell:has(#roomLayout[data-quick-combat=true]:not([data-journal=true])) .hud-bottom :is(#wave,#openRoomChat){display:none}

@@ -1,3 +1,4 @@
+import {ashenStagMoves} from './ashen-stag.js';
 import {smartAttacks} from './enemy-brain.js';
 import {arenaInDanger,arenaBehindCover} from './dungeon-arena.js';
 export const vaultTeamCounter={move:'bossIronSweep',duration:2000,bonus:.35};
@@ -8,8 +9,14 @@ export const vaultPhaseDetails=[
  {name:'Runic heart',color:'#c6a4ff',hint:'Heart Marks explode at each player’s marked position. Spread out and move clear. Sanctuary absorbs damage for nearby allies.',moves:['bossHeartMarks','bossFan','bossPulse']}
 ];
 export const coopPhase=raid=>raid.hp>raid.max*2/3?1:raid.hp>raid.max/3?2:3;
-export const coopMove=raid=>smartAttacks[raid.move]??smartAttacks.bossIronSmash;
-export function coopEncounter(raid){return {enemy:'depthsGuardian',bossVersion:1,brainVersion:2,brainMaxHealth:raid.max,health:raid.hp,nextPlayerAt:raid.self?.nextStrikeAt??0,brainMove:raid.move,arenaVersion:1,arenaRoom:'depthsVault',vaultMechanism:raid.vaultMechanism,arenaEnemy:raid.origin??{x:6,y:5},brainOrigin:raid.origin??{x:6,y:5},arenaTarget:raid.targetTile??{x:5,y:5},arenaMarks:raid.marks,arenaLockedFor:raid.landsAt,nextBoarAt:raid.landsAt,staggerWeakUntil:raid.exposedUntil??0,exposedUntil:raid.exposedUntil??0};}
+export function coopMove(raid){
+ if(raid.hunt==='ashenStag'){
+  const move=ashenStagMoves[raid.move]??ashenStagMoves.ashCharge;
+  return move.id==='ashCharge'&&raid.charge?{...move,reach:raid.charge.reach}:move;
+ }
+ return smartAttacks[raid.move]??smartAttacks.bossIronSmash;
+}
+export function coopEncounter(raid){return {enemy:raid.hunt==='ashenStag'?'ashenStag':'depthsGuardian',bossVersion:raid.hunt?undefined:1,brainVersion:2,brainMaxHealth:raid.max,health:raid.hp,nextPlayerAt:raid.self?.nextStrikeAt??0,brainMove:raid.move,arenaVersion:1,arenaRoom:raid.room??'depthsVault',vaultMechanism:raid.vaultMechanism,arenaEnemy:raid.origin??{x:6,y:5},brainOrigin:raid.origin??{x:6,y:5},arenaTarget:raid.targetTile??{x:5,y:5},arenaMarks:raid.marks,arenaLockedFor:raid.landsAt,nextBoarAt:raid.landsAt,staggerWeakUntil:raid.exposedUntil??0,exposedUntil:raid.exposedUntil??0};}
 export function coopDanger(raid,position){const e={...coopEncounter(raid),arenaPlayer:position};return arenaInDanger(e,coopMove(raid))&&!arenaBehindCover(e,coopMove(raid));}
 export function vaultWarningStyle(move){
  if(move.shape==='arc')return 'sweep';

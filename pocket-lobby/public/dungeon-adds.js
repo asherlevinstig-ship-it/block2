@@ -7,7 +7,7 @@ export const addKinds={
  skitter:{id:'addSkitter',name:'Mire Hatchling',prop:'depthsSkitter',health:32,damage:6,shellArmor:0,interval:2800,archetype:'skirmisher',move:{id:'addBite',name:'Hatchling Bite',tell:900,recovery:650,shape:'arc',reach:1.5,angle:1.2,damage:0}},
  wisp:{id:'addWisp',name:'Rune Wisp',prop:'depthsSeer',health:30,damage:8,shellArmor:0,interval:3700,archetype:'caster',move:{id:'addBolt',name:'Wisp Bolt',tell:1400,recovery:800,shape:'bolt',reach:7,width:.42,damage:0,blockable:true}}
 };
-const effects=['burn','snaredUntil','chilledUntil','weakenedUntil','weakenPercent','interruptResistUntil','castHits','castDeadline','stagger','staggerUntil','staggerWeakUntil','staggerResistUntil','exposedUntil'];
+const effects=['runeMarkUntil','burn','snaredUntil','chilledUntil','weakenedUntil','weakenPercent','interruptResistUntil','castHits','castDeadline','stagger','staggerUntil','staggerWeakUntil','staggerResistUntil','exposedUntil'];
 const heroFields=['guardAt','guardUntil','guardFacing','nextGuardAt','sanctuaryWard','bloodShield','bloodShieldUntil','stamina','staminaAt','dodgeUntil','nextDodgeAt','nextPlayerAt','nextFleeAt','magicWard','magicWardUntil','usedEssences','counterUntil','counterPercent','autoDodgeUntil'];
 export function initializeAdds(e,now,foxBond=false){
  if(e.brainVersion!==2||e.arenaRoom==='depthsGate')return e;

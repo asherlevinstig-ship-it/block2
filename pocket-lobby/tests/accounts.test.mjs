@@ -157,6 +157,28 @@ test('teacher ability access is verified per session and preserves permanent slo
  assert.deepEqual(forged.data.state.styleAbilities.learned,['waypoint']);
 });
 
+test('verified teachers can claim and ride Cinderwing without recording hunt wins',async t=>{
+ const {db,sql}=testDatabase(),env={TOWER_DB:db};t.after(()=>sql.close());
+ const player=client(env);
+ await player.call('player/session',{legacy:{actionPoints:{value:0,active:true}}});
+ assert.equal((await player.call('account/register',{username:'DragonTeacher',password:'a sufficiently long passphrase'})).status,200);
+ const account=sql.prepare('SELECT account_id FROM tower_accounts WHERE username=?').get('DragonTeacher');
+ const current=async()=>(await player.call('player/state')).data;
+ const action=async(path,body={})=>player.call(path,{...body,revision:(await current()).revision,operation:crypto.randomUUID()});
+ const claim=()=>action('player/gameplay/teacherDragon');
+ assert.equal((await claim()).status,403);
+ sql.prepare('INSERT INTO tower_external_accounts VALUES (?,?,?,?,?)').run('liveweave','teacher:81',81,account.account_id,Date.now());
+ const initial=await current(),reward=await claim();
+ assert.equal(reward.status,200,reward.data.error);
+ assert.deepEqual(reward.data.state.mounts,{sightings:0,selected:false,teacherClaimed:true});
+ assert.equal(reward.data.state.actionPoints.value,initial.state.actionPoints.value);
+ assert.deepEqual((await claim()).data.state.mounts,reward.data.state.mounts);
+ assert.equal((await action('player/teacher/teleport',{room:'willowbank'})).status,200);
+ const ride=await action('player/gameplay/dragonMount',{selected:true});
+ assert.equal(ride.status,200,ride.data.error);
+ assert.equal((await current()).state.mounts.selected,true);
+});
+
 test('teacher teleport is role-gated and covers every location without spending AP',async t=>{
  const {db,sql}=testDatabase(),env={TOWER_DB:db};t.after(()=>sql.close());
  const player=client(env);

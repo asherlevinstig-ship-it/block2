@@ -50,7 +50,7 @@ export function recordCombatFx(events,result,time){
   if(result.enemyTile)events.enemyTile=result.enemyTile;
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
-  if(action==='attack'&&(damage||result.arrow))events.strikeAt=time;
+  if(['attack','runeBurst'].includes(action)&&(damage||result.arrow))events.strikeAt=time;
   if(!result.targetId)recordEnemyReaction(events,{damage,guarded:result.shellGuarded,broken:result.faultbreaker||staggered,interrupted},time);
   if(perfectDodge)events.perfectDodgeAt=time;
   if(counter)events.counterAt=time;
@@ -226,9 +226,9 @@ export function drawShortbowArrow(ctx,point,arrow,age,reduced){
   const [ax,ay]=point(from.x+.5,from.y+.5,16),[tx,ty]=point(to.x+.5,to.y+.5,blocked?11:15);
   const travel=reduced?1:Math.min(1,t/.68),x=ax+(tx-ax)*travel,y=ay+(ty-ay)*travel;
   const trail=Math.max(0,travel-.18);
-  ctx.save();ctx.strokeStyle=arrow.exposed?'#fff2a7':arrow.longbow?'#abffda':'#ffe0a1';ctx.lineWidth=arrow.longbow?2.2:1.6;ctx.globalAlpha=travel<1?1:1-t;
+  ctx.save();ctx.strokeStyle=arrow.staff?'#c6b5ff':arrow.exposed?'#fff2a7':arrow.longbow?'#abffda':'#ffe0a1';ctx.lineWidth=arrow.staff?3:arrow.longbow?2.2:1.6;ctx.globalAlpha=travel<1?1:1-t;
   line(ctx,ax+(tx-ax)*trail,ay+(ty-ay)*trail,x,y);
-  if(travel===1)particles(ctx,tx,ty,t,blocked?'#d9b493':arrow.exposed?'#fff2a7':arrow.longbow?'#a6ffd8':'#ffdb8a',reduced,13,5);
+  if(travel===1)particles(ctx,tx,ty,t,blocked?'#d9b493':arrow.staff?'#c6b5ff':arrow.exposed?'#fff2a7':arrow.longbow?'#a6ffd8':'#ffdb8a',reduced,13,5);
   ctx.restore();
 }
 export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,encounter}){
