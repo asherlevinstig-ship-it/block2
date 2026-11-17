@@ -4,7 +4,7 @@ const canvas = $('game');
 let ctx = canvas.getContext('2d');
 let trainingController=null;
 const standardView={width:480,height:310,cols:10,rows:10,originX:240,originY:94};
-const hubView={width:720,height:465,cols:18,rows:16,originX:342,originY:115};
+const hubView=grandLobbyView;
 const courtyardView={width:600,height:388,cols:14,rows:12,originX:282,originY:108};
 let view=standardView;
 // The sprite atlas is drawn at half size in world units. Keep two backing
@@ -2352,12 +2352,7 @@ function updateCombatMoment(time){
   if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
 }
 let editing=false,selection=null,zoom=1,camX=standardView.width/2,camY=standardView.height/2-4,camSmoothX=camX,camSmoothY=camY,camRoom='',camZoom=1,camAt=0,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
-const hubFurniture=[
-  ['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
-  ['plant',1,1],['plant',16,1],
-  ['sofa',4,10],['bench',4,12],
-  ['sofa',14,10,2]
-].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
+const hubFurniture=grandLobbyLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const courtyardFurniture=[
   ['trainingDummy',9,4],
   ['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],
@@ -2479,9 +2474,9 @@ const hubDoors=[
   {to:'lounge',side:'right',tile:{x:14,y:0},start:13.6,end:15.4,height:51,label:'LOUNGE'},
   {to:'store',side:'left',tile:{x:0,y:10},start:9.4,end:11.3,height:51,label:'FISHING'},
   {to:'market',side:'left',tile:{x:0,y:14},start:13.25,end:15.15,height:51,label:'MARKET'},
-  {to:'outside',side:'front',tile:{x:8,y:15},start:7.24,end:9.76,label:'OUTSIDE'}
+  {to:'outside',side:'front',tile:grandLobbyExit,start:7.24,end:9.76,label:'OUTSIDE'}
 ];
-const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
+const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},arrival:grandLobbyArrival,start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
 const bakeryDoor={to:'bakery',side:'right',tile:{x:7,y:0},start:6.55,end:8.45,height:49,label:'BAKERY',arrival:{x:1,y:5}};

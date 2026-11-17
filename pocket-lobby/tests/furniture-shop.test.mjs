@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {furnitureCatalog,purchaseFurniture} from '../public/furniture-catalog.js';
 import {normalizeState} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
-import {socialRooms,roomBoxes,reachableMove} from '../public/shared-world.js';
+import {socialRooms,roomBoxes,reachableMove,grandLobbyExit,grandLobbyArrival} from '../public/shared-world.js';
+import {autoDoors,autoTilePath} from '../server/auto-motion.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';import {testDatabase} from './db-helper.mjs';import {boot} from './helpers/game-client.mjs';
 test('all furniture purchases charge the catalogue price and preserve existing placed and free items',()=>{
  for(const [id,item] of Object.entries(furnitureCatalog)){
@@ -73,12 +74,19 @@ test('API retries and concurrent furniture purchases charge and deliver exactly 
  const revision=packet.revision,results=await Promise.all([1,2].map(()=>call('gameplay/buyFurniture',{revision,operation:crypto.randomUUID(),id:'safe',quantity:1})));assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);await call('state');assert.equal(packet.state.credits,110);assert.equal(packet.state.ownedFurniture.safe,1);assert.equal(packet.state.ownedFurniture.sofa,2);
 });
 
-test('walking to each lobby shop or home never crosses another shop doorway',()=>{
- const g=boot(normalizeState({location:'hub',quest:{accepted:true}}));
- for(const to of ['home','furnishings','market','store','armory','lounge']){
-  const path=JSON.parse(g.read("JSON.stringify(walkingPath({x:8,y:12},hubDoors.find(d=>d.to==="+JSON.stringify(to)+").tile))"));assert(path.length>0);
+test('every lobby exit can be reached from the expanded floor without crossing a different doorway',()=>{
+ const position={x:20,y:18};
+ const state=normalizeState({location:'hub',position,quest:{accepted:true}});
+ assert.deepEqual(state.position,position);
+ const g=boot(state);
+ assert.deepEqual(JSON.parse(g.read('JSON.stringify([view.cols,view.rows])')),socialRooms.hub);
+ for(const to of ['home','furnishings','market','store','armory','lounge','library','tailor','outside']){
+  const path=JSON.parse(g.read("JSON.stringify(walkingPath(player,hubDoors.find(d=>d.to==="+JSON.stringify(to)+").tile))"));assert(path.length>0);
   const forbidden=JSON.parse(g.read("JSON.stringify(hubDoors.filter(d=>d.to!=="+JSON.stringify(to)+").map(d=>d.tile))"));assert(path.every(p=>!forbidden.some(d=>d.x===p.x&&d.y===p.y)),to+' crosses a different exit');
  }
+ assert.deepEqual(autoDoors('hub',state).find(door=>door.to==='outside').tile,grandLobbyExit);
+ assert.deepEqual(autoDoors('outside',state).find(door=>door.to==='hub').arrival,grandLobbyArrival);
+ assert.deepEqual(autoTilePath('hub',position,grandLobbyExit,state).at(-1),grandLobbyExit);
  assert.deepEqual(g.errors,[]);
 });
 

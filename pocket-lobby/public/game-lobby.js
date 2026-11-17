@@ -95,6 +95,7 @@ function drawLobbyCrystal(x,y,time){
 }
 function drawGrandLobby(showDoors=true){
   const {cols,rows}=view;
+  const runnerEnd=rows-1.42;
   // The surrounding atrium already provides the backdrop. Keep the room layer transparent at its edges.
   for(const inset of [.55,.32,.12]){
     polygon([point(-inset,0,-13),point(cols+inset,0,-13),point(cols+inset,rows+inset,-13),point(0,rows+inset,-13)],'#070d1928');
@@ -117,11 +118,11 @@ function drawGrandLobby(showDoors=true){
   surface(9.7,2.85,2.1,1.9,.22,'#584a51');
   surface(9.8,2.93,1.9,1.74,.27,'#182943','#b28a5c');
   surface(9.93,3.06,1.64,1.48,.31,'#223b65','#d6ae6e');
-  surface(6.89,3.98,3.22,10.56,.22,'#584a51');
-  surface(7,4.07,3,10.38,.27,'#182943','#b28a5c');
-  surface(7.13,4.22,2.74,10.08,.31,'#223b65','#d6ae6e');
-  surface(7.26,4.37,2.48,9.78,.34,'#263e66','#765f54');
-  for(const y of [4.58,13.68])for(const x of [7.32,9.34]){
+  surface(6.89,3.98,3.22,runnerEnd-3.98,.22,'#584a51');
+  surface(7,4.07,3,runnerEnd-4.16,.27,'#182943','#b28a5c');
+  surface(7.13,4.22,2.74,runnerEnd-4.46,.31,'#223b65','#d6ae6e');
+  surface(7.26,4.37,2.48,runnerEnd-4.76,.34,'#263e66','#765f54');
+  for(const y of [4.58,runnerEnd-.82])for(const x of [7.32,9.34]){
     surface(x,y,.33,.08,.4,'#d5b071');surface(x,y,.08,.33,.4,'#d5b071');
   }
   // The embroidered shield follows the carpet plane, rather than facing the camera.
@@ -131,7 +132,7 @@ function drawGrandLobby(showDoors=true){
   surface(8.13,8.9,.74,.33,.7,'#e4c583');
   for(const x of [8.13,8.43,8.73])surface(x,8.62,.14,.36,.7,'#e4c583');
   surface(8.44,9.05,.13,.18,.75,'#1e3557');
-  for(let y=4.8;y<13.5;y+=.42){surface(7.18,y,.035,.12,.5,'#caa465');surface(9.78,y,.035,.12,.5,'#caa465');}
+  for(let y=4.8;y<runnerEnd-1;y+=.42){surface(7.18,y,.035,.12,.5,'#caa465');surface(9.78,y,.035,.12,.5,'#caa465');}
   // Seating bays use architectural inlays, leaving all existing walking tiles free.
   for(const [x,y,width,depth,ink,edge] of [[3.22,9.49,3.24,3.76,'#635669','#b58b78'],[12.81,9.39,3.69,2.98,'#556971','#b5a378']]){
     surface(x,y,width,depth,.16,'#4b454f');
@@ -144,7 +145,7 @@ function drawGrandLobby(showDoors=true){
   }
   // A compass mosaic gives the open south-east floor a place to gather.
   {
-    const cx=13.5,cy=13.4;
+    const cx=19.25,cy=14.7;
     const ring=(r,z,fill,line)=>{
       const [x,y]=point(cx,cy,z);
       ctx.beginPath();ctx.ellipse(x,y,r*25.456,r*12.728,0,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
@@ -154,12 +155,12 @@ function drawGrandLobby(showDoors=true){
       const angle=turn+i*Math.PI/4,reach=i%2?r*.38:r;
       return point(cx+Math.cos(angle)*reach,cy+Math.sin(angle)*reach,z);
     }),color);
-    ring(1.75,.15,'#6f6672');ring(1.62,.18,'#cdb07a');ring(1.5,.2,'#22375a');ring(1.02,.22,'#2b4570','#b9975f');
-    star(1.42,Math.PI/4,.24,'#b9975f');star(1.36,0,.26,'#ead29a');
+    ring(2.35,.15,'#6f6672');ring(2.22,.18,'#cdb07a');ring(2.1,.2,'#22375a');ring(1.48,.22,'#2b4570','#b9975f');
+    star(2,Math.PI/4,.24,'#b9975f');star(1.91,0,.26,'#ead29a');
     ring(.2,.3,'#22375a','#ead29a');
     lobbyLight(...point(cx,cy),70,'#ffd39a55',.47);
   }
-  for(const [x,y] of [[2.3,2.9],[4.4,4.1],[12.9,8.5],[6.7,14.2]]){
+  for(const [x,y] of [[2.3,2.9],[4.4,4.1],[12.9,8.5],[6.7,18.2],[21.2,2.8],[2.4,17.5]]){
     lobbyLight(...point(x,y),68,'#ffd39a7a',.47);
   }
   for(const [x,y] of [[2,10],[2,12],[13,8],[3,2]]){surface(x+.2,y+.1,2,.86,.12,'#34374633');surface(x+.35,y+.3,1.62,.67,.15,'#30344738');}
@@ -190,7 +191,7 @@ function drawGrandLobby(showDoors=true){
     wall(side,0,length,70.5,76,'#252f49');
     wall(side,0,length,70.5,71.2,'#8f775c');
     for(let u=.55;u<length;u+=.5)wall(side,u,u+.16,72.6,74.4,'#c9a66b');
-    for(const u of (side==='left'?[.20,4.4,8,12.05,15.54]:[.20,5.6,12.0,17.5])){
+    for(const u of (side==='left'?[.20,4.4,8,12.05,16,19.54]:[.20,5.6,12,17.5,23.5])){
       wall(side,u,u+.25,1,76,'#2b354d');
       wall(side,u+.04,u+.18,3,76,'#718096');
       wall(side,u+.04,u+.065,8,71,'#9ba5b4');
@@ -202,6 +203,7 @@ function drawGrandLobby(showDoors=true){
   }
   if(showDoors){drawLobbyWindow(10.7,11.9);}
   else{drawLobbyWindow(6.55,8.6);drawLobbyWindow(9.25,11.3);}
+  drawLobbyWindow(18.35,20.15);drawLobbyWindow(20.85,22.65);
   drawLobbyBanner('left',4.9);drawLobbyBanner('right',1.05);drawLobbyBanner('right',16.25);
   if(!showDoors){
     wall('left',1,4.4,39,65,'#171f34');
@@ -209,8 +211,8 @@ function drawGrandLobby(showDoors=true){
     wall('left',1.16,4.24,41,63,'#232d48');
   }
   if(showDoors)hubDoors.forEach(drawLobbyPortal);
-  for(const u of [5.27,8.72,12.53])drawLobbySconce('left',u);
-  for(const u of [2.12,5.05,12.8,17.05])drawLobbySconce('right',u);
+  for(const u of [5.27,8.72,12.53,17.65])drawLobbySconce('left',u);
+  for(const u of [2.12,5.05,12.8,17.05,20.5])drawLobbySconce('right',u);
 }
 // Lobby regulars. Like the Courtyard's, they are scenery on the shared clock: they never block a tile and cannot be clicked.
 // They arrive once the Warden has opened the doors, so a first-time visitor sees him alone.
@@ -218,7 +220,7 @@ function drawLobbyAmbience(time){
   const still=reducedMotion.matches;
   const t=still?0:time/1000;
   ctx.save();
-  for(const [x,y,phase] of [[4.7,11.35,0],[14.65,10.82,2.3],[8.58,14.48,4.8]]){
+  for(const [x,y,phase] of [[4.7,11.35,0],[14.65,10.82,2.3],[8.58,18.48,4.8]]){
     const [px,py]=point(x,y,.22);
     ctx.globalAlpha=still?.55:.49+.07*Math.sin(t*1.7+phase)+.045*Math.sin(t*4.9+phase);
     lobbyLight(px,py,42,'#ffbd7055',.48);
@@ -242,8 +244,8 @@ function lobbyLife(now){
     {ambient:'porter',x:11.6+Math.min(1,Math.max(0,(leg-.2)/.6))*4,y:12.04,moving:walking,direction:walking&&!out?'left':'right',back:walking&&!out,
       look:{outfit:5,hair:3,trousers:3,boots:2,faceStyle:'angular'}},
     // Two visitors talk on the compass mosaic, and the Tower cat keeps the seats company.
-    {ambient:'visitor',x:12.7,y:13.1,moving:false,direction:'right',back:false,wave:still?null:greeting,look:{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}},
-    {ambient:'visitor',x:13.8,y:13.5,moving:false,direction:'left',back:false,look:{outfit:5,hair:1,trousers:1,boots:0,faceStyle:'soft'}},
+    {ambient:'visitor',x:18.55,y:14.4,moving:false,direction:'right',back:false,wave:still?null:greeting,look:{outfit:2,hair:3,trousers:1,boots:0,gender:'female',hairStyle:'ponytail',faceStyle:'soft'}},
+    {ambient:'visitor',x:19.65,y:14.8,moving:false,direction:'left',back:false,look:{outfit:5,hair:1,trousers:1,boots:0,faceStyle:'soft'}},
     {ambient:'cat',x:5.45+(catOut?catStep:1-catStep)*.8,y:11.65,moving:catWalking,direction:catOut?'right':'left',back:false}
   ];
 }

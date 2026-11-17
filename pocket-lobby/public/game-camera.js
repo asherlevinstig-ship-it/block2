@@ -7,7 +7,12 @@ function defaultRoomZoom(room){return depthsStageIndex(room)>=0?1.27:['pond','mi
 // The Grand Lobby is framed, not followed. At its default zoom the whole room sits in the clear space between the
 // HUD panels, so the Warden, the Outside steps and both door walls are visible together on any screen.
 // Zooming by hand returns to the usual follow camera; Reset zoom frames the room again.
-const hubFrame={left:48,right:672,top:30,bottom:440};
+const hubFrame={
+  left:grandLobbyView.originX-grandLobbyView.rows*18-10,
+  right:grandLobbyView.originX+grandLobbyView.cols*18+10,
+  top:grandLobbyView.originY-85,
+  bottom:grandLobbyView.originY+(grandLobbyView.cols+grandLobbyView.rows)*9+18
+};
 let hubFramed=false,hubFrameAt=-Infinity,hubFrameCamera=null;
 function hubFraming(){
   const p=canvasBounds(),box=canvas.getBoundingClientRect();

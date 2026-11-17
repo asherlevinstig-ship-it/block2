@@ -16,7 +16,7 @@ import {autoHasNoPoints,stopForActionPoints,spendAutoPoint,requireActionPoint} f
 import {cellarFlags} from '../public/mill-cellar.js';
 import {autoPatientCast,finishAutoPatientCast} from './auto-abilities.mjs';
 import {awardFamiliarBond} from './familiar-progression.mjs';
-import {roomBoxes,validRoomTile} from '../public/shared-world.js';
+import {roomBoxes,validRoomTile,grandLobbyView} from '../public/shared-world.js';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
 import {normalizeVitals,useHunger,exertionDuration} from '../public/player-vitals.js';
 import {checkAutoWorkFood} from './auto-food.mjs';
@@ -124,6 +124,7 @@ export function normalizeState(input={}){
   const depthsRun=normalizeDepthsRun(input.depthsRun,input.location,hunting.encounter);
   if(input.vaultCoop!==undefined&&(!/^[A-F0-9]{8}$/.test(input.vaultCoop?.id??'')||!(input.vaultCoop.hunt==='ashenStag'?ashenStagRoom(input.location)&&!depthsRun:input.location==='depthsVault'&&depthsRun?.cleared===2)||hunting.encounter||input.controlMode==='auto'))throw new Error('Invalid co-op Vault membership.');
   let position=input.position;
+  const positionView=input.location==='hub'?grandLobbyView:input.location===wildlifeRoom?wildlifeView:input.location==='willowbank'?willowbankView:{cols:18,rows:16};
   if(input.location==='willowbank'&&position){
     const boxes=roomBoxes('willowbank');
     const open=(x,y)=>validRoomTile('willowbank',x,y,boxes,adventure);
@@ -141,7 +142,7 @@ export function normalizeState(input={}){
     mining:normalizeMining(input.mining),woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     outfitMagic:normalizeOutfitMagic(input.outfitMagic),wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair,...characterLook}),
     location:locations.has(input.location)?input.location:"home",
-    position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<(input.location===wildlifeRoom?wildlifeView.cols:input.location==='willowbank'?willowbankView.cols:18)&&position.y<(input.location===wildlifeRoom?wildlifeView.rows:input.location==='willowbank'?willowbankView.rows:16)?{x:position.x,y:position.y}:null,
+    position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<positionView.cols&&position.y<positionView.rows?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   state.robbery=normalizeRobbery(input.robbery);
