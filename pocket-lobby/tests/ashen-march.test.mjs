@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {crossesWillowbankChannel,dragonFlightPose} from '../public/dragon-flight.js';
-import {activeMount,legendaryDragon} from '../public/mounts.js';
+import {dragonFlightPose,withinDragonFlightRange} from '../public/dragon-flight.js';
+import {activeMount,canRideHere,legendaryDragon} from '../public/mounts.js';
 import {ashenStagRules,ashenStagSighting,ashenChargePath,ashstepCloakId} from '../public/ashen-stag.js';
 import {actVaultParty,advanceVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';
 import {arenaMoveEvent} from '../public/dungeon-arena.js';
@@ -11,7 +11,7 @@ import {testDatabase} from './db-helper.mjs';
 import {skillXpForLevel} from '../public/skill-curve.js';
 import {ashenAreas,ashenRooms,ashenLatch,cinderBrazier} from '../public/ashen-march.js';
 import {moonwood} from '../public/moonwood.js';
-import {reachableMove,roomBoxes,validRoomTile} from '../public/shared-world.js';
+import {reachableMove,roomBoxes,socialRooms,validRoomTile} from '../public/shared-world.js';
 import {pvpRooms} from '../public/pvp.js';
 import {huntEnemyForRoom} from '../public/hunting.js';
 import {normalizeState} from '../server/player-state.mjs';
@@ -134,8 +134,7 @@ test('Cinderwing is earned from three distinct claimed hunts and rides outdoors 
 test('Cinderwing crosses the channel while the saved player stays at launch until landing',()=>{
  const from={x:9,y:6},to={x:10,y:3};
  const s=normalizeState({location:'willowbank',position:from,mounts:{sightings:3,selected:true},actionPoints:{value:4}});
- assert(crossesWillowbankChannel(from,to));
- for(const tile of [{x:8,y:9},{x:12,y:3},{x:15,y:3},{x:11,y:1}]){
+ for(const tile of [from,{x:9,y:5},{x:15,y:3},{x:18,y:6}]){
   assert.throws(()=>applyGameplayAction(s,'dragonFlight',{tile},1000),/clear tile/);
  }
  applyGameplayAction(s,'dragonFlight',{tile:to},1000);
@@ -154,6 +153,50 @@ test('Cinderwing crosses the channel while the saved player stays at launch unti
  assert.deepEqual(s.position,to);assert.equal(s.mounts.flight,undefined);
  applyGameplayAction(s,'dragonLand',{},flight.landAt+10);
  assert.equal(s.actionPoints.value,4);
+});
+
+test('Cinderwing can fly and land in every rideable area and stays grounded inside the Tower',()=>{
+ const mounts={sightings:3,selected:true};
+ for(const [room,[cols,rows]] of Object.entries(socialRooms)){
+  const boxes=roomBoxes(room),tiles=[];
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+   if(validRoomTile(room,x,y,boxes)&&!moonwood.blocked(room,x,y,{}))tiles.push({x,y});
+  }
+  const [from]=tiles;
+  const to=tiles.find(tile=>withinDragonFlightRange(from,tile));
+  const state=normalizeState({location:room,position:from,mounts});
+  if(!canRideHere(room)){
+   assert.throws(()=>applyGameplayAction(state,'dragonFlight',{tile:to},1000),/outdoors/,room);
+   continue;
+  }
+  assert(to,room);
+  applyGameplayAction(state,'dragonFlight',{tile:to},1000);
+  const flight=state.mounts.flight;
+  assert.equal(flight.room,room);
+  assert.deepEqual(normalizeState(state).mounts.flight,flight);
+  assert(settleActivities(state,flight.landAt),room);
+  assert.equal(state.location,room);
+  assert.deepEqual(state.position,to);
+ }
+});
+
+test('The flight button opens landing selection outdoors and stays hidden in the Tower',()=>{
+ for(const room of ['outside','willowbank','hub']){
+  const state=normalizeState({location:room,position:{x:4,y:4},mounts:{sightings:3,selected:true},bedLessonComplete:true,quest:{accepted:true}});
+  const game=boot(state);
+  Object.assign(game.context,{activeMount,withinDragonFlightRange});
+  game.context.playerCloud.initial=state;
+  game.run('updateMountControl()');
+  const button=game.nodes.get('quickFlight');
+  assert.equal(button.hidden,room==='hub');
+  if(room==='hub')continue;
+  assert.equal(button.textContent,'Take flight');
+  button.onclick();
+  assert(game.read('flightAim.tiles.length')>0);
+  assert.equal(button.textContent,'Cancel flight');
+  button.onclick();
+  assert.equal(game.read('flightAim'),null);
+ }
 });
 
 test('Emberwood latch requires proximity, opens both directions, and persists through saves',()=>{

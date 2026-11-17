@@ -1,15 +1,21 @@
-export const dragonFlightRules={room:'willowbank',range:9,height:82,canopy:57};
-const bankTile=tile=>Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&tile.x>=0&&tile.x<14&&tile.y>=2&&tile.y<=13;
+import {ashenRooms,watchRooms,willowmereRooms} from './region-catalog.js';
+import {overlookRoom} from './lantern-keepers.js';
+import {waystationRoom} from './waystation.js';
+import {wildlifeRoom} from './wildlife.js';
 
-export function crossesWillowbankChannel(from,to){
- if(!bankTile(from)||!bankTile(to)||(from.y-5)*(to.y-5)>=0)return false;
- const across=from.x+(to.x-from.x)*(5-from.y)/(to.y-from.y);
- return across>=8.65&&across<=13.35&&Math.hypot(to.x-from.x,to.y-from.y)<=dragonFlightRules.range;
+const ridingRooms=new Set(['outside','trail','grove','creek','pond','logging','clearing','shrine','ruins','quarry',overlookRoom,waystationRoom,wildlifeRoom,...ashenRooms,...watchRooms.filter(room=>room!=='starfall'),...willowmereRooms]);
+export const canRideHere=room=>ridingRooms.has(room);
+export const dragonFlightRules={range:9,height:82,canopy:57};
+
+export function withinDragonFlightRange(from,to){
+ if(![from,to].every(tile=>Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&tile.x>=0&&tile.y>=0))return false;
+ const distance=Math.hypot(to.x-from.x,to.y-from.y);
+ return distance>0&&distance<=dragonFlightRules.range;
 }
 export const dragonFlightDuration=(from,to)=>3000+Math.round(Math.hypot(to.x-from.x,to.y-from.y)*150);
 
 export function normalizeDragonFlight(flight){
- if(flight?.room!==dragonFlightRules.room||!crossesWillowbankChannel(flight.from,flight.to)||
+ if(!canRideHere(flight?.room)||!withinDragonFlightRange(flight.from,flight.to)||
    !Number.isSafeInteger(flight.startedAt)||flight.startedAt<0||
    flight.landAt!==flight.startedAt+dragonFlightDuration(flight.from,flight.to))return null;
  return {room:flight.room,from:{x:flight.from.x,y:flight.from.y},to:{x:flight.to.x,y:flight.to.y},startedAt:flight.startedAt,landAt:flight.landAt};
@@ -25,7 +31,7 @@ export function dragonFlightPose(flight,now){
  const descent=ease(clamp((1-progress)/.32));
  const dx=flight.to.x-flight.from.x,dy=flight.to.y-flight.from.y;
  const height=dragonFlightRules.height*climb*descent;
- return {x:flight.from.x+dx*travel,y:flight.from.y+dy*travel,height,progress,
+ return {room:flight.room,x:flight.from.x+dx*travel,y:flight.from.y+dy*travel,height,progress,
    overCanopy:height>=dragonFlightRules.canopy,direction:dx-dy>=0?'right':'left',back:dx+dy<0,
    phase:progress<.32?'takeoff':progress<.68?'glide':progress<1?'landing':'landed'};
 }

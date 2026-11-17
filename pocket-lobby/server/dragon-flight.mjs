@@ -1,14 +1,15 @@
 import {activeMount} from '../public/mounts.js';
-import {crossesWillowbankChannel,dragonFlightRules,dragonFlightDuration} from '../public/dragon-flight.js';
+import {withinDragonFlightRange,dragonFlightDuration} from '../public/dragon-flight.js';
+import {moonwood} from '../public/moonwood.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 
 export function startDragonFlight(state,tile,now){
- const room=dragonFlightRules.room;
+ const room=state.location;
  const from=state.position;
- if(state.location!==room||!activeMount(state))throw new Error('Ride Cinderwing in Willowbank to take flight.');
+ if(!activeMount(state))throw new Error('Ride Cinderwing outdoors to take flight.');
  if(state.mounts.flight)throw new Error('Cinderwing is already in flight.');
- if(!crossesWillowbankChannel(from,tile)||!validRoomTile(room,tile.x,tile.y,roomBoxes(room),state.adventure)){
-  throw new Error('Choose a clear tile on the opposite bank within nine tiles.');
+ if(!withinDragonFlightRange(from,tile)||!validRoomTile(room,tile.x,tile.y,roomBoxes(room),state.adventure)||moonwood.blocked(room,tile.x,tile.y,state.adventure)){
+  throw new Error('Choose a clear tile within nine tiles.');
  }
  const to={x:tile.x,y:tile.y};
  state.mounts.flight={room,from:{...from},to,startedAt:now,landAt:now+dragonFlightDuration(from,to)};

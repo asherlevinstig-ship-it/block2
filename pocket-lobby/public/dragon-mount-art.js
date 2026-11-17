@@ -1,50 +1,116 @@
 import {dragonFlightRules} from './dragon-flight.js';
 
-// One ground anchor for both mount and rider. The wings and gait never move the actor's tile.
+const palette={
+ ink:'#211726', dark:'#3a2432', shade:'#642d39', scale:'#944135', light:'#c26043',
+ edge:'#e18753', bone:'#e7c493', tooth:'#fff0c7', leather:'#492e30', brass:'#f2b76a'
+};
+
+function dragonPainter(ctx){
+ function plane(points,fill,outline=null){
+  ctx.beginPath();
+  points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+  ctx.closePath();
+  ctx.fillStyle=fill;ctx.fill();
+  if(outline){ctx.strokeStyle=outline;ctx.lineWidth=1.4;ctx.stroke();}
+ }
+ function line(points,color,width=1){
+  ctx.beginPath();
+  points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();
+ }
+ return {plane,line};
+}
+
+function drawWing({plane,line},[root,wrist,tip,outer,middle,inner],near){
+ const membrane=near?['#963c40','#723048','#54293d']:['#783b51','#562c45','#40283c'];
+ // Each trailing edge curves in between wing fingers.
+ const scallop=(a,b)=>[(a[0]+b[0])/2+(wrist[0]-(a[0]+b[0])/2)*.25,(a[1]+b[1])/2+(wrist[1]-(a[1]+b[1])/2)*.25];
+ const first=scallop(tip,outer),second=scallop(outer,middle),third=scallop(middle,inner);
+ plane([root,wrist,tip,first,outer,second,middle,third,inner],membrane[0],palette.ink);
+ plane([wrist,outer,second,middle],membrane[1]);
+ plane([wrist,middle,third,inner,root],membrane[2]);
+ for(const joint of [tip,outer,middle,inner])line([wrist,joint],near?'#b35e54':'#965563');
+ line([root,wrist,tip],near?palette.light:palette.shade,2.4);
+ line([wrist,[wrist[0]-3,wrist[1]+1]],near?palette.edge:'#be766e');
+}
+
+function drawLeg({plane,line},x,y,stride,near){
+ const foot=x+stride;
+ plane([[x-5,y],[x+4,y-2],[foot+3,y+6],[foot,y+12],[foot+6,y+15],[foot+4,y+17],[foot-5,y+16],[foot-6,y+11],[x-7,y+6]],near?palette.scale:palette.shade,palette.ink);
+ if(near)line([[x-3,y+2],[foot,y+6],[foot-3,y+11]],palette.light,1.5);
+ line([[foot+1,y+15],[foot+5,y+16]],near?palette.bone:'#9e746f');
+}
+
+function drawHead({plane,line},back){
+ plane([[15,-26],[21,-37],[28,-41],[34,-39],[38,-34],[49,-31],[51,-27],[45,-23],[35,-23],[29,-18],[23,-18]],palette.scale,palette.ink);
+ plane([[23,-35],[28,-40],[34,-38],[38,-33],[48,-30],[45,-28],[35,-30],[27,-28]],palette.light);
+ plane([[26,-28],[33,-29],[40,-25],[50,-27],[45,-23],[35,-23],[29,-19],[24,-20]],palette.edge);
+ line([[32,-25],[39,-24],[47,-26]],palette.ink);
+ line([[46,-29],[47,-29]],palette.dark,1.6);
+ plane([[27,-37],[21,-39],[16,-49],[23,-45],[29,-43],[32,-39]],palette.bone,palette.ink);
+ plane([[32,-39],[31,-45],[33,-51],[36,-43],[36,-38]],back?palette.bone:'#b28b74',palette.ink);
+ plane([[28,-34],[35,-35],[33,-32],[30,-31]],palette.ink);
+ line([[30,-33],[33,-34]],'#ffdf72',1.5);
+ line([[29,-26],[27,-23]],palette.bone);
+ if(!back)line([[39,-24],[39,-22]],palette.tooth);
+}
+
 export function drawDragonMount(ctx,x,y,{direction,back,moving,time,reduced,flight=null},drawRider){
  const side=direction==='left'?-1:1;
  const cycle=reduced?0:time/(moving?92:420);
- const wing=flight?flightWing(flight,reduced):reduced?0:Math.round(Math.sin(cycle)*(moving?5:2));
- const stride=moving&&!flight&&!reduced?Math.round(Math.sin(cycle)*3):0;
- const bob=reduced?0:flight?.phase==='takeoff'&&flight.progress<.08?-Math.round(Math.sin(flight.progress/.08*Math.PI)*4):moving&&!flight?Math.round(Math.abs(Math.sin(cycle))*2):0;
- const ink='#2b2435',ember='#d88958',scales=back?'#955044':'#b46149';
- const shape=(vertices,fill,stroke=ink)=>{
-  ctx.beginPath();
-  vertices.forEach(([px,py],index)=>index?ctx.lineTo(px,py):ctx.moveTo(px,py));
-  ctx.closePath();ctx.fillStyle=fill;ctx.fill();
-  if(stroke){ctx.strokeStyle=stroke;ctx.stroke();}
- };
- ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.scale(side,1);ctx.lineWidth=1.4;ctx.lineJoin='round';
- if(!flight){ctx.fillStyle='#181e2d68';ctx.beginPath();ctx.ellipse(0,1,24,6,0,0,Math.PI*2);ctx.fill();}
+ const stride=moving&&!flight&&!reduced?Math.round(Math.sin(cycle)*4):0;
+ const bob=flight||reduced?0:Math.round((moving?Math.abs(Math.sin(cycle))*2:Math.sin(cycle)));
+ const wing=flight?flightWing(flight,reduced):Math.round(Math.sin(cycle)*(moving?3:1));
+ const rise=back?-6:2;
+ const tuck=flight?5:0;
+ const tailSwing=Math.round(Math.sin(cycle-.6)*(moving?3:1));
+ const art=dragonPainter(ctx),{plane,line}=art;
+ const groundX=Math.round(x),groundY=Math.round(y);
+ ctx.save();
+ ctx.translate(groundX,groundY);
+ ctx.scale(side,1);
+ ctx.lineJoin='round';
+ ctx.lineCap='round';
+ if(!flight){
+  ctx.fillStyle='#15122372';ctx.beginPath();ctx.ellipse(-3,1,36,8,0,0,Math.PI*2);ctx.fill();
+ }
  ctx.translate(0,-bob);
- // Tail, far wing and far legs.
- shape([[-12,-14],[-22,-11],[-30,-11],[-39,-19],[-34,-10],[-28,-6],[-18,-7]],'#744352');
- const spread=flight?14:0;
- shape([[-10,-16],[-22-spread,-37-wing],[-8,-33-wing],[4,-23],[-3,-25],[-8,-20]],'#733f59');
- shape([[-14,-11],[-9,-12],[-10-stride,-3],[-16-stride,-2]],'#774451');
- shape([[12,-14],[16,-13],[18+stride,-4],[13+stride,-3]],'#774451');
- // Chest, neck and face with warm scales and a high-contrast eye.
- shape([[-19,-13],[-15,-21],[-5,-25],[8,-23],[15,-26],[20,-24],[19,-15],[12,-9],[0,-7],[-13,-8]],scales);
- shape([[9,-15],[17,-15],[13,-9],[4,-7],[-2,-8]],'#cb9569');
- shape([[14,-23],[16,-32],[24,-34],[29,-29],[34,-28],[33,-24],[25,-22],[19,-15],[16,-16]],scales);
- shape([[17,-31],[16,-39],[22,-34]],'#e2bc82');
- shape([[21,-34],[24,-40],[27,-33]],'#e8ca96');
- shape([[20,-24],[26,-23],[33,-25],[29,-22],[23,-21]],'#d99b6c',null);
- ctx.fillStyle='#422738';ctx.fillRect(24,-30,5,3);ctx.fillStyle='#ffe58c';ctx.fillRect(25,-30,3,2);
- // Saddle and legs. Contrasting feet keep the grounded gait readable.
- shape([[-11,-22],[1,-24],[8,-20],[4,-16],[-9,-17]],'#4b3448');
- shape([[-9,-23],[0,-25],[5,-22],[1,-20],[-9,-20]],'#cf9e68');
- shape([[-12,-12],[-7,-10],[-9+stride,-3],[-14+stride,0],[-18+stride,-1]],scales);
- shape([[9,-12],[15,-12],[13-stride,-5],[17-stride,-1],[10-stride,0]],scales);
- ctx.fillStyle='#e3bb81';ctx.fillRect(-18+stride,-1,5,1);ctx.fillRect(11-stride,-1,5,1);
+ const tail=[[-13,-16],[-25,-11],[-39,-9],[-50,-13+tailSwing],[-57,-23+tailSwing]];
+ line(tail,palette.ink,9);line(tail,palette.shade,6);
+ line([[-14,-18],[-26,-13],[-39,-11],[-49,-15+tailSwing]],palette.light,2);
+ plane([tail[4],[-65,-30+tailSwing],[-62,-21+tailSwing],[-62,-16+tailSwing],[-54,-20+tailSwing]],palette.edge,palette.ink);
+ const farWing=flight?[[3,-27],[16,-56-wing],[48,-60-wing],[36,-49-wing],[25,-43-wing],[19,-33]]:
+  [[1,-27],[14,-46-wing],[28,-45-wing],[20,-41-wing],[15,-35],[10,-30]];
+ drawWing(art,farWing,false);
+ drawLeg(art,-16,-19-tuck,-stride,false);
+ drawLeg(art,17,-19+rise-tuck,stride,false);
+ plane([[-23,-15],[-23,-22],[-16,-28],[-7,-31],[9,-29],[15,-33+rise],[22,-37+rise],[31,-32+rise],[30,-23+rise],[20,-14],[12,-9],[-8,-7],[-19,-9]],palette.scale,palette.ink);
+ plane([[-17,-24],[-7,-29],[9,-27],[18,-30+rise],[23,-34+rise],[22,-27+rise],[14,-21],[2,-22],[-14,-19]],palette.light);
+ plane([[26,-27+rise],[30,-25+rise],[22,-16],[14,-11],[6,-10],[-4,-11],[8,-16],[15,-21]],palette.edge);
+ for(const [sx,sy] of [[-20,-19],[-15,-23],[-11,-19],[-5,-17],[1,-19],[17,-24],[23,-29+rise]]){
+  line([[sx,sy],[sx+2,sy+1],[sx+4,sy]],palette.shade);
+ }
+ plane([[10,-28],[12,-35],[17,-32+rise],[18,-41+rise],[23,-36+rise],[25,-28+rise]],palette.shade,palette.ink);
+ line([[13,-33],[16,-31],[19,-36+rise],[21,-35+rise]],palette.edge);
+ ctx.save();ctx.translate(0,rise);drawHead(art,back);ctx.restore();
+ plane([[-13,-29],[2,-30],[10,-26],[5,-17],[-7,-16],[-12,-21]],palette.leather,palette.ink);
+ line([[-12,-27],[1,-28],[7,-25]],palette.brass,1.6);
+ line([[9,-24],[14,-20],[21,-26+rise],[31,-26+rise]],palette.leather,1.6);
+ drawLeg(art,-16,-17-tuck,stride,true);
+ drawLeg(art,13,-17-tuck,-stride,true);
  ctx.restore();
- const riderY=Math.round(y)-24-bob;
- drawRider(Math.round(x)-side*3,riderY);
- // Near wing folds forward of the saddle, leaving the rider's face clear.
- ctx.save();ctx.translate(Math.round(x),Math.round(y)-bob);ctx.scale(side,1);ctx.lineWidth=1.4;ctx.lineJoin='round';
- shape([[2,-18],[-9,-25],[-27-spread,-27-wing],[-20-spread*.7,-19],[-23,-14],[-12,-15],[-8,-10]],'#914b63');
- shape([[-26-spread,-26-wing],[-10,-22],[1,-18],[-12,-16]],'#b96a69',null);
- ctx.strokeStyle=ember;ctx.beginPath();ctx.moveTo(-25-spread,-26-wing);ctx.lineTo(-9,-23);ctx.lineTo(1,-18);ctx.lineTo(-8,-12);ctx.stroke();
+ const riderY=groundY-24-bob;
+ drawRider(groundX-side*4,riderY);
+
+ ctx.save();
+ ctx.translate(groundX,groundY-bob);
+ ctx.scale(side,1);
+ ctx.lineJoin='round';
+ ctx.lineCap='round';
+ const nearWing=flight?[[5,-23],[-31,-39+wing],[-71,-27+wing],[-57,-21+wing],[-42,-13+wing],[-21,-10+wing/2]]:
+  [[5,-23],[-15,-29+wing],[-43,-24+wing],[-35,-18+wing],[-23,-15+wing],[-13,-12]];
+ drawWing(art,nearWing,true);
+ line([[4,-24],[2,-16],[5,-15]],palette.brass,1.4);
  ctx.restore();
  return riderY;
 }
@@ -63,7 +129,7 @@ export function drawDragonFlightGround(ctx,point,pose,{reduced}){
   ctx.globalAlpha=opacity*(1-altitude*.56);
   ctx.fillStyle='#101727';ctx.beginPath();ctx.ellipse(x,y,21+spread+altitude*12,6+spread*.3+altitude*3,0,0,Math.PI*2);ctx.fill();
  }
- if(pose.x>=9&&pose.x<14&&Math.abs(pose.y-5)<.8&&altitude>.4){
+ if(pose.room==='willowbank'&&pose.x>=9&&pose.x<14&&Math.abs(pose.y-5)<.8&&altitude>.4){
   ctx.fillStyle='#a8d1c9';
   ctx.globalAlpha=(1-Math.abs(pose.y-5)/.8)*.28;
   ctx.beginPath();ctx.ellipse(x-4,y-1,36,4,0,0,Math.PI*2);ctx.fill();

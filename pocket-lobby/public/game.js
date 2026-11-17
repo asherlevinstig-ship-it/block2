@@ -7869,11 +7869,11 @@ var fieldJournalOpen=false;
 function updateMountControl(state=window.playerCloud?.initial){
   const flight=$('quickFlight');
   if(flight){
-    flight.hidden=!dragonFlight&&(!window.activeMount?.(state)||state.location!==window.dragonFlightRules?.room||currentRoom!==state.location);
+    flight.hidden=!dragonFlight&&(!window.activeMount?.(state)||currentRoom!==state.location);
     flight.disabled=!!dragonFlight;
     flight.textContent=dragonFlight?'In flight':flightAim?'Cancel flight':'Take flight';
     flight.setAttribute('aria-pressed',String(!!flightAim));
-    flight.title='Choose a Willowbank landing tile · Y';
+    flight.title='Choose a landing tile · Y';
   }
   const button=$('quickMount');
   if(!button)return;
@@ -10000,22 +10000,24 @@ function setFlightAim(aim){
 }
 function toggleDragonFlightAim(){
   if(flightAim){setFlightAim(null);note('Flight cancelled.');return;}
-  if(unavailable()||!currentDragon()||currentRoom!==dragonFlightRules.room)return;
+  if(dragonFlight){note('Cinderwing is already in flight.');return;}
+  if(unavailable())return;
+  if(!currentDragon()){note('Mount Cinderwing before taking flight.');return;}
   if(step||route.length){note('Stop riding before choosing a landing tile.');return;}
   const from={x:player.cx,y:player.cy},tiles=[],items=roomFurniture();
-  for(let y=2;y<view.rows-2;y++)for(let x=0;x<14;x++){
+  for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     const tile={x,y};
-    if(crossesWillowbankChannel(from,tile)&&!blocked(x,y,items))tiles.push(tile);
+    if(withinDragonFlightRange(from,tile)&&!blocked(x,y,items))tiles.push(tile);
   }
-  if(!tiles.length){note('Ride closer to the riverside path to cross the channel.');return;}
+  if(!tiles.length){note('No clear landing tiles nearby. Ride to an open spot first.');return;}
   tiles.sort((a,b)=>Math.hypot(a.x-from.x,a.y-from.y)-Math.hypot(b.x-from.x,b.y-from.y));
   setFlightAim({tiles});
   canvas.focus({preventScroll:true});
-  note('Choose a bright landing tile across the river. Enter confirms the selected tile · Esc cancels.',7000);
+  note('Choose a highlighted landing tile. Enter confirms the selected tile · Esc cancels.',7000);
 }
 async function launchDragonFlight(tile){
   if(!flightAim||unavailable())return;
-  if(!flightAim.tiles.some(spot=>spot.x===tile?.x&&spot.y===tile?.y)){note('Choose a clear, highlighted tile on the opposite bank.');return;}
+  if(!flightAim.tiles.some(spot=>spot.x===tile?.x&&spot.y===tile?.y)){note('Choose a clear, highlighted landing tile.');return;}
   setFlightAim(null);
   try{await serverGameplay('dragonFlight',{tile});note('Cinderwing takes flight.');}
   catch(error){note(error.message);}
