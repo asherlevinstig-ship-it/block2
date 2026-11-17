@@ -1,5 +1,6 @@
 import {recordEquipmentEffect} from './equipment-effects.js';
 export const rareHunts={
+ cinderthornLongbow:{name:'Cinderthorn Longbow',kind:'weapon',enemy:'cinderback',source:'Cinderback · The Broken Road',room:'brokenRoad',perk:'Long-range arrows snare surviving enemies for 2.5 seconds.',cost:'Requires Strength 2 and Agility 4. Takes 1.5 seconds to draw.'},
  vampiricSword:{name:'Vampiric Sword',kind:'weapon',enemy:'depthsGuardian',source:'Vault Guardian · Sunken Vault',room:'ruins',perk:'Recover 4 HP per enemy killed while wielded.',cost:'18 base damage; slower than a Duelist’s Blade.'},
  anglersCloak:{name:'Angler’s Cloak',kind:'clothing',enemy:'cacheGuardian',source:'Rune Channeler · Sealed Alcove',room:'ruins',perk:'+5 percentage points Fine fish; +1 point Rare fish while worn.',cost:'Uses your top slot, replacing other cloaks or mage robes.'},
  prospectorsGloves:{name:'Prospector’s Gloves',kind:'armour',enemy:'crystalGuardian',source:'Shardback Guardian · Crystaldeep Tunnels',room:'crystaldeep',perk:'10% chance for +1 ore per completed mining swing.',cost:'Uses the armour slot. Offers no damage absorption.'},

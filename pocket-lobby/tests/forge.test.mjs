@@ -66,4 +66,12 @@ test('forge enforces costs, levels, ownership and replay protection; upgraded pi
  assert.equal(bow.state.woodcutting.timber,0);
  assert.equal(bow.state.huntingLoot.copperBar,0);
  assert.equal(bow.state.actionPoints.value,0);
+ await seed({huntingLoot:{ironBar:3},woodcutting:{timber:4},stats:{...packet.state.stats,vitalityXp:skillXpForLevel(2)},actionPoints:{value:2}});
+ const shield=await action('mineCraft',{id:'ironShield'});
+ assert.equal(shield.status,200,shield.error);
+ assert.equal(shield.state.combatGear.equippedArmour,'ironShield');
+ assert(shield.state.combatGear.ownedArmour.includes('ironShield'));
+ assert.equal(shield.state.huntingLoot.ironBar,0);assert.equal(shield.state.woodcutting.timber,0);
+ assert.equal(shield.state.actionPoints.value,1);
+ assert.equal((await action('mineCraft',{id:'ironShield'})).status,400);
 });

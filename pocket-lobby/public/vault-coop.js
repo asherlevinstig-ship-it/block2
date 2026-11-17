@@ -1,5 +1,6 @@
 import {smartAttacks} from './enemy-brain.js';
 import {arenaInDanger,arenaBehindCover} from './dungeon-arena.js';
+export const vaultTeamCounter={move:'bossIronSweep',duration:2000,bonus:.35};
 export const vaultCoopRules={limit:4,lifetime:30*60000,health:420,scale:.65};
 export const vaultPhaseDetails=[
  {name:'Ironclad',color:'#e6c080',hint:'Crack the armour with Faultbreaker, or avoid the smash and strike the exposed core.',moves:['bossIronSmash','bossHarpoon','bossIronSweep']},
@@ -10,14 +11,24 @@ export const coopPhase=raid=>raid.hp>raid.max*2/3?1:raid.hp>raid.max/3?2:3;
 export const coopMove=raid=>smartAttacks[raid.move]??smartAttacks.bossIronSmash;
 export function coopEncounter(raid){return {enemy:'depthsGuardian',bossVersion:1,brainVersion:2,brainMaxHealth:raid.max,health:raid.hp,nextPlayerAt:raid.self?.nextStrikeAt??0,brainMove:raid.move,arenaVersion:1,arenaRoom:'depthsVault',vaultMechanism:raid.vaultMechanism,arenaEnemy:raid.origin??{x:6,y:5},brainOrigin:raid.origin??{x:6,y:5},arenaTarget:raid.targetTile??{x:5,y:5},arenaMarks:raid.marks,arenaLockedFor:raid.landsAt,nextBoarAt:raid.landsAt,staggerWeakUntil:raid.exposedUntil??0,exposedUntil:raid.exposedUntil??0};}
 export function coopDanger(raid,position){const e={...coopEncounter(raid),arenaPlayer:position};return arenaInDanger(e,coopMove(raid))&&!arenaBehindCover(e,coopMove(raid));}
-export function vaultWarningPrompt(move,ms,{danger,covered,canDodge}){
+export function vaultWarningStyle(move){
+ if(move.shape==='arc')return 'sweep';
+ if(move.shape==='ring'||move.shape==='marks')return 'slam';
+ if(move.shape==='bolt')return 'bolt';
+ return 'move';
+}
+export function vaultWarningPrompt(move,ms,{danger,covered,canDodge,canGuard=false,guardRaised=false,guardWindow=330}){
  if(covered)return 'In cover · Hold position';
  if(!danger)return 'Clear of this attack';
- if(canDodge&&ms>0&&ms<=350)return 'DODGE NOW · Space';
+ if(move.shape==='arc'&&move.damage<6){
+  if(guardRaised)return 'Shield up · Face the sweep';
+  if(canGuard&&ms>0&&ms<=guardWindow)return 'GUARD NOW · B';
+  if(canGuard)return 'Wait for Guard now, or step sideways';
+ }
  if(move.shape==='safeLane')return 'Reach the green lane';
- if(move.shape==='marks')return 'Leave the marked rings';
- if(move.blockable)return 'Get behind a pillar or step out of the bolt lanes';
- if(move.opensShell)return 'Leave the ring or wait for the dodge cue';
+ if(move.shape==='marks'||move.shape==='ring')return 'Move clear of the ring';
+ if(move.blockable)return 'Take green cover or step out of the bolt lane';
+ if(canDodge&&ms>0&&ms<=350)return 'DODGE NOW · Space';
  if(move.shape==='arc')return 'Step sideways out of the sweep';
  return 'Step out of the marked tiles';
 }

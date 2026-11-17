@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {arenaBehindCover,arenaMoveEvent,dungeonFloor} from '../public/dungeon-arena.js';
-import {coopDanger,coopEncounter,coopMove} from '../public/vault-coop.js';
+import {arenaBehindCover,arenaBoltBlocker,arenaMoveEvent,dungeonFloor} from '../public/dungeon-arena.js';
+import {coopDanger,coopEncounter,coopMove,vaultWarningPrompt} from '../public/vault-coop.js';
+import {drawArenaTelegraph} from '../public/dungeon-art.js';
 import {smartAttacks} from '../public/enemy-brain.js';
 import {normalizeState} from '../server/player-state.mjs';import {protectFishingState,applyGameplayAction} from '../server/gameplay.mjs';import {actVaultParty,advanceVaultParty,publicVaultParty,writeVaultParty,readVaultParty} from '../server/vault-coop.mjs';import {testDatabase} from './db-helper.mjs';import {handlePlayerApi} from '../server/player-api.mjs';import {normalizeMagic} from '../public/essences.js';import {advanceServerCombat} from '../server/activities.mjs';import {boot} from './helpers/game-client.mjs';import {enemyRoleInfo} from '../public/enemy-roles.js';
 function player(name='A'){return normalizeState({avatar:{name,outfit:0,hair:0},location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2,routeChoice:'safe'},stats:{strengthXp:1000,agilityXp:1000,vitalityXp:1000},combatGear:{ownedWeapons:['trainingSword','ironSword','quickfang'],equippedWeapon:'ironSword'},magic:{picks:['fire','ice','storm'],unlocked:['fire:sword','ice:shield','fire:renewal','storm:sword'],slots:{q:'ice:shield',e:'fire:renewal'}}});}
@@ -19,6 +20,102 @@ test('a Vault archer draws before firing and a blocked arrow spends one AP',()=>
  assert.deepEqual(publicVaultParty(r,'a',2900).members.find(member=>member.id===m.id).arrow,{from:{x:3,y:3},to:{x:4,y:3},blocked:true});
  a.position={x:3,y:5};r.origin={x:6,y:3};
  assert(act(r,a,'a','strike',4800).hit>0);assert.equal(a.actionPoints.value,1);
+});
+
+test('the longbow buys the Vault party time before an unmarked attack',()=>{
+ const {r,a}=party(),m=r.members.a;
+ a.combatGear.ownedWeapons.push('cinderthornLongbow');a.combatGear.equippedWeapon='cinderthornLongbow';a.actionPoints.value=2;
+ Object.assign(m,{weapon:'cinderthornLongbow',attackInterval:2400});
+ act(r,a,'a','start',2000);
+ assert.throws(()=>act(r,a,'a','strike',3499),/recover/);
+ const warning=r.warningAt,lands=r.landsAt;
+ const shot=act(r,a,'a','strike',3500);
+ assert(shot.hit>0);assert.match(shot.text,/snared/);
+ assert.equal(r.warningAt,warning+500);assert.equal(r.landsAt,lands+500);
+ assert.equal(a.actionPoints.value,1);
+});
+
+test('sword and shield holds the Guardian while a longbow ally repositions and draws',()=>{
+ const {r,a,b}=party(),tank=r.members.a,archer=r.members.b;
+ Object.assign(a.combatGear,{ownedArmour:['ironShield'],equippedArmour:'ironShield'});a.actionPoints.value=2;
+ b.combatGear.ownedWeapons.push('cinderthornLongbow');b.combatGear.equippedWeapon='cinderthornLongbow';b.actionPoints.value=2;
+ Object.assign(archer,{weapon:'cinderthornLongbow',attackInterval:2400});
+ act(r,a,'a','start',2000);
+ Object.assign(r,{move:'bossIronSweep',warningAt:2600,landsAt:4000,target:'a',origin:{x:6,y:5},targetTile:{x:5,y:5}});
+ b.position={x:9,y:5};
+ const shot=act(r,b,'b','strike',3500);
+ assert(shot.hit>0);assert.equal(b.actionPoints.value,1);
+ assert.equal(r.landsAt,4000);
+ act(r,a,'a','guard',3750);
+ assert.equal(a.actionPoints.value,2);
+ advanceVaultParty(r,4000);
+ assert(tank.lastHit.perfectBlock);assert(tank.lastHit.guardBlocked>0);
+ assert(tank.hp>=90&&archer.hp===b.health);
+ assert.equal(r.target,'a');assert.equal(tank.support,1);
+ const counter=act(r,a,'a','strike',4001);
+ assert.match(counter.text,/Counter/);assert.equal(a.actionPoints.value,1);
+});
+
+test('Anchor Sweep rewards an ally who holds an arrow for the shield player’s perfect block',()=>{
+ const {r,a,b}=party(),tank=r.members.a,archer=r.members.b;
+ Object.assign(a.combatGear,{ownedArmour:['ironShield'],equippedArmour:'ironShield'});a.actionPoints.value=2;
+ b.combatGear.ownedWeapons.push('cinderthornLongbow');b.combatGear.equippedWeapon='cinderthornLongbow';b.actionPoints.value=3;
+ Object.assign(archer,{weapon:'cinderthornLongbow',attackInterval:2400});
+ act(r,a,'a','start',2000);
+ Object.assign(r,{move:'bossIronSweep',warningAt:2600,landsAt:4000,target:'a',origin:{x:6,y:5},targetTile:{x:5,y:5}});
+ b.position={x:9,y:5};
+ act(r,b,'b','tick',3500);
+ assert.equal(publicVaultParty(r,'b',3500).teamOpening,null);
+ assert.equal(b.actionPoints.value,3);
+ act(r,a,'a','guard',3750);
+ const counter=act(r,a,'a','strike',4001);
+ assert.match(counter.text,/Counter/);
+ assert.equal(a.actionPoints.value,1);
+ const opening=publicVaultParty(r,'b',4001).teamOpening;
+ assert.deepEqual(opening,{at:4000,until:6000,openedBy:tank.id});
+ assert.deepEqual(publicVaultParty(r,'a',4001).teamOpening,opening);
+
+ const covered=structuredClone(r),behindCover=structuredClone(b);
+ covered.origin={x:6,y:3};behindCover.position={x:3,y:3};
+ assert.match(act(covered,behindCover,'b','strike',4050).text,/Cover blocked/);
+ assert(publicVaultParty(covered,'b',4050).teamOpening);
+
+ const baseline=structuredClone(r),baselineArcher=structuredClone(b);
+ delete baseline.teamOpening;
+ const regular=act(baseline,baselineArcher,'b','strike',4100);
+ assert.equal(publicVaultParty(r,'b',6000).teamOpening,null);
+ const shot=act(r,b,'b','strike',4100);
+ assert.match(shot.text,/Exposed hit/);
+ assert.equal(shot.hit,regular.hit+Math.ceil(regular.hit*.35));
+ assert.equal(b.actionPoints.value,2);
+ assert.equal(publicVaultParty(r,'a',4100).teamOpening,null);
+ assert.equal(publicVaultParty(r,'a',4100).lastExposedHit.damage,shot.hit);
+});
+
+test('Guardian warnings give different instructions to a frontline shield and a clear archer',()=>{
+ const {r,a}=party();act(r,a,'a','start',2000);
+ Object.assign(r,{move:'bossIronSweep',origin:{x:6,y:5},targetTile:{x:5,y:5}});
+ const sweep=coopMove(r);
+ const danger=coopDanger(r,{x:5,y:5}),archerDanger=coopDanger(r,{x:9,y:5});
+ assert(danger);assert(!archerDanger);
+ assert.equal(vaultWarningPrompt(sweep,250,{danger,canGuard:true,canDodge:true}),'GUARD NOW · B');
+ assert.equal(vaultWarningPrompt(sweep,250,{danger:archerDanger,canGuard:false}),'Clear of this attack');
+ assert.match(vaultWarningPrompt(smartAttacks.bossIronSmash,250,{danger:true,canGuard:true,canDodge:true}),/Move clear/);
+ assert.match(vaultWarningPrompt(smartAttacks.bossFan,250,{danger:true,canDodge:true}),/Take green cover/);
+ assert.match(vaultWarningPrompt(smartAttacks.bossFan,250,{danger:true,covered:true}),/In cover/);
+});
+
+test('the Bolt warning labels real blocking cover and shows covered floor cells',()=>{
+ const raid={move:'bossFan',origin:{x:7,y:5},targetTile:{x:4,y:5},landsAt:5000,max:420,hp:120,vaultMechanism:'screen'};
+ const encounter=coopEncounter(raid),move=coopMove(raid),tile={x:3,y:5};
+ assert.deepEqual(arenaBoltBlocker(encounter,move,tile),{x:4.5,y:5});
+ assert(arenaBehindCover(encounter,move,tile));
+ const captions=[],tiles=[];
+ const ctx=new Proxy({fillText:text=>captions.push(text)},{get:(target,key)=>target[key]??(()=>{})});
+ drawArenaTelegraph({ctx,point:(x,y)=>[x,y],surface:(...args)=>tiles.push(args),encounter,move,now:4250,reduced:true});
+ assert(captions.includes('COVER'));
+ assert(captions.some(label=>label.startsWith('BOLT LANES')));
+ assert(tiles.some(([x,y,width,depth,z,fill])=>x===3.05&&y===5.05&&fill==='#82d5bb33'));
 });
 
 test('the spillway opens a real combat tile and survives a save on that tile',()=>{

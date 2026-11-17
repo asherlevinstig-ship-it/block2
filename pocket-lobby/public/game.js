@@ -764,7 +764,7 @@ function drawRemote(peer,time){
       events:{strikeAt:peer.raidStrikeAt??-10000,castAt:peer.raidCastAt??-10000,castKind:peer.raidCastKind,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000,...peer.reactionFx},reduced:reducedMotion.matches}):null;
   const reading=!moving&&!chopping&&!cast&&!raidPose&&readingAt(peer.reading,currentRoom,peer.x,peer.y,now);
   const meditating=!reading&&peer.meditating===true&&!moving&&!chopping&&!cast&&!raidPose&&!peer.seat&&peer.activity!=='combat';
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair,gender:peer.gender,hairStyle:peer.hairStyle,faceStyle:peer.faceStyle,skinTone:peer.skinTone},{shadowstep:shadowstepBody(peer,time),reading,readingAge:reading?now-peer.reading.startedAt:0,meditating,direction:facing.direction,back:facing.back,cycle,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,guarding:(peer.guardUntil??0)>now,weaponTier:chopping?(peer.mining?(peer.mining.pick??'basic')+'Pick':'basicAxe'):peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(peer.arrow)drawShortbowArrow(ctx,point,peer.arrow.shot,time-peer.arrow.at,reducedMotion.matches);
   if(peer.stoneguardUntil>now)window.drawStoneguard?.(ctx,x,y,time,peer.stoneguardUntil-now,reducedMotion.matches);
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing,remote:true});
@@ -1633,7 +1633,9 @@ function startMonsterEncounter(enemy,standGround=false,ambush=false,feedback=not
       }else feedback(error.message);
     });return;
   }
-  hunting.encounter=createHunt(combatNow(),enemy.health,enemy.id);
+  const now=combatNow(),drawMs=bowDrawTime(combatGear.equippedWeapon);
+  hunting.encounter=createHunt(now,enemy.health,enemy.id);
+  if(drawMs)hunting.encounter.nextPlayerAt=now+drawMs;
   setPlayerCombat(true);
   combatMessage='You engage the '+enemy.name+'. Dodge '+enemyAttack(hunting.encounter,enemy).name+' with Space, or Flee.';
   updateCombatPanel();savePlayerState();
@@ -1642,7 +1644,12 @@ function startMonsterEncounter(enemy,standGround=false,ambush=false,feedback=not
 function combatAction(action){
   if(routineControlled()){note('Use Take control to stop your routine.');return;}
   combatAudio.enable(combatSoundEnabled);
-  if(!player.inCombat||!['flee','dodge'].includes(action))return;
+  if(!player.inCombat||!['flee','dodge','guard'].includes(action))return;
+  if(action==='guard'){
+    if(!canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon))return;
+    const encounter=hunting.encounter,now=combatNow();
+    if(now<(encounter?.nextGuardAt??0)||combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped)<shieldRules.raiseCost){note('Let your guard and stamina recover.');return;}
+  }
   if(window.playerCloud?.gameplay){
     if(action==='dodge'&&hunting.encounter&&combatNow()>=hunting.encounter.nextDodgeAt&&combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)>=combatDodgeCost(armourSelection(combatGear),currentCombatBuild()))previewDodge();
     sendServerCombat(action);return;
@@ -1682,6 +1689,11 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   else if(result.bloodPriceBlocked)combatMessage+=' Blood Price absorbed '+result.bloodPriceBlocked+' damage.';
   if(result.stoneguardBlocked)combatMessage+=' Stoneguard blocked '+result.stoneguardBlocked+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
+  if(result.guardRaised)combatMessage='Shield raised · Block a frontal hit.';
+  if(result.guardBroken)combatMessage='Guard broken! '+result.guardBlocked+' damage blocked. Let your guard recover.';
+  else if(result.perfectBlock)combatMessage='Perfect block · Counter ready!';
+  else if(result.guardBlocked)combatMessage='Iron Shield blocked '+result.guardBlocked+' damage.';
+  if(result.snared)combatMessage+=' Target snared for 2.5s.';
   if(result.arrow?.blocked)combatMessage='Cover blocked your arrow. Move for a clear shot.';
   if(result.outOfRange)combatMessage='Out of reach · Move closer to your target.';
   if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
@@ -1897,9 +1909,17 @@ function updateCombatPanel(){
   $('quickDodge').disabled=$('combatDodge').disabled;$('quickFlee').disabled=$('combatFlee').disabled;
   $('quickDodge').textContent=timing&&!$('quickDodge').disabled?'Dodge now!':'Dodge';
   $('quickDodge').classList.toggle('dodge-ready',timing&&!$('quickDodge').disabled);
+  const guard=!!encounter&&canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon);
+  const raised=guard&&now<(encounter.guardUntil??0),guardReady=guard&&!raised&&(!encounter.nextGuardAt||now>=encounter.nextGuardAt)&&stamina>=shieldRules.raiseCost;
+  for(const id of ['combatGuard','dungeonGuard','quickGuard']){
+    const button=$(id);button.hidden=!guard||id==='quickGuard'&&stage>=0;button.disabled=!guardReady||activityBusy||serverActionBusy;
+    const perfect=guardReady&&attack.shape==='arc'&&attack.damage<6&&encounter.nextBoarAt>now&&encounter.nextBoarAt-now<=shieldRules.perfect&&arenaInDanger(encounter,attack)&&!activeAdd(encounter);
+    button.textContent=raised?'Shield up':perfect?'Guard now! · B':guard&&!guardReady?(stamina<shieldRules.raiseCost?'Guard · Low stamina':'Guard · Recovering'):'Guard · B';
+    button.title='Raise Iron Shield · 20 stamina · Press B just before impact';
+  }
   $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
-  $('combatCooldown').textContent=encounter?(combatGear.equippedWeapon==='shortbow'?'Next arrow ':'Next strike ')+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
+  $('combatCooldown').textContent=encounter?(bowDrawTime(combatGear.equippedWeapon)?'Next arrow ':'Next strike ')+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Each attack costs 1 AP. Abilities cost 1 AP plus mana. Dodge and flee are free.';
   $('combatLog').textContent=(encounter&&needsLearningPoints()?'Out of AP · Attacks paused. Answer an MCQ using Action Points +, or flee.':combatMessage)||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments,currentCombatBuild());
@@ -2243,7 +2263,7 @@ function updateDungeonArenaHud(){
  $('dungeonEngage').hidden=!!e;$('dungeonDodge').hidden=!e;$('dungeonFlee').hidden=!e;
  $('dungeonEngage').disabled=!combatGear.equippedWeapon||unavailable();
  $('dungeonDodge').disabled=$('combatDodge').disabled;$('dungeonFlee').disabled=$('combatFlee').disabled;
- let cue='Approach to fight · Click the floor to explore.';
+ let cue='Approach to fight · Click the floor to explore.',vaultCue='';
  if(e){const move=enemyAttack(e),warn=e.nextBoarAt-combatNow()<=move.tell;
   cue=warn?(arenaInDanger(e,move)?'Move out of marked tiles!':'You are clear · Close in after the attack.'):'Click floor / arrows to move · Space to dodge';
   if(e.brainVersion===2){
@@ -2252,23 +2272,29 @@ function updateDungeonArenaHud(){
    else if(warn){
     const danger=arenaInDanger(e,move),covered=danger&&arenaBehindCover(e,move);
     const prompt=e.enemy==='depthsGuardian'
-      ?vaultWarningPrompt(move,e.nextBoarAt-combatNow(),{danger,covered,canDodge:!$('dungeonDodge').disabled})
+      ?vaultWarningPrompt(move,e.nextBoarAt-combatNow(),{
+        danger,covered,canDodge:!$('dungeonDodge').disabled,guardWindow:shieldRules.perfect,
+        canGuard:!activeAdd(e)&&canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon)&&combatNow()>=(e.nextGuardAt??0)&&stamina>=shieldRules.raiseCost+shieldRules.impactCost,
+        guardRaised:!activeAdd(e)&&combatNow()<(e.guardUntil??0)
+      })
       :covered?'Cover blocks this spell':danger?'Move or dodge!':'Clear of this attack';
     cue=move.name+' · '+left.toFixed(1)+'s · '+prompt;
+    if(e.enemy==='depthsGuardian')vaultCue=covered?'cover':vaultWarningStyle(move);
    }
    else cue=(e.brainCombo?'Follow-up coming · ':'')+'Step '+ARENA_STEP_COST+' stamina · Space: dodge';
   }
  }
  const summoning=e?.adds?.some(a=>a.spawnAt>combatNow()),incoming=e&&addThreats(e,combatNow()).sort((a,b)=>a.actor.attackAt-b.actor.attackAt)[0];
  if(summoning&&!(e.enemy==='depthsGuardian'&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell))cue='Reinforcements! · Click an enemy to change target';
- else if(incoming&&incoming.actor.attackAt<e.nextBoarAt)cue=incoming.move.name+' · '+Math.max(0,(incoming.actor.attackAt-combatNow())/1000).toFixed(1)+'s · '+(arenaBehindCover(incoming.encounter,incoming.move)?'Cover blocks this spell':arenaInDanger(incoming.encounter,incoming.move)?'Move or dodge!':'Stay clear of the marked tiles');
+ else if(!vaultCue&&incoming&&incoming.actor.attackAt<e.nextBoarAt)cue=incoming.move.name+' · '+Math.max(0,(incoming.actor.attackAt-combatNow())/1000).toFixed(1)+'s · '+(arenaBehindCover(incoming.encounter,incoming.move)?'Cover blocks this spell':arenaInDanger(incoming.encounter,incoming.move)?'Move or dodge!':'Stay clear of the marked tiles');
  else if(e&&e.nextBoarAt-combatNow()>enemyAttack(e).tell){
   const now=combatNow();
   if(now<(e.counterUntil??0))cue='Counter ready · Next strike +'+(e.counterPercent??50)+'% · '+((e.counterUntil-now)/1000).toFixed(1)+'s';
   else if(now<(e.staggerWeakUntil??0))cue=(now<(e.staggerUntil??0)?'Staggered':'Weak spot')+' · Weapon hits +25%';
   else if(now<(e.exposedUntil??0))cue='Shell exposed · Strike now';
  }
- const targetHint=combatTargetHint();
+ if(panel.dataset.warning!==vaultCue)panel.dataset.warning=vaultCue;
+ const targetHint=vaultCue?'':combatTargetHint();
  setHudText($('dungeonArenaCue'),targetHint?cue+' · '+targetHint:cue);panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
@@ -4144,14 +4170,14 @@ function selectedCombatTarget(){
   if(!e||e.arenaVersion!==1)return null;
   const add=activeAdd(e);
   return {tile:combatTargetTile(e),name:add?addKinds[add.kind].name:huntEnemy(e).name,
-    reach:e.brainVersion===2||combatGear.equippedWeapon==='shortbow'?playerMeleeReach(combatGear.equippedWeapon):2.5};
+    reach:e.brainVersion===2||bowDrawTime(combatGear.equippedWeapon)?playerMeleeReach(combatGear.equippedWeapon):2.5};
 }
 function combatTargetGuidance(){
   const selected=selectedCombatTarget();
   if(!selected)return null;
   const from={x:player.cx,y:player.cy},distance=Math.hypot(from.x-selected.tile.x,from.y-selected.tile.y);
   const inRange=distance<=selected.reach;
-  const bow=combatGear.equippedWeapon==='shortbow',arena=hunting.encounter??window.towerVaultCoop?.encounter();
+  const bow=bowDrawTime(combatGear.equippedWeapon),arena=hunting.encounter??window.towerVaultCoop?.encounter();
   const clear=tile=>!bow||!arena||!projectileCover(arena,tile,selected.tile);
   const covered=inRange&&!clear(from);
   if(inRange&&!covered||!combatGear.equippedWeapon)return {...selected,inRange,step:null};
@@ -4167,7 +4193,7 @@ function combatTargetHint(){
   if(!guide)return '';
   if(!combatGear.equippedWeapon)return 'Equip a weapon to strike';
   if(guide.covered)return 'Cover blocks your shot · '+(guide.step?'Step onto the gold tile':'Find another angle');
-  if(guide.inRange)return combatGear.equippedWeapon==='shortbow'?'Clear shot at '+guide.name:guide.name+' is in reach';
+  if(guide.inRange)return bowDrawTime(combatGear.equippedWeapon)?'Clear shot at '+guide.name:guide.name+' is in reach';
   return 'Out of reach · '+(guide.step?'Step onto the gold tile':'No clear approach');
 }
 function drawCombatSelection(){
@@ -4502,12 +4528,18 @@ function draw(time){
     const reading=!step&&!route.length&&readingAt(readingSession,currentRoom,player.cx,player.cy,combatNow());
     const meditating=!reading&&playerMeditating()&&!cast&&!miningSwing;
     const foe=vaultCoopState?(window.towerVaultCoop?.targetPosition()??{x:6,y:5}):combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
-    if(combatGear.equippedWeapon==='shortbow'){
+    const drawMs=bowDrawTime(combatGear.equippedWeapon);
+    if(drawMs){
       if(pose.ready&&!step&&!combatMovePreview?.pending)faceCombatTarget(foe);
-      const shotAt=hunting.encounter?.nextPlayerAt??vaultCoopState?.self?.nextStrikeAt;
-      if(pose.ready&&!needsLearningPoints()&&Number.isFinite(shotAt)&&pose.attack===null&&pose.casting===null&&shotAt>combatNow()&&shotAt-combatNow()<=shortbowDrawMs){
-        pose.bowDraw=reducedMotion.matches?.8:Math.max(.15,1-(shotAt-combatNow())/shortbowDrawMs);
+      const shotAt=hunting.encounter?.nextPlayerAt??window.towerVaultCoop?.shotAt?.();
+      if(pose.ready&&!needsLearningPoints()&&Number.isFinite(shotAt)&&pose.attack===null&&pose.casting===null&&shotAt>combatNow()&&shotAt-combatNow()<=drawMs){
+        pose.bowDraw=reducedMotion.matches?.8:Math.max(.15,1-(shotAt-combatNow())/drawMs);
+        if(combatGear.equippedWeapon==='cinderthornLongbow'&&shotAt-combatNow()<=180){
+          pose.bowDraw=1;
+          if(combatArt.bowCueAt!==shotAt){combatArt.bowCueAt=shotAt;combatAudio.play('longbowDraw');}
+        }
       }
+      if(vaultCoopState&&pose.ready&&shotAt<=combatNow()&&!needsLearningPoints()&&pose.attack===null&&pose.casting===null)pose.bowDraw=1;
       pose.lunge=0;
     }
     const thrust=enemy?pose.lunge-pose.recoil:0;
@@ -4515,7 +4547,8 @@ function draw(time){
     ctx.save();if(veiled)ctx.globalAlpha=.40;
     const bodyX=x+Math.sign(enemyX-x)*thrust+(player.direction==='left'?1:-1)*pose.dodge;
     const bodyY=y+Math.sign(enemyY-y)*thrust+pose.dodge*.25;
-    const spriteOptions={shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time};
+    const guarding=(hunting.encounter?.guardUntil??window.towerVaultCoop?.view()?.self?.guardUntil??0)>combatNow();
+    const spriteOptions={guarding,shadowstep:shadowstepBody(player,time),reading,readingAge:reading?combatNow()-readingSession.startedAt:0,meditating,direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:miningSwing||autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!miningSwing&&!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:miningSwing?(mining.pick??'basic')+'Pick':woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time};
     sprite(ctx,bodyX,bodyY,avatar,{...spriteOptions,visibilityOutline:!veiled});
     if(!veiled&&!spriteOptions.shadowstep)playerBody={x:bodyX,y:bodyY,options:spriteOptions};
     const undead=activeRaised({...window.playerCloud?.initial,location:currentRoom,health},combatNow());
@@ -5423,7 +5456,7 @@ function use(item){
     if(!woodcutting.axeOwned&&currentRoom!=='logging'){note('Get your free axe from the woodcutter at Timber Hollow.');return;}
   }
   if(unavailable())return;
-  if(combatGear.equippedWeapon==='shortbow'&&currentRoom==='clearing'&&item.type==='wildboar'&&!item.trackedPrey&&Math.hypot(player.cx-item.x,player.cy-item.y)<=playerMeleeReach('shortbow')){
+  if(bowDrawTime(combatGear.equippedWeapon)&&currentRoom==='clearing'&&item.type==='wildboar'&&!item.trackedPrey&&Math.hypot(player.cx-item.x,player.cy-item.y)<=playerMeleeReach(combatGear.equippedWeapon)){
     startMonsterEncounter(huntEnemies.boar);return;
   }
   if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
@@ -6296,7 +6329,7 @@ function bagEntries(){
     entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch · '+odds.fine.toFixed(1)+'% fine · '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
   }
   if(woodcutting.axeOwned)entries.push({key:'axe',name:'Basic Axe',category:'gear',art:windowItemArt('axe'),quantity:1,equipped:woodcutting.equipped,description:'Your trusty tool for felling trees.',stats:'Train Woodcutting with every log.',action:woodcutting.equipped?'Unequip axe':'Equip axe',disabled:unavailable(),run:()=>$('equipAxe').onclick()});
-  for(const id of combatGear.ownedArmour??[]){const item=armourCatalog[id],equipped=combatGear.equippedArmour===id;entries.push({key:'armour:'+id,name:item.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:item.description,stats:'Absorbs '+item.absorption+' damage per hit · Dodge '+item.dodgeCost+' stamina',action:equipped?'Remove armour':'Equip armour',disabled:unavailable(),run:()=>equipArmour(equipped?null:id)});}
+  for(const id of combatGear.ownedArmour??[]){const item=armourCatalog[id],equipped=combatGear.equippedArmour===id;entries.push({key:'armour:'+id,name:item.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:item.description,stats:id==='ironShield'?'Guard · B · 20 stamina to raise':'Absorbs '+item.absorption+' damage per hit · Dodge '+item.dodgeCost+' stamina',action:equipped?'Remove armour':'Equip armour',disabled:unavailable(),run:()=>equipArmour(equipped?null:id)});}
   if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetle’s shell.',stats:'Absorbs 4 damage · Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
   for(const id of wardrobe.owned){
     const item=clothingCatalog[id],included=outfit[item.slot]===id;
@@ -7492,7 +7525,7 @@ function updateArmoryShop(){
     ];
     offers.append(renderShopCard({document,id,name:weapon.name,category:id==='huntingSpear'?'HEAVY':id==='quickDagger'?'QUICK':'BALANCED',price:weapon.price,owned,equipped:active,stats:[['DAMAGE',damage+'–'+(damage+4)],['PER ATTACK',(weapon.interval/1000).toFixed(1)+'s']],deltas,requirements:'STR '+weapon.strength+'  ·  AGI '+weapon.agility,reason,action:vaultedItem('weapon',id)?'In vault':active?'Equipped':!skill?'Stats required':owned?'Equip weapon':credits<weapon.price?'Not enough gold':'Buy & equip',disabled:vaultedItem('weapon',id)||active||!skill||(!owned&&credits<weapon.price),onBuy:()=>buyArmoryWeapon(id)}));
   }
-  for(const [id,item] of Object.entries(armourCatalog).filter(([,item])=>!item.loot)){
+  for(const [id,item] of Object.entries(armourCatalog).filter(([,item])=>!item.loot&&!item.crafted)){
     const owned=combatGear.ownedArmour?.includes(id),active=combatGear.equippedArmour===id,eligible=canUseArmour(playerStats,id);
     offers.append(renderShopCard({document,id,name:item.name,category:'ARMOUR',price:item.price,owned,equipped:active,stats:[['ABSORBS',item.absorption+' / hit'],['DODGE',item.dodgeCost+' stamina']],deltas:[{text:item.description,tone:'neutral'}],requirements:'VITALITY '+item.vitality,reason:!eligible?'Train Vitality to '+item.vitality:!owned&&credits<item.price?'Need '+(item.price-credits)+' more gold':'One armour piece at a time · Replaces your vest',action:active?'Equipped':!eligible?'Stats required':owned?'Equip armour':'Buy & equip',disabled:active||!eligible||(!owned&&credits<item.price)||serverActionBusy,onBuy:()=>equipArmour(id)}));
   }
@@ -7500,7 +7533,7 @@ function updateArmoryShop(){
 async function equipArmour(id){
   if(unavailable())return;
   const item=armourCatalog[id],owned=combatGear.ownedArmour?.includes(id);
-  try{await serverGameplay('armour',{id});updateInventory();updateCombatPanel();savePlayerState();showTransaction(id?(owned?'Armour equipped':'Armour purchased'):'Armour removed',id?[{icon:'⬡',text:item.name+' · Absorbs '+item.absorption+' · Dodge '+item.dodgeCost}]:[{icon:'⬡',text:'No armour equipped'}],id&&!owned?-item.price:0);}
+  try{await serverGameplay('armour',{id});updateInventory();updateCombatPanel();savePlayerState();showTransaction(id?(owned?'Armour equipped':'Armour purchased'):'Armour removed',id?[{icon:'⬡',text:item.name+(id==='ironShield'?' · Guard with B in combat':' · Absorbs '+item.absorption+' · Dodge '+item.dodgeCost)}]:[{icon:'⬡',text:'No armour equipped'}],id&&!owned?-item.price:0);}
   catch(error){$('shopStatus').textContent=error.message;note(error.message);}
 
 }
@@ -7738,6 +7771,7 @@ function updateFieldJournal(){
   const required=editing;
   const quickCombat=player.inCombat&&depthsStageIndex(currentRoom)<0;
   $('quickDodge').hidden=$('quickFlee').hidden=!quickCombat;
+  $('quickGuard').hidden=!quickCombat||!canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon);
   $('roomLayout').dataset.quickCombat=String(quickCombat);
   const open=fieldJournalOpen||required;
   if($('roomLayout').dataset.journal!==String(open)){
@@ -8385,6 +8419,7 @@ $('courtyardPractice').onclick=openTrainingCourtyard;
 $('visitTraining').onclick=()=>{navigateHud('outside');note('Head outside and select the Training courtyard dummy.');};
 $('combatDodge').onclick=()=>combatAction('dodge');
 $('quickDodge').onclick=$('combatDodge').onclick;
+for(const id of ['combatGuard','dungeonGuard','quickGuard'])$(id).onclick=()=>combatAction('guard');
 $('quickFlee').onclick=$('combatFlee').onclick;
 $('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';
 $('combatSound').onclick=()=>{combatSoundEnabled=!combatSoundEnabled;save('combat-sound',combatSoundEnabled);combatAudio.enable(combatSoundEnabled);$('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';};
@@ -9216,10 +9251,10 @@ document.addEventListener('keydown',e=>{
   if(outfitPower&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useOutfitPower(outfitPower);return;}
   if(e.code==='KeyV'&&wearsVeilCloak(wardrobe)&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useVeilstep();return;}
   if(e.code==='KeyG'&&familiarState.equipped&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useFamiliar();return;}
-  if(player.inCombat&&['Space','KeyF','KeyQ','KeyE'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+  if(player.inCombat&&['Space','KeyF','KeyQ','KeyE','KeyB'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
     if(['KeyQ','KeyE'].includes(e.code)){e.preventDefault();if(!e.repeat)castEquippedEssence(e.code==='KeyQ'?'q':'e');return;}
     if(e.code==='Space'&&e.target.matches('button'))return;
-    e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':'flee');return;
+    e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':e.code==='KeyB'?'guard':'flee');return;
   }
   if(!editing||e.target.matches('input')||document.querySelector('dialog[open]'))return;
   if(e.key.toLowerCase()==='r'){e.preventDefault();rotate();}
@@ -9842,6 +9877,8 @@ window.towerVaultCoopHooks={
  now:()=>combatNow(),state:()=>({room:currentRoom,party:vaultCoopState?.id,cleared:depthsRun?.cleared,solo:!!hunting.encounter}),change:body=>window.playerCloud.vaultCoop(body),
  apply:state=>{if(state.health<health)combatArt.hurtAt=performance.now();applyServerGameplay(state);if(currentRoom!==state.location)enterRoom(state.location,state.position);updateCombatPanel();updateInventory();},
  face:faceCombatTarget,targetHint:combatTargetHint,
+ usesBow:()=>!!bowDrawTime(combatGear.equippedWeapon),
+ canGuard:()=>canRaiseShield(armourSelection(combatGear),combatGear.equippedWeapon),
  enableSound:()=>combatAudio.enable(combatSoundEnabled),counterSound:()=>combatAudio.play('counter'),
  strike:(tile,arrow)=>{faceCombatTarget(tile);combatArt.strikeAt=performance.now();if(arrow)combatArt.coopArrow={shot:arrow,at:combatArt.strikeAt};},
  cast:(tile,kind)=>{faceCombatTarget(tile);combatArt.castAt=performance.now();combatArt.castKind=kind;},
@@ -9852,6 +9889,7 @@ window.towerVaultCoopHooks={
   if(!peer)return;
   if(cue.health!==undefined){peer.health=cue.health;peer.maxHealth=cue.maxHealth;peer.raidCombat=cue.inCombat;}
   if(cue.blink)beginShadowstep(peer,cue.blink);
+  if(cue.guardUntil!==undefined)peer.guardUntil=cue.guardUntil;
   if((cue.strike||cue.cast)&&cue.target&&cue.position){
    const facing=combatFacing(cue.position,cue.target);
    if(facing)Object.assign(peer,facing);

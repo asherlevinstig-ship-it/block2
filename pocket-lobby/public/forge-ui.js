@@ -1,7 +1,7 @@
 import {pickaxes,pickaxeArt,miningLevel,equippedPickaxe} from './mining.js';
 import {weaponCatalog,warAxeSweepDamage} from './hunting.js';
 import {shopItemArt} from './shop-ui.js';
-import {barProducts,forgeCraftReason,barArt,pickaxeRecipe,pickaxeIngredients,forgeMaterialName,warAxeCraftReason,warAxeRecipe,shortbowCraftReason,shortbowRecipe} from './forge.js';
+import {barProducts,forgeCraftReason,barArt,pickaxeRecipe,pickaxeIngredients,forgeMaterialName,warAxeCraftReason,warAxeRecipe,shortbowCraftReason,shortbowRecipe,ironShieldCraftReason,ironShieldRecipe} from './forge.js';
 
 export function initializeQuarryForge(api,doc=document){
  const css=doc.createElement('link');css.rel='stylesheet';css.href='forge.css';doc.head.append(css);
@@ -58,6 +58,12 @@ export function initializeQuarryForge(api,doc=document){
    button.disabled=busy||!!reason||!api.ready();button.onclick=()=>change('mineCraft',{id},pick.name);
    card.append(button);by('picks').append(card);
   }
+  const shieldReason=ironShieldCraftReason(state),shield=doc.createElement('article'),shieldArt=node('div','');
+  shield.className='forge-recipe forge-pick';shieldArt.className='forge-art';shieldArt.innerHTML=shopItemArt('ironShield');
+  const shieldButton=node('button',state.combatGear.ownedArmour?.includes('ironShield')?'Already crafted':'Craft & equip Iron Shield');
+  shieldButton.type='button';shieldButton.disabled=busy||!!shieldReason||!api.ready();shieldButton.onclick=()=>change('mineCraft',{id:'ironShield'},'Iron Shield');
+  shield.append(shieldArt,node('h4','Iron Shield'),node('p',ironShieldRecipe),node('b','Vitality 2 · Armour slot'),node('p','Block frontal attacks with a sword equipped.'),node('small',shieldReason||'Ready to craft · 1 AP'),shieldButton);
+  by('picks').append(shield);
   for(const [id,reason,recipe,detail] of [
    ['shortbow',shortbowCraftReason(state),shortbowRecipe,'Range 5 tiles · Cover blocks shots.'],
    ['warAxe',warAxeCraftReason(state),warAxeRecipe,'Cleave one nearby reinforcement for '+warAxeSweepDamage()+' damage.']

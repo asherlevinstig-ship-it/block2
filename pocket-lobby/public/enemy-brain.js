@@ -81,7 +81,7 @@ export function planBrainAttack(e,enemy,now,previous=null){
  const id=chooseBrainAttack(e,enemy,now),move=smartAttacks[id],count=e.brainAttackCount??0;
  const combo=!!previous&&(enemy.id==='sealGuardian'?previous.id==='sentinelSlash':(enemy.elite||enemy.id==='depthsGuardian'||enemy.archetype==='duelist')&&count%3===1);
  const recovery=previous?Math.max(300,Math.round(previous.recovery*(combo?.55:1))):500;
- const approach=combo?150:enemy.archetype==='caster'?400:550;
+ const approach=(combo?150:enemy.archetype==='caster'?400:550)+(now<(e.snaredUntil??0)?500:0);
  return {...e,brainMove:id,brainRecoveryUntil:now+recovery,brainNextThinkAt:now+recovery,nextBoarAt:now+recovery+approach+move.tell,
   brainCooldowns:{...e.brainCooldowns,...(move.cooldown?{[id]:now+move.cooldown}:{})},brainRecentMoves:[...(e.brainRecentMoves??[]),id].slice(-3),brainCombo:combo};
 }
@@ -104,7 +104,7 @@ export function brainThinkEvent(state,enemy,move,now){
  const queue=[{...from,first:null}],seen=new Set(),goal=new Set(goals.map(p=>p.x+','+p.y));let step=null;
  for(const q of queue){const k=q.x+','+q.y;if(seen.has(k))continue;seen.add(k);if(goal.has(k)){step=q.first;break;}for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:q.x+dx,y:q.y+dy};if(valid(n)&&!seen.has(n.x+','+n.y))queue.push({...n,first:q.first??n});}}
  if(step)next.arenaEnemy=step;
- next.brainNextThinkAt=now+(enemy.id==='depthsBoar'?420:caster?600:550);
+ next.brainNextThinkAt=now+(enemy.id==='depthsBoar'?420:caster?600:550)+(now<(e.snaredUntil??0)?350:0);
  return {action:step?'enemyMove':'enemyThink',behaviour:step?(caster?'Seeking a clear firing line.':hunter?'Circling your flank before the pounce.':'Closing to attack range.'):'Watching for an opening.',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
 }
 export function normalizeBrain(e,base){

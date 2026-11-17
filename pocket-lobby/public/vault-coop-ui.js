@@ -1,17 +1,18 @@
+import {shieldRules} from './hunting.js';
 import {sanctuaryRules} from './style-abilities.js';
 import {vaultMechanisms} from './vault-mechanisms.js';
 import {arenaInDanger,arenaBehindCover} from './dungeon-arena.js';
-import {coopEncounter,coopMove,vaultPhaseDetails,vaultWarningPrompt} from './vault-coop.js';
+import {coopEncounter,coopMove,vaultPhaseDetails,vaultWarningPrompt,vaultWarningStyle,vaultTeamCounter} from './vault-coop.js';
 import {drawArenaTelegraph} from './dungeon-art.js';
 export function initializeVaultCoop(api){
  const entry=document.createElement('button');entry.id='vaultCoopEntry';entry.className='vault-coop-entry';entry.textContent='Co-op Vault · Form or join a party';entry.hidden=true;
  const panel=document.createElement('section');panel.id='vaultCoopPanel';panel.className='vault-coop-panel';panel.hidden=true;panel.setAttribute('aria-label','Shared Vault Guardian fight');
- panel.innerHTML='<header><b id="coopPhaseName">Co-op Vault</b><span id="coopBossHealth"></span></header><progress id="coopBossBar" max="420" value="420"></progress><p id="coopWarning"></p><p id="coopCounter" hidden></p><p id="coopHint"></p><div id="coopMembers"></div><div id="coopTargets"></div><p id="coopTargetHint" hidden></p><label class="coop-ally">Support target <select id="coopAlly"><option value="">Yourself</option></select></label><div class="coop-actions"><button id="coopStrike" type="button">Attack · 1 AP</button><button id="coopDodge" type="button">Dodge · Free</button><button id="coopTaunt" type="button">Taunt · 1 AP</button><button id="coopQ" type="button">Q ability · 1 AP</button><button id="coopE" type="button">E ability · 1 AP</button><button id="coopSpillway" type="button">Open spillway</button><button id="coopScreen" type="button">Raise stone screen</button><button id="coopStart" type="button">Awaken Guardian</button><button id="coopClaim" type="button">Claim Vault victory</button><button id="coopLeave" type="button">Retreat to Gallery</button></div><p id="coopFeedback" role="status"></p>';
+ panel.innerHTML='<header><b id="coopPhaseName">Co-op Vault</b><span id="coopBossHealth"></span></header><progress id="coopBossBar" max="420" value="420"></progress><p id="coopWarning"></p><p id="coopCounter" hidden></p><p id="coopTeamOpening" hidden></p><p id="coopHint"></p><div id="coopMembers"></div><div id="coopTargets"></div><p id="coopTargetHint" hidden></p><label class="coop-ally">Support target <select id="coopAlly"><option value="">Yourself</option></select></label><div class="coop-actions"><button id="coopStrike" type="button">Attack · 1 AP</button><button id="coopLoose" type="button" hidden>Loose arrow · 1 AP</button><button id="coopDodge" type="button">Dodge · Free</button><button id="coopGuard" type="button" hidden>Guard · B</button><button id="coopTaunt" type="button">Taunt · 1 AP</button><button id="coopQ" type="button">Q ability · 1 AP</button><button id="coopE" type="button">E ability · 1 AP</button><button id="coopSpillway" type="button">Open spillway</button><button id="coopScreen" type="button">Raise stone screen</button><button id="coopStart" type="button">Awaken Guardian</button><button id="coopClaim" type="button">Claim Vault victory</button><button id="coopLeave" type="button">Retreat to Gallery</button></div><p id="coopFeedback" role="status"></p>';
  const dialog=document.createElement('dialog');dialog.id='vaultCoopDialog';dialog.className='game-window vault-coop-dialog';dialog.innerHTML='<button class="close" type="button" aria-label="Close co-op party">×</button><div class="eyebrow">ONE GUARDIAN · SHARED HEALTH · UP TO FOUR PLAYERS</div><h2>Face the Vault together.</h2><p>The party leader starts the fight once everyone has joined. One player can Taunt; allies clear adds, interrupt the charged volley, or ward and heal each other.</p><p>Weapons and outfits stay locked. This is a live Play-mode fight. Retreat before leaving your browser.</p><button id="coopCreate" type="button" class="primary">Create a party</button><label>Join with a party code<input id="coopCode" maxlength="8" placeholder="8-character code" autocomplete="off"></label><button id="coopJoin" type="button">Join party</button><p id="coopJoinError" role="status"></p>';
  document.getElementById('scene').append(entry,panel);document.body.append(dialog);const $=id=>document.getElementById(id);
  const impact=document.createElement('progress');impact.id='coopImpact';impact.max=1;impact.setAttribute('aria-label','Time until attack lands');$('coopWarning').after(impact);
  const details=document.createElement('button');details.id='coopDetails';details.type='button';details.textContent='Party & support';panel.querySelector('header').after(details);panel.dataset.compact=String(window.matchMedia('(max-width:900px)').matches);details.onclick=()=>{panel.dataset.compact=String(panel.dataset.compact!=='true');render();};
- let raid=null,busy=false,queuedDodge=null,selected='boss',autoAttack=false,lastRequest=0,lastKey='',popups=[],attackFx=null;
+ let raid=null,busy=false,queuedDefense=null,selected='boss',autoAttack=false,lastRequest=0,lastKey='',popups=[],attackFx=null;
  const active=()=>!!api.state().party;
  function popup(text,position,tint='#ffddaa',lane=0){
   popups.push({at:performance.now(),text,x:position.x,y:position.y,tint,lane});
@@ -25,6 +26,9 @@ export function initializeVaultCoop(api){
    if(old?.phase!==raid.phase)attackFx=null;
    if(raid.status==='victory'&&old?.status!=='victory'){
     autoAttack=false;api.victory();popup('GUARDIAN DEFEATED',raid.origin??{x:6,y:5},'#ffe6a6');
+   }
+   if(raid.lastExposedHit&&raid.lastExposedHit.at!==old?.lastExposedHit?.at){
+    const hit=raid.lastExposedHit;popup('EXPOSED HIT −'+hit.damage,hit.tile,'#fff1a8',1);
    }
    if(old&&raid.faultbreaker?.until!==old.faultbreaker?.until&&raid.faultbreaker)popup('ARMOUR BROKEN',raid.origin,'#ffd28a',1);
    for(const add of old?.adds??[]){
@@ -47,9 +51,9 @@ export function initializeVaultCoop(api){
     if(!before)continue;
     const delta=member.hp-before.hp,blocked=(member.shielded??0)-(before.shielded??0);
     if(delta)popup((delta>0?'+':'−')+Math.abs(delta)+' HP',member.position,delta>0?'#94f4b4':'#ff8c9e');
-    if(blocked>0)popup('Shield absorbed '+blocked,member.position,'#8ef4e2',1);
+    if(blocked>0)popup(member.lastHit?.guardBroken?'Guard broken':member.lastHit?.perfectBlock?'Perfect block · '+blocked:'Shield absorbed '+blocked,member.position,member.lastHit?.guardBroken?'#ffa281':'#8ef4e2',1);
    }
-   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,target:m.attackTarget,position:m.attackPosition,arrow:m.arrow,castAge:Math.max(0,raid.observedAt-m.castAt)});}
+   for(const m of raid.members){const before=old?.members.find(p=>p.id===m.id);if(m.perk&&m.id!==raid.self?.id&&m.perk.id!==before?.perk?.id&&raid.observedAt-m.perk.at>=0&&raid.observedAt-m.perk.at<5000)popups.push({at:performance.now(),text:m.perk.perk==='luck'?'Lucky Boots · Rare drop!':'+'+m.perk.amount+' HP · Vampiric Sword',x:m.position.x,y:m.position.y,perk:m.perk.perk});if(m.peerId&&m.id!==raid.self?.id)api.peer({id:m.peerId,health:m.hp,maxHealth:m.maxHealth,inCombat:raid.status==='battle',strike:m.strikeAt!==before?.strikeAt&&raid.observedAt-m.strikeAt<1500,cast:m.castAt!==before?.castAt&&raid.observedAt-m.castAt<1500,blink:m.blink?.at!==before?.blink?.at?m.blink:null,castKind:m.castKind,guardUntil:m.guardUntil,target:m.attackTarget,position:m.attackPosition,arrow:m.arrow,castAge:Math.max(0,raid.observedAt-m.castAt)});}
   }
   if(result.receipt?.text)$('coopFeedback').textContent=result.receipt.text;
   if(result.state&&result.receipt&&raid?.status==='victory'&&!result.state.vaultCoop&&result.state.depthsRun?.cleared===3)api.reward?.(result.state);
@@ -65,9 +69,9 @@ export function initializeVaultCoop(api){
   render();
  }
  async function send(kind,slot,feedback){
-  if(['strike','dodge','power','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind)&&raid?.status!=='battle'){feedback?.('The Vault fight is no longer active.');return;}
+  if(['strike','dodge','guard','power','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind)&&raid?.status!=='battle'){feedback?.('The Vault fight is no longer active.');return;}
   if(busy){
-   if(kind==='dodge'&&api.now()<raid.landsAt)queuedDodge=raid.landsAt;
+   if(['guard','dodge'].includes(kind)&&api.now()<raid.landsAt)queuedDefense={kind,deadline:raid.landsAt};
    else feedback?.('Wait for the current Vault action to finish.');
    return;
   }
@@ -88,13 +92,14 @@ export function initializeVaultCoop(api){
   catch(error){feedback?.(error.message);$('coopFeedback').textContent=error.message;$('coopJoinError').textContent=error.message;if((error.status===402||/closer|mana|Action Point/i.test(error.message))&&kind==='strike')autoAttack=false;}
   finally{
    busy=false;
-   const deadline=queuedDodge;queuedDodge=null;
-   if(deadline&&raid?.status==='battle'&&raid.landsAt===deadline&&api.now()<deadline)void send('dodge');
+   const defense=queuedDefense;queuedDefense=null;
+   if(defense&&raid?.status==='battle'&&raid.landsAt===defense.deadline&&api.now()<defense.deadline)void send(defense.kind);
    render();
   }
  }
  function renderWarning(now){
-  if(raid?.status!=='battle'){impact.hidden=true;return;}
+  const team=$('coopTeamOpening');
+  if(raid?.status!=='battle'){impact.hidden=true;team.hidden=true;return;}
   const move=coopMove(raid),ms=raid.landsAt-now,warning=ms>=0&&now>=raid.warningAt;
   const self=raid.members.find(member=>member.id===raid.self?.id);
   const encounter=coopEncounter(raid);
@@ -105,9 +110,24 @@ export function initializeVaultCoop(api){
   panel.dataset.danger=String(danger);
   impact.hidden=!warning;
   if(warning){const fill=Math.round(Math.max(0,Math.min(1,1-ms/move.tell))*40)/40;if(impact.value!==fill)impact.value=fill;}
-  const prompt=vaultWarningPrompt(move,ms,{danger,covered,canDodge});
+  const prompt=vaultWarningPrompt(move,ms,{
+   danger,covered,canDodge,guardWindow:shieldRules.perfect,
+   canGuard:selected==='boss'&&api.canGuard?.()&&now>=(raid.self?.nextGuardAt??0)&&(raid.self?.guardStamina??0)>=shieldRules.raiseCost+shieldRules.impactCost,
+   guardRaised:selected==='boss'&&now<(raid.self?.guardUntil??0)
+  });
+  const style=warning?(covered?'cover':vaultWarningStyle(move)):'';
+  if(panel.dataset.warning!==style)panel.dataset.warning=style;
   const message=warning?move.name+' · '+(ms/1000).toFixed(1)+'s · '+prompt:'Next '+move.name+' · Prepare your next move';
   if($('coopWarning').textContent!==message)$('coopWarning').textContent=message;
+  const openFor=(raid.teamOpening?.until??0)-now,archer=api.usesBow?.();
+  const prepare=warning&&raid.phase===1&&move.id===vaultTeamCounter.move&&archer&&raid.members.some(m=>m.id!==raid.self?.id&&m.hp>0&&m.guardCapable);
+  team.hidden=openFor<=0&&!prepare;
+  if(!team.hidden){
+   const action=archer?(selected==='boss'?' · Loose a clear shot':' · Target the Guardian'):' · Any ally with a bow can take the shot';
+   const text=openFor>0?'Team opening · '+(openFor/1000).toFixed(1)+'s'+action:
+    autoAttack?'Anchor Sweep · Stop auto-attacking to hold your arrow':'Anchor Sweep · Hold your arrow for the perfect block';
+   if(team.textContent!==text)team.textContent=text;
+  }
   const counterMs=(raid.self?.counterUntil??0)-now;
   const hint=counterMs>0?'Counter ready · Next hit · '+(counterMs/1000).toFixed(1)+'s':'';
   $('coopCounter').hidden=!hint;
@@ -137,15 +157,26 @@ export function initializeVaultCoop(api){
   $('coopStart').hidden=raid.status!=='waiting'||!raid.leader;$('coopClaim').hidden=raid.status!=='victory'||raid.self?.claimed||!(raid.self?.damage>0||raid.self?.support>=1);
   for(const id of ['coopStrike','coopDodge','coopTaunt','coopQ','coopE'])$(id).hidden=!battle;
   for(const b of panel.querySelectorAll('button'))b.disabled=busy&&b.id!=='coopDodge';$('coopStrike').textContent=autoAttack?'Stop attacking':'Attack · 1 AP / hit';
+  const guard=$('coopGuard'),now=api.now(),stamina=Math.floor(raid.self?.guardStamina??100),raised=now<(raid.self?.guardUntil??0);
+  guard.hidden=!battle||!api.canGuard?.();guard.disabled=busy||raised||now<(raid.self?.nextGuardAt??0)||stamina<shieldRules.raiseCost;
+  const loose=$('coopLoose'),drawLeft=Math.max(0,(raid.self?.nextStrikeAt??0)-now);
+  loose.hidden=!battle||!api.usesBow?.()||autoAttack;loose.disabled=busy||drawLeft>0;
+  loose.textContent=drawLeft>0?'Drawing · '+(drawLeft/1000).toFixed(1)+'s':'Loose arrow · 1 AP';
+  const move=coopMove(raid),self=raid.members.find(member=>member.id===raid.self?.id);
+  const perfect=selected==='boss'&&move.shape==='arc'&&move.damage<6&&self&&arenaInDanger(coopEncounter(raid),move,self.position)&&raid.landsAt>now&&raid.landsAt-now<=shieldRules.perfect;
+  guard.textContent=raised?'Shield up':perfect&&!guard.disabled?'Guard now! · B':'Guard · B · '+stamina+' stamina';
+  guard.title='Raise Iron Shield · 20 stamina';
   const box=panel.getBoundingClientRect(),scene=document.getElementById('scene').getBoundingClientRect(),bar=document.getElementById('essenceHotbar');let lower=Math.min(scene.bottom,window.innerHeight-10);if(bar&&!bar.hidden){const dock=bar.getBoundingClientRect();if(box.left<dock.right&&box.right>dock.left)lower=Math.min(lower,dock.top-12);}panel.style.maxHeight=Math.max(140,lower-box.top-8)+'px';
  }
  entry.onclick=()=>{if(!dialog.open)dialog.showModal();};dialog.querySelector('.close').onclick=()=>dialog.close();
  $('coopCreate').onclick=()=>send('create');$('coopJoin').onclick=async()=>{const code=$('coopCode').value.trim().toUpperCase();if(!/^[A-F0-9]{8}$/.test(code)){$('coopJoinError').textContent='Enter the eight-character party code.';return;}raid={id:code,members:[],adds:[]};await send('join');};
  $('coopSpillway').onclick=()=>send('mechanism','spillway');
  $('coopScreen').onclick=()=>send('mechanism','screen');
- $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};const dodge=()=>{api.enableSound?.();if(raid?.status==='battle'&&(raid.self?.nextDodgeAt??0)<=api.now())api.previewDodge?.();return send('dodge');};$('coopDodge').onclick=dodge;$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
+ $('coopStart').onclick=()=>send('start');$('coopClaim').onclick=()=>send('claim');$('coopLeave').onclick=()=>{autoAttack=false;send('leave');};const dodge=()=>{api.enableSound?.();if(raid?.status==='battle'&&(raid.self?.nextDodgeAt??0)<=api.now())api.previewDodge?.();return send('dodge');};$('coopDodge').onclick=dodge;
+ const guard=()=>{if(api.canGuard?.()&&raid?.status==='battle'&&(busy||!$('coopGuard').disabled))send('guard');};$('coopGuard').onclick=guard;$('coopTaunt').onclick=()=>send('taunt');$('coopQ').onclick=()=>send('power','q');$('coopE').onclick=()=>send('power','e');
+ $('coopLoose').onclick=()=>{api.enableSound?.();if(!$('coopLoose').disabled)send('strike');};
  $('coopStrike').onclick=()=>{api.enableSound?.();autoAttack=!autoAttack;if(autoAttack&&api.now()>=(raid?.self?.nextStrikeAt??0))send('strike');else render();};
- document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();dodge();}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});
+ document.addEventListener('keydown',event=>{if(!active()||event.repeat||document.querySelector('dialog[open]')||/INPUT|TEXTAREA|SELECT/.test(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();dodge();}else if(event.code==='KeyB'&&api.canGuard?.()){event.preventDefault();guard();}else if(['KeyQ','KeyE'].includes(event.code)){event.preventDefault();send('power',event.code==='KeyQ'?'q':'e');}});
  const timer=setInterval(async()=>{
   render();if(document.hidden||!active()||api.state().room!=='depthsVault'||busy||Date.now()-lastRequest<(raid?.status==='waiting'?2000:500))return;lastRequest=Date.now();
   if(raid?.status==='battle'&&autoAttack&&api.now()>=(raid.self?.nextStrikeAt??0)){await send('strike');return;}
@@ -153,6 +184,11 @@ export function initializeVaultCoop(api){
  },250);
  function draw({ctx,point,surface,now,time,reduced}){
   if(!active()||!['battle','victory'].includes(raid?.status))return;const e=coopEncounter(raid);if(raid.status==='battle'){renderWarning(now);drawArenaTelegraph({ctx,point,surface,encounter:e,move:coopMove(raid),now,reduced});}
+  if(raid.status==='battle'&&raid.teamOpening?.until>now&&raid.origin){
+   const [x,y]=point(raid.origin.x+.5,raid.origin.y+.5,69);
+   ctx.save();ctx.strokeStyle='#fff2a7';ctx.lineWidth=2;ctx.beginPath();
+   ctx.moveTo(x-10,y+5);ctx.lineTo(x+1,y-6);ctx.moveTo(x+1,y+6);ctx.lineTo(x+11,y-5);ctx.stroke();ctx.restore();
+  }
   const fracture=raid.faultbreaker;
   if(raid.status==='battle'&&fracture?.until>now&&fracture.hits>0&&raid.origin){
    const [x,y]=point(raid.origin.x+.5,raid.origin.y+.5,1);
@@ -183,5 +219,5 @@ export function initializeVaultCoop(api){
   }
   popups=popups.filter(p=>time-p.at<1100);for(const p of popups){const [x,y]=point(p.x+.5,p.y+.5,85+(p.lane??0)*15+(reduced?0:(time-p.at)/35));ctx.save();ctx.globalAlpha=Math.max(0,1-(time-p.at)/1100);if(p.perk||p.counter){const [fx,fy]=point(p.x+.5,p.y+.5,20);ctx.strokeStyle=p.counter||p.perk==='luck'?'#ffe49a':'#f48ca9';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(fx,fy,reduced?15:8+(time-p.at)/40,reduced?8:4+(time-p.at)/80,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=p.tint??(p.perk==='vampire'?'#ff9db5':'#ffddaa');ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText(p.text,x,y);ctx.restore();}
  }
- return {active,render,draw,view:()=>raid,lastAttack:()=>attackFx,targetPosition,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:chooseTarget,power:slot=>send('power',slot),sanctuary:feedback=>send('sanctuary',undefined,feedback),faultbreaker:feedback=>send('faultbreaker',undefined,feedback),shadowstep:(tile,feedback)=>send('shadowstep',tile,feedback),dispose:()=>clearInterval(timer)};
+ return {active,render,draw,view:()=>raid,shotAt:()=>raid?.status==='battle'?raid.self?.nextStrikeAt:undefined,lastAttack:()=>attackFx,targetPosition,encounter:()=>active()&&['battle','victory'].includes(raid?.status)?coopEncounter(raid):null,adds:()=>active()?raid?.adds??[]:[],target:chooseTarget,power:slot=>send('power',slot),sanctuary:feedback=>send('sanctuary',undefined,feedback),faultbreaker:feedback=>send('faultbreaker',undefined,feedback),shadowstep:(tile,feedback)=>send('shadowstep',tile,feedback),dispose:()=>clearInterval(timer)};
 }

@@ -1,7 +1,7 @@
 import {recordEquipmentEffect} from '../public/equipment-effects.js';
 import {prospectorBonus} from '../public/rare-loot.js';
 import {quarryRoom,quarryMiner,oreDeposits,oreProducts,pickaxes,miningDuration,miningRules,miningLevel,besideDeposit,miningFind} from '../public/mining.js';
-import {quarryForge,barProducts,forgeCraftReason,pickaxeIngredients,warAxeCraftReason,warAxeIngredients,shortbowCraftReason,shortbowIngredients} from '../public/forge.js';
+import {quarryForge,barProducts,forgeCraftReason,pickaxeIngredients,warAxeCraftReason,warAxeIngredients,shortbowCraftReason,shortbowIngredients,ironShieldCraftReason,ironShieldIngredients} from '../public/forge.js';
 import {requireActionPoint,spendActionPoint} from './action-points.mjs';
 import {exertionDuration,useHunger} from '../public/player-vitals.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
@@ -78,6 +78,12 @@ export async function mineAction(db,row,state,body,action,now){
    if((state.huntingLoot[body.id]??0)+quantity>1000000)throw invalid('Make room in your bag for these bars.');
    state.huntingLoot[bar.ore]-=quantity*bar.amount;
    state.huntingLoot[body.id]=(state.huntingLoot[body.id]??0)+quantity;
+  }else if(body.id==='ironShield'){
+   const reason=ironShieldCraftReason(state);if(reason)throw invalid(reason);
+   state.huntingLoot.ironBar-=ironShieldIngredients.ironBar;
+   state.woodcutting.timber-=ironShieldIngredients.timber;
+   state.combatGear.ownedArmour??=[];state.combatGear.ownedArmour.push('ironShield');
+   state.combatGear.equippedArmour='ironShield';state.combatGear.stonebackVestEquipped=false;
   }else if(body.id==='shortbow'){
    const reason=shortbowCraftReason(state);if(reason)throw invalid(reason);
    state.huntingLoot.copperBar-=shortbowIngredients.copperBar;

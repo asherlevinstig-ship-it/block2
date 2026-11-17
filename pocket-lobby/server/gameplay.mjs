@@ -177,6 +177,7 @@ function applyGameplayActionImpl(state,action,body,now=Date.now(),random=Math.ra
     if(!canUseArmour(state.stats,id))throw new Error('Choose armour within your Vitality level. Requires Vitality '+item.vitality+'.');
     const owned=state.combatGear.ownedArmour??[];
     if(!owned.includes(id)){
+      if(item.crafted)throw new Error('Craft the Iron Shield at Coppervein Quarry.');
       if(item.loot)throw new Error('Defeat the Shardback Guardian to find these gloves.');
       location(state,['armory']);if(state.credits<item.price)throw new Error('Choose armour within your gold balance.');
       state.credits-=item.price;owned.push(id);recordShopPurchase(state,'armory',item.price,now);

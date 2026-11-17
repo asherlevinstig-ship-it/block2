@@ -1,7 +1,7 @@
 import {drawDungeonCreature} from './dungeon-creature-art.js';
 import {drawDungeonGuardian} from './dungeon-guardian-art.js';
 import {shoreDistance,drawWaterTile} from './water-art.js';
-import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBehindCover,arenaMarkCount,isDungeonMob} from './dungeon-arena.js';
+import {dungeonFloor,dungeonCover,arenaEnemy,arenaInDanger,arenaBoltBlocker,arenaMarkCount,isDungeonMob} from './dungeon-arena.js';
 export const dungeonHeights={depthsSkitter:29,depthsWarden:77,depthsSeer:61,depthsSentinel:76,depthsColossus:93,dungeonCover:34,dungeonArch:58,dungeonExit:58,dungeonChain:37,dungeonBones:7};
 const stone=['#94aeb3','#35495c','#597484'];
 const sideRoomArt={
@@ -191,9 +191,9 @@ function markedArenaTiles(encounter,move){
    if(move.shape==='safeLane')tiles.push({...tile,kind:'safe'});
    continue;
   }
-  const kind=move.shape==='marks'&&arenaMarkCount(encounter,move,tile)>1?'overlap':
-    arenaBehindCover(encounter,move,tile)?'cover':'danger';
-  tiles.push({...tile,kind});
+  const blocker=arenaBoltBlocker(encounter,move,tile);
+  const kind=move.shape==='marks'&&arenaMarkCount(encounter,move,tile)>1?'overlap':blocker?'cover':'danger';
+  tiles.push({...tile,kind,blocker});
  }
  if(warningTiles.size>=24)warningTiles.delete(warningTiles.keys().next().value);
  warningTiles.set(key,tiles);
@@ -212,26 +212,79 @@ export function drawDungeonBraziers(room,time,{point,polygon,rect,reduced}){
   if(!reduced){const rise=(time/900+x*.37)%1;rect(tx+Math.round(Math.sin(rise*9+x)*3),ty-15-rise*14,1,1,rise<.6?'#ffd27a':'#ffd27a66');}
  }
 }
+function drawVaultFootprint(ctx,point,encounter,move,progress,reduced){
+ const origin=encounter.brainOrigin??arenaEnemy(encounter),aim=encounter.arenaTarget??origin;
+ const center=move.center==='target'?aim:origin;
+ const heading=Math.atan2(aim.y-origin.y,aim.x-origin.x);
+ const arc=move.shape==='arc';
+ const circles=move.shape==='marks'?encounter.arenaMarks??[aim]:[center];
+ if(!arc&&move.shape!=='ring'&&move.shape!=='marks')return;
+ const radius=arc?move.reach:move.radius,start=arc?heading-move.angle:0,span=arc?move.angle*2:Math.PI*2;
+ for(const tile of circles){
+  ctx.beginPath();
+  if(arc)ctx.moveTo(...point(tile.x+.5,tile.y+.5,1));
+  for(let i=0;i<=24;i++){
+   const angle=start+span*i/24;
+   const pos=point(tile.x+.5+Math.cos(angle)*radius,tile.y+.5+Math.sin(angle)*radius,1);
+   if(!arc&&!i)ctx.moveTo(...pos);else ctx.lineTo(...pos);
+  }
+  ctx.closePath();ctx.strokeStyle='#231823';ctx.lineWidth=3.4;ctx.stroke();
+  ctx.strokeStyle=arc?'#ffe1a0':'#ffc09c';ctx.lineWidth=1.4;ctx.stroke();
+  if(arc||reduced)continue;
+  const wave=radius*Math.max(.12,progress);
+  ctx.beginPath();
+  for(let i=0;i<=24;i++){
+   const angle=i*Math.PI/12,pos=point(tile.x+.5+Math.cos(angle)*wave,tile.y+.5+Math.sin(angle)*wave,1);
+   if(!i)ctx.moveTo(...pos);else ctx.lineTo(...pos);
+  }
+  ctx.strokeStyle='#ffb690';ctx.lineWidth=2;ctx.stroke();
+ }
+}
 export function drawArenaTelegraph({ctx,point,surface,encounter,move,now,reduced}){
  if(encounter?.arenaVersion!==1||encounter.nextBoarAt-now>move.tell||encounter.nextBoarAt<now)return false;
- const imminent=encounter.enemy==='depthsGuardian'&&encounter.nextBoarAt-now<=350;
- const danger=imminent?'#ffceac':move.shape==='bolt'?'#bc8df7':'#f19a6e',alpha=reduced?.35:.3+Math.sin(now/85)*.07;
+ const vault=encounter.enemy==='depthsGuardian',remaining=encounter.nextBoarAt-now,imminent=vault&&remaining<=350;
+ const progress=Math.max(0,1-remaining/move.tell);
+ const danger=move.shape==='bolt'?'#c7a7ff':vault&&move.shape==='arc'?'#ffd990':imminent?'#ffceac':'#f19a6e',alpha=reduced?.35:.3+Math.sin(now/85)*.07;
  ctx.save();
- for(const {x,y,kind} of markedArenaTiles(encounter,move)){
+ const blockers=new Set();
+ const origin=encounter.brainOrigin??arenaEnemy(encounter);
+ for(const {x,y,kind,blocker} of markedArenaTiles(encounter,move)){
   if(kind==='safe'){surface(x+.05,y+.05,.9,.9,.9,'#5ce6be66','#a6ffe2');continue;}
   if(kind==='overlap'){
    surface(x+.05,y+.05,.9,.9,.9,'#d05affaa','#f3baff');
    continue;
   }
   const covered=kind==='cover';surface(x+.05,y+.05,.9,.9,.9,covered?'#82d5bb33':danger+(imminent?'99':'55'),covered?'#93e6c4':danger);
-  if(!covered){const [px,py]=point(x+.5,y+.5,1);ctx.globalAlpha=alpha+.35;ctx.fillStyle=danger;ctx.fillRect(px-1,py-3,2,4);ctx.fillRect(px-1,py+3,2,1);ctx.globalAlpha=1;}
+  const [px,py]=point(x+.5,y+.5,1);
+  if(vault&&move.shape==='bolt'){
+   ctx.save();ctx.translate(px,py);ctx.beginPath();ctx.lineWidth=1.6;
+   if(covered){
+    blockers.add(blocker);ctx.strokeStyle='#b8ffe2';
+    ctx.moveTo(-4,0);ctx.lineTo(-1,3);ctx.lineTo(5,-4);
+   }else{
+    const [ox,oy]=point(origin.x+.5,origin.y+.5,1);
+    ctx.rotate(Math.atan2(py-oy,px-ox));ctx.strokeStyle=danger;
+    ctx.moveTo(-4,-4);ctx.lineTo(2,0);ctx.lineTo(-4,4);
+   }
+   ctx.stroke();ctx.restore();
+  }else if(!covered){
+   ctx.globalAlpha=alpha+.35;ctx.fillStyle=danger;ctx.fillRect(px-1,py-3,2,4);ctx.fillRect(px-1,py+3,2,1);ctx.globalAlpha=1;
+  }
+ }
+ if(vault)drawVaultFootprint(ctx,point,encounter,move,progress,reduced);
+ for(const cover of blockers){
+  const [x,y]=point(cover.x+.5,cover.y+.5,43);
+  ctx.font='bold 8px system-ui';ctx.textAlign='center';ctx.lineWidth=3;
+  ctx.fillStyle='#b8ffe2';ctx.strokeStyle='#101525';
+  ctx.strokeText('COVER',x,y);ctx.fillText('COVER',x,y);
  }
  const target=encounter.arenaTarget??encounter.arenaEnemy??{x:6,y:5};
  const [tx,ty]=point(target.x+.5,target.y+.5,52);
  const seconds=Math.max(0,(encounter.nextBoarAt-now)/1000);
  ctx.font='bold 9px system-ui';ctx.textAlign='center';ctx.lineWidth=3;
  ctx.strokeStyle='#101525';ctx.fillStyle='#fff0cf';
- const caption=move.name+' · '+seconds.toFixed(1)+'s';
+ const action=vault?(move.shape==='arc'?'SWEEP':move.shape==='bolt'?'BOLT LANES':move.shape==='ring'||move.shape==='marks'?'MOVE CLEAR':''):'';
+ const caption=(action||move.name)+' · '+seconds.toFixed(1)+'s';
  ctx.strokeText(caption,tx,ty);ctx.fillText(caption,tx,ty);
  ctx.restore();return true;
 }

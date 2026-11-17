@@ -1,4 +1,4 @@
-import {canUseWeapon,weaponCatalog} from './hunting.js';
+import {canUseWeapon,weaponCatalog,canUseArmour} from './hunting.js';
 import {pickaxes,miningLevel,miningFinds} from './mining.js';
 export const quarryForge={x:9,y:7};
 export const barProducts={
@@ -15,6 +15,14 @@ export function shortbowCraftReason(state){
  if(state.combatGear.ownedWeapons.includes('shortbow'))return 'Already crafted · Equip it from Inventory.';
  if(!canUseWeapon(state.stats,'shortbow'))return 'Needs Agility 2.';
  if(state.woodcutting.timber<shortbowIngredients.timber||(state.huntingLoot.copperBar??0)<shortbowIngredients.copperBar)return 'Bring '+shortbowRecipe+'.';
+ return '';
+}
+export const ironShieldIngredients={ironBar:3,timber:4};
+export const ironShieldRecipe='3 Iron Bars + 4 timber';
+export function ironShieldCraftReason(state){
+ if(state.combatGear.ownedArmour?.includes('ironShield'))return 'Already crafted · Equip it from Inventory.';
+ if(!canUseArmour(state.stats,'ironShield'))return 'Needs Vitality 2.';
+ if((state.huntingLoot.ironBar??0)<ironShieldIngredients.ironBar||state.woodcutting.timber<ironShieldIngredients.timber)return 'Bring '+ironShieldRecipe+'.';
  return '';
 }
 export const warAxeIngredients={ironBar:4,timber:8};

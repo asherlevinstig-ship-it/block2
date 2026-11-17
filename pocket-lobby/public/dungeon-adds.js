@@ -7,8 +7,8 @@ export const addKinds={
  skitter:{id:'addSkitter',name:'Mire Hatchling',prop:'depthsSkitter',health:32,damage:6,shellArmor:0,interval:2800,archetype:'skirmisher',move:{id:'addBite',name:'Hatchling Bite',tell:900,recovery:650,shape:'arc',reach:1.5,angle:1.2,damage:0}},
  wisp:{id:'addWisp',name:'Rune Wisp',prop:'depthsSeer',health:30,damage:8,shellArmor:0,interval:3700,archetype:'caster',move:{id:'addBolt',name:'Wisp Bolt',tell:1400,recovery:800,shape:'bolt',reach:7,width:.42,damage:0,blockable:true}}
 };
-const effects=['burn','chilledUntil','weakenedUntil','weakenPercent','interruptResistUntil','castHits','castDeadline','stagger','staggerUntil','staggerWeakUntil','staggerResistUntil','exposedUntil'];
-const heroFields=['sanctuaryWard','bloodShield','bloodShieldUntil','stamina','staminaAt','dodgeUntil','nextDodgeAt','nextPlayerAt','nextFleeAt','magicWard','magicWardUntil','usedEssences','counterUntil','counterPercent','autoDodgeUntil'];
+const effects=['burn','snaredUntil','chilledUntil','weakenedUntil','weakenPercent','interruptResistUntil','castHits','castDeadline','stagger','staggerUntil','staggerWeakUntil','staggerResistUntil','exposedUntil'];
+const heroFields=['guardAt','guardUntil','guardFacing','nextGuardAt','sanctuaryWard','bloodShield','bloodShieldUntil','stamina','staminaAt','dodgeUntil','nextDodgeAt','nextPlayerAt','nextFleeAt','magicWard','magicWardUntil','usedEssences','counterUntil','counterPercent','autoDodgeUntil'];
 export function initializeAdds(e,now,foxBond=false){
  if(e.brainVersion!==2||e.arenaRoom==='depthsGate')return e;
  return {...e,addsVersion:1,...(foxBond?{foxBond:true}:{}),adds:[],addWaves:[],addKills:0,manualTarget:false,addWaveAt:e.enemy==='depthsGuardian'?0:now+3500,combatTarget:'leader'};
@@ -29,6 +29,7 @@ export function mergeAddEvent(e,a,event,now=0){
  const combined={...e};
  if(next)for(const key of heroFields){delete combined[key];if(next[key]!==undefined)combined[key]=next[key];}
  const actor={...a,health:dead?0:next.health};
+ if(event.snared&&actor.thinkAt<actor.attackAt)actor.thinkAt=Math.max(now,actor.thinkAt)+500;
  if(next){actor.attackAt=next.nextBoarAt;for(const key of effects){delete actor[key];if(next[key]!==undefined)actor[key]=next[key];}}
  combined.adds=e.adds.filter(b=>b.id!==a.id);if(!dead)combined.adds.push(actor);
  combined.adds.sort((a,b)=>a.id.localeCompare(b.id));combined.addKills=(e.addKills??0)+(dead?1:0);
@@ -65,7 +66,7 @@ export function advanceAddPosition(e,a,now){
  const p=arenaPlayer(e),from={x:a.x,y:a.y},caster=a.kind==='wisp',queue=[{...from,first:null}],seen=new Set();let step=null;
  const goal=q=>{const d=Math.hypot(q.x-p.x,q.y-p.y);return caster?d>=2.5&&d<=4&&!arenaBehindCover({...addEncounter(e,a),brainOrigin:q},addKinds[a.kind].move):d>=1&&d<=1.45;};
  for(const q of queue){const k=q.x+','+q.y;if(seen.has(k))continue;seen.add(k);if(goal(q)){step=q.first;break;}for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:q.x+dx,y:q.y+dy};if(valid(e,n,a.id)&&!(n.x===p.x&&n.y===p.y)&&!seen.has(n.x+','+n.y))queue.push({...n,first:q.first??n});}}
- return {...a,...(step??{}),thinkAt:now+(caster?600:450)};
+ return {...a,...(step??{}),thinkAt:now+(caster?600:450)+(now<(a.snaredUntil??0)?350:0)};
 }
 export function addThreats(e,now){return (e?.adds??[]).filter(a=>a.spawnAt<=now&&a.lockedFor===a.attackAt&&a.attackAt>=now).map(a=>({actor:a,encounter:addEncounter(e,a),move:addKinds[a.kind].move}));}
 export function chooseAutoAddTarget(e,now){

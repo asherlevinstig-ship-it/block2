@@ -8,12 +8,12 @@ import {rareBootsPenalty,awardRareHunt} from '../public/rare-loot.js';
 import {playerMaxHealth,mealArmour} from '../public/food-buffs.js';
 import {validVaultMechanism,vaultMechanisms} from '../public/vault-mechanisms.js';
 import {dungeonFloor} from '../public/dungeon-arena.js';
-import {vaultCoopRules,coopPhase,coopMove,coopDanger,coopEncounter,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
+import {vaultCoopRules,vaultTeamCounter,coopPhase,coopMove,coopDanger,coopEncounter,vaultPhaseDetails,vaultDefeatTip} from '../public/vault-coop.js';
 import {physicalPlating} from '../public/enemy-roles.js';
 import {arenaMarkCount} from '../public/dungeon-arena.js';
 import {shadowstepTiles} from '../public/shadowstep-tiles.js';
 import {combatBuild} from '../public/combat-builds.js';
-import {huntingAttributes,weaponStagger,weaponProfile,armourSelection,armourProfile,playerMeleeReach,warAxeReinforcement,warAxeSweepDamage,shortbowDrawMs,counterMultiplier,counterRules,boarRules,normalizeCombatSummary} from '../public/hunting.js';
+import {huntingAttributes,weaponStagger,weaponProfile,armourSelection,armourProfile,playerMeleeReach,warAxeReinforcement,warAxeSweepDamage,bowDrawTime,longbowSnare,canRaiseShield,raiseIronShield,ironShieldImpact,counterMultiplier,counterRules,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsSpoils} from '../public/depths.js';
 import {essencePower,normalizeMagic,awardEssenceMastery,bondedEssences,bladeSplash} from '../public/essences.js';
 import {manaAvailable,normalizeVitals} from '../public/player-vitals.js';
@@ -30,24 +30,40 @@ function enemyReaction(r,hit,at){
 }
 const uid=()=>crypto.randomUUID().slice(0,8).toUpperCase();
 function eligible(s){if(s.location!=='depthsVault'||s.depthsRun?.cleared!==2||s.hunting?.encounter||s.plan||s.report||s.controlMode==='auto'||s.health<=0)throw invalid('Travel to the Sunken Vault in Play mode, before starting the solo fight.');}
-const nextStrikeAt=(r,m,interval=m.attackInterval)=>Math.max(m.lastStrike+interval,m.weapon==='shortbow'?(r.startedAt??0)+shortbowDrawMs:0);
-function member(s,now){const build=combatBuild(s);return {id:uid(),name:s.avatar.name,hp:s.health,pos:{...s.position},lastAt:now,mealBuff:s.vitals?.mealBuff,damage:0,support:0,threat:0,lastStrike:0,dodgeUntil:0,counterUntil:0,nextDodgeAt:0,ward:0,used:[],build,armour:huntingAttributes(s.stats).armor+(armourProfile(armourSelection(s.combatGear))?.absorption??0)+build.armor-rareBootsPenalty(s),weapon:s.combatGear.equippedWeapon,attackInterval:huntingAttributes(s.stats,s.combatGear.equippedWeapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build).attackInterval};}
+const nextStrikeAt=(r,m,interval=m.attackInterval)=>Math.max(m.lastStrike+interval,bowDrawTime(m.weapon)?(r.startedAt??0)+bowDrawTime(m.weapon):0);
+function member(s,now){const build=combatBuild(s);return {id:uid(),name:s.avatar.name,hp:s.health,pos:{...s.position},lastAt:now,mealBuff:s.vitals?.mealBuff,damage:0,support:0,threat:0,lastStrike:0,dodgeUntil:0,counterUntil:0,nextDodgeAt:0,ward:0,used:[],build,armour:huntingAttributes(s.stats).armor+(armourProfile(armourSelection(s.combatGear))?.absorption??0)+build.armor-rareBootsPenalty(s),weapon:s.combatGear.equippedWeapon,guardCapable:canRaiseShield(armourSelection(s.combatGear),s.combatGear.equippedWeapon),attackInterval:huntingAttributes(s.stats,s.combatGear.equippedWeapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build).attackInterval};}
 function plan(r,at,pause=0){
  const phase=coopPhase(r),detail=vaultPhaseDetails[phase-1],players=living(r);if(!players.length){r.status='defeat';return;}
  const forced=players.find(([id])=>id===r.taunt&&at<r.tauntUntil),target=forced??players.sort((a,b)=>b[1].threat-a[1].threat)[0];
  r.target=target[0];r.targetTile={...target[1].pos};r.origin??={x:6,y:5};r.move=detail.moves[(r.attacks??0)%detail.moves.length];
- const move=coopMove(r);r.warningAt=at+pause+600;r.landsAt=r.warningAt+move.tell;r.phase=phase;r.castHits=0;
+ const move=coopMove(r);r.warningAt=at+pause+600+(at<(r.snaredUntil??0)?longbowSnare.delay:0);r.landsAt=r.warningAt+move.tell;r.phase=phase;r.castHits=0;
  if(move.shape==='marks')r.marks=players.map(([,m])=>({...m.pos}));
  else delete r.marks;
 }
 function dodgeCoversImpact(member,at){
  return member.dodgeUntil>=at&&member.dodgeUntil-at<=boarRules.dodgeWindow;
 }
-function hurt(r,m,amount,move,at){
+const guardStamina=(m,at)=>Math.min(100,(m.stamina??100)+Math.max(0,at-(m.staminaAt??at))*.012);
+function hurt(r,m,amount,move,at,origin){
+ const name=move.name;
  m.hp=Math.min(m.hp,playerMaxHealth(m,at));if(m.hp<=0||m.left)return;
  const perfectDodge=dodgeCoversImpact(m,at);
  let damage=amount;if(perfectDodge){damage=0;m.counterUntil=at+counterRules.duration+(m.build.counterWindow??0);m.lastFeedback='Perfect dodge · Counter ready';}
  let shielded=0;
+ let guard=null;
+ if(damage&&at<(m.guardUntil??0)){
+  m.stamina=guardStamina(m,at);m.staminaAt=at;
+  guard=ironShieldImpact(m,damage,m.pos,origin,move,at);
+  if(guard){
+   damage-=guard.blocked;shielded+=guard.blocked;m.support++;
+   if(guard.perfect){
+    m.counterUntil=at+counterRules.duration+(m.build.counterWindow??0);m.threat+=guard.blocked*3;
+    if(r.phase===1&&move.id===vaultTeamCounter.move&&r.teamOpening?.at!==at&&living(r).some(([,ally])=>ally!==m&&bowDrawTime(ally.weapon))){
+     r.teamOpening={at,until:at+vaultTeamCounter.duration,openedBy:m.id};
+    }
+   }
+  }
+ }
  if(damage&&m.ward>0&&at<=(m.wardUntil??0)){const block=Math.min(damage,m.ward);damage-=block;m.ward-=block;shielded+=block;}
  const sanctuary=r.sanctuary;
  if(damage&&sanctuary?.until>at&&sanctuary.remaining>0&&Math.hypot(m.pos.x-sanctuary.x,m.pos.y-sanctuary.y)<=sanctuaryRules.radius){
@@ -57,10 +73,11 @@ function hurt(r,m,amount,move,at){
   shielded+=blocked;
   m.lastFeedback='Sanctuary absorbed '+blocked+' damage.';
  }
- if(damage)m.lastFeedback=move+' hit you for '+damage+' HP.';
+ if(guard)m.lastFeedback=guard.broken?'Guard broken!':guard.perfect?'Perfect block · Counter ready':'Iron Shield blocked '+guard.blocked+' damage.';
+ else if(damage)m.lastFeedback=name+' hit you for '+damage+' HP.';
  m.shielded=(m.shielded??0)+shielded;
  m.reactionId=(m.reactionId??0)+1;
- m.hp=Math.max(0,m.hp-damage);m.lastHit={id:m.reactionId,at,damage,shielded,perfectDodge,heavy:damage>=20,move};if(!m.hp){m.cause=move;m.tip=vaultDefeatTip(move);m.lastFeedback='Defeated by '+move;}
+ m.hp=Math.max(0,m.hp-damage);m.lastHit={id:m.reactionId,at,damage,shielded,perfectDodge,heavy:damage>=20,move:name,guardBlocked:guard?.blocked,guardBroken:guard?.broken,perfectBlock:guard?.perfect};if(!m.hp){m.cause=name;m.tip=vaultDefeatTip(name);m.lastFeedback='Defeated by '+name;}
 }
 export function advanceVaultParty(r,now){
  if(r.status!=='battle')return;
@@ -75,13 +92,13 @@ export function advanceVaultParty(r,now){
    }
    for(const [,m] of living(r))if(coopDanger(r,m.pos)){
     const overlap=move.shape==='marks'?Math.max(0,arenaMarkCount(encounter,move,m.pos)-1)*8:0;
-    hurt(r,m,Math.max(5,Math.round((30+move.damage+overlap-m.armour-mealArmour(m,due))*(due<(r.weakenedUntil??0)?.75:1))),move.name,due);
+    hurt(r,m,Math.max(5,Math.round((30+move.damage+overlap-m.armour-mealArmour(m,due))*(due<(r.weakenedUntil??0)?.75:1))),move,due,r.origin);
    }
    r.lastAttack={at:due,move:move.name,shape:move.shape,center:move.center,origin:{...r.origin},target:{...r.targetTile},...(r.marks?{marks:r.marks}: {})};r.weakenedUntil=0;
    r.attacks=(r.attacks??0)+1;plan(r,due,move.recovery);
   }else{
-   for(const add of r.adds??[]){if(add.hp<=0||add.landsAt!==due)continue;for(const [,m] of living(r))if(Math.hypot(m.pos.x-add.target.x,m.pos.y-add.target.y)<=1.1)hurt(r,m,Math.max(4,add.kind==='wisp'?14-m.armour-mealArmour(m,due):10-m.armour-mealArmour(m,due)),add.kind==='wisp'?'Wisp Bolt':'Hatchling Bite',due);
-    const target=living(r).sort((a,b)=>a[1].hp-b[1].hp)[0];if(target)add.target={...target[1].pos};add.landsAt=due+3800;
+   for(const add of r.adds??[]){if(add.hp<=0||add.landsAt!==due)continue;for(const [,m] of living(r))if(Math.hypot(m.pos.x-add.target.x,m.pos.y-add.target.y)<=1.1)hurt(r,m,Math.max(4,add.kind==='wisp'?14-m.armour-mealArmour(m,due):10-m.armour-mealArmour(m,due)),{name:add.kind==='wisp'?'Wisp Bolt':'Hatchling Bite',shape:add.kind==='wisp'?'bolt':'arc',damage:0},due,add);
+    const target=living(r).sort((a,b)=>a[1].hp-b[1].hp)[0];if(target)add.target={...target[1].pos};add.landsAt=due+3800+(due<(add.snaredUntil??0)?longbowSnare.delay:0);
    }
   }
   if(!living(r).length)r.status='defeat';
@@ -103,8 +120,8 @@ function syncPlayer(s,r,id,now){const m=r.members[id];if(!m)return;if(m.hp<=0){
  s.health=0;s.location='home';s.position={x:5,y:7};s.depthsRun=null;s.hunting.recoveryUntil=now+boarRules.recovery;delete s.vaultCoop;
  }else s.health=Math.min(m.hp,playerMaxHealth(s,now));}
 export function publicVaultParty(r,id,now=Date.now()){
- const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,marks:r.marks,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,enemyReaction:r.enemyReaction&&now>=r.enemyReaction.at&&now-r.enemyReaction.at<1000?r.enemyReaction:null,
-  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,maxHealth:playerMaxHealth(m,now),lastHit:m.lastHit&&now>=m.lastHit.at&&now-m.lastHit.at<900?m.lastHit:null,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),strikeAt:m.lastStrike,arrow:m.arrow??null,lastCounter:m.lastCounter&&now-m.lastCounter.at<1100?m.lastCounter:null,castAt:m.castAt??0,castKind:m.castKind??null,attackTarget:m.attackTarget??null,attackPosition:m.attackPosition??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,counterUntil:self.counterUntil,nextDodgeAt:self.nextDodgeAt,nextStrikeAt:nextStrikeAt(r,self),damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
+ const self=r.members[id];return {id:r.id,status:r.status,vaultMechanism:r.vaultMechanism,expiresAt:r.expiresAt,hp:r.hp,max:r.max,phase:r.phase??1,move:r.move,warningAt:r.warningAt,landsAt:r.landsAt,origin:r.origin,targetTile:r.targetTile,marks:r.marks,exposedUntil:r.exposedUntil,stagger:r.stagger??0,lastAttack:r.lastAttack,teamOpening:r.status==='battle'&&r.teamOpening?.until>now&&!r.teamOpening.used?r.teamOpening:null,lastExposedHit:r.lastExposedHit&&now-r.lastExposedHit.at<1100?r.lastExposedHit:null,faultbreaker:r.phase===1&&r.faultbreaker?.until>now&&r.faultbreaker.hits>0?r.faultbreaker:null,sanctuary:r.sanctuary?.until>now&&r.sanctuary.remaining>0?r.sanctuary:null,observedAt:now,enemyReaction:r.enemyReaction&&now>=r.enemyReaction.at&&now-r.enemyReaction.at<1000?r.enemyReaction:null,
+  targetName:r.members[r.target]?.name??'',leader:r.leader===id,members:Object.values(r.members).filter(m=>!m.left).map(m=>({id:m.id,peerId:m.peerId,name:m.name,hp:m.hp,maxHealth:playerMaxHealth(m,now),lastHit:m.lastHit&&now>=m.lastHit.at&&now-m.lastHit.at<900?m.lastHit:null,shielded:m.shielded??0,damage:m.damage,support:m.support,position:m.pos,...(m.perk?{perk:m.perk}:{}),guardUntil:m.guardUntil??0,guardCapable:m.guardCapable===true,strikeAt:m.lastStrike,arrow:m.arrow??null,lastCounter:m.lastCounter&&now-m.lastCounter.at<1100?m.lastCounter:null,castAt:m.castAt??0,castKind:m.castKind??null,attackTarget:m.attackTarget??null,attackPosition:m.attackPosition??null,blink:m.blink&&now>=m.blink.at&&now-m.blink.at<700?m.blink:null})),self:self?{id:self.id,hp:self.hp,counterUntil:self.counterUntil,nextDodgeAt:self.nextDodgeAt,guardUntil:self.guardUntil??0,nextGuardAt:self.nextGuardAt??0,guardStamina:guardStamina(self,now),nextStrikeAt:nextStrikeAt(r,self),damage:self.damage,support:self.support,claimed:!!self.claimed,left:!!self.left,feedback:self.lastFeedback??'',cause:self.cause,tip:self.tip}:null,adds:(r.adds??[]).filter(a=>a.hp>0)};
 }
 export function actVaultParty(r,s,id,body,now,random=Math.random){
  s.routineLastSeen=now;
@@ -147,7 +164,15 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  }
  if(kind==='tick')return {text:m.lastFeedback??'Watch the marked attack.'};
  if(r.status!=='battle'||m.hp<=0)throw invalid('This co-op battle is not active.');
- if(!['strike','power','dodge','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(!['strike','power','dodge','guard','taunt','sanctuary','faultbreaker','shadowstep'].includes(kind))throw invalid('Choose a co-op combat action.');
+ if(kind==='guard'){
+  if(!canRaiseShield(armourSelection(s.combatGear),m.weapon))throw invalid('Equip the Iron Shield and a sword to guard.');
+  m.stamina=guardStamina(m,now);m.staminaAt=now;
+  const target=r.adds?.find(a=>a.id===body.target&&a.hp>0)??r.origin;
+  if(!raiseIronShield(m,m.pos,target,now))throw invalid('Let your guard and stamina recover.');
+  m.guardCapable=true;
+  m.lastFeedback='Shield raised.';return {text:m.lastFeedback};
+ }
  if(kind==='shadowstep'){
   const abilities=normalizeStyleAbilities(s.styleAbilities);
   if(!abilities.learned.includes(kind))throw invalid('Learn Shadowstep before using it.');
@@ -210,7 +235,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
  if(kind!=='dodge')requireActionPoint(s);
  const build=m.build,weapon=weaponProfile(m.weapon,s.combatGear.activeSwordUpgrade,s.combatGear.weaponEnchantments),stats=huntingAttributes(s.stats,m.weapon,s.combatGear.activeSwordUpgrade,false,s.combatGear.weaponEnchantments,build);
  const target=r.adds?.find(a=>a.id===body.target&&a.hp>0),position=target??r.origin,armour=target?0:r.phase===1&&now>=(r.exposedUntil??0)?9:0;
- let damage=0,text='',guarded=false,broken=false,interrupted=false,counter=false;
+ let damage=0,text='',guarded=false,broken=false,interrupted=false,counter=false,exposedShot=false;
  if(kind==='strike'){
   if(!weapon)throw invalid('You joined without a weapon. Use abilities, or retreat and equip one.');
   if(now<nextStrikeAt(r,m,stats.attackInterval))throw invalid('Wait for your weapon to recover.');
@@ -220,8 +245,8 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
    m.lastFeedback='War Axe missed · Recover before swinging again.';
    syncPlayer(s,r,id,now);return {text:m.lastFeedback,hit:0};
   }
-  const cover=m.weapon==='shortbow'?projectileCover(coopEncounter(r),m.pos,position):null;
-  if(m.weapon==='shortbow')m.arrow={from:{...m.pos},to:{x:(cover??position).x,y:(cover??position).y},blocked:!!cover};
+  const cover=bowDrawTime(m.weapon)?projectileCover(coopEncounter(r),m.pos,position):null;
+  if(bowDrawTime(m.weapon))m.arrow={from:{...m.pos},to:{x:(cover??position).x,y:(cover??position).y},blocked:!!cover,...(m.weapon==='cinderthornLongbow'?{longbow:true}:{})};
   if(cover){
    m.lastStrike=now;m.attackTarget={...cover};m.attackPosition={...m.pos};
    m.lastFeedback='Cover blocked your arrow. Move for a clear shot.';
@@ -240,6 +265,14 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
    text+='Counter! ';
   }
   if(now<(r.exposedUntil??0))damage=Math.ceil(damage*1.25);
+  const opening=r.teamOpening;
+  if(!target&&(!body.target||body.target==='boss')&&bowDrawTime(m.weapon)&&opening&&!opening.used&&now<opening.until&&m.id!==opening.openedBy){
+   damage+=Math.ceil(damage*vaultTeamCounter.bonus);
+   opening.used=true;
+   m.arrow.exposed=true;
+   exposedShot=true;
+   text+='Exposed hit! ';
+  }
   const raised=s.styleAbilities?.raised;
   if(s.styleAbilities?.learned?.includes(raised?.living?'bindBeast':'raiseFallen')&&raised?.summonedAt<=now&&raised.until>now&&raised.nextAt<=now){
    damage+=raised.damage;
@@ -254,6 +287,13 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
    text+='Faultbreaker opening! ';
   }
   m.lastStrike=now;
+  const foe=target??r;
+  if(m.weapon==='cinderthornLongbow'&&damage>0&&damage<(target?.hp??r.hp)&&now>=(foe.snaredUntil??0)){
+   foe.snaredUntil=now+longbowSnare.duration;
+   if(target&&now<target.landsAt-1400)target.landsAt+=longbowSnare.delay;
+   if(!target&&now<r.warningAt){r.warningAt+=longbowSnare.delay;r.landsAt+=longbowSnare.delay;}
+   text+='Target snared. ';
+  }
   if(m.weapon==='warAxe'){
    const add=warAxeReinforcement(m.pos,position,(r.adds??[]).filter(candidate=>candidate.hp>0),target?.id);
    if(add){const hit=Math.min(add.hp,warAxeSweepDamage());add.hp-=hit;m.damage+=hit;m.threat+=hit;text+='Cleave hit '+add.name+' for '+hit+'. ';}
@@ -285,7 +325,7 @@ export function actVaultParty(r,s,id,body,now,random=Math.random){
   m.attackTarget=damage>0?{x:position.x,y:position.y}:null;
   m.attackPosition=damage>0?{...m.pos}:null;
  }
- if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(counter)m.lastCounter={at:now,tile:{x:position.x,y:position.y},damage:hit};if(target)target.hp-=hit;else r.hp-=hit;if(m.weapon==='vampiricSword'&&(target?target.hp:r.hp)===0){const heal=Math.min(4,playerMaxHealth(m,now)-m.hp);m.hp+=heal;if(heal){recordEquipmentEffect(s,'vampire',heal,now,'vampire:coop:'+r.id+':'+(target?.id??'leader'));m.perk=s.equipmentEffects.at(-1);}}m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
+ if(damage){const hit=Math.min(damage,target?target.hp:r.hp);if(counter)m.lastCounter={at:now,tile:{x:position.x,y:position.y},damage:hit};if(exposedShot)r.lastExposedHit={at:now,tile:{x:position.x,y:position.y},damage:hit};if(target)target.hp-=hit;else r.hp-=hit;if(m.weapon==='vampiricSword'&&(target?target.hp:r.hp)===0){const heal=Math.min(4,playerMaxHealth(m,now)-m.hp);m.hp+=heal;if(heal){recordEquipmentEffect(s,'vampire',heal,now,'vampire:coop:'+r.id+':'+(target?.id??'leader'));m.perk=s.equipmentEffects.at(-1);}}m.damage+=hit;m.threat+=hit;text+='Hit '+(target?.name??'Guardian')+' for '+hit+'.';phaseChange(r,now);}
  if(interrupted||!target&&(damage>0||broken))enemyReaction(r,{damage:target?0:damage,guarded,broken,interrupted},now);
  m.lastFeedback=text;if(kind!=='dodge')spendActionPoint(s,now);syncPlayer(s,r,id,now);return {text,hit:damage};
 }

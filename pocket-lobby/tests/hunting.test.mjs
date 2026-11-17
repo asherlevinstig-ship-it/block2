@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {counterMultiplier,armourSelection,armourProfile,staggerProfile,weaponStagger,boarRules,huntingTurn,dungeonEnemyPreview,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,huntRespawnField,enemyAttack,enemyStatusEffects,stonebackVest,moonwellCharm} from '../public/hunting.js';
+import {counterMultiplier,armourSelection,armourProfile,staggerProfile,weaponStagger,boarRules,huntingTurn,dungeonEnemyPreview,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,bowDrawTime,canRaiseShield,shieldRules,ironShieldImpact,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,huntRespawnField,enemyAttack,enemyStatusEffects,stonebackVest,moonwellCharm} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -78,7 +78,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({essencesPaused:false,armourSelection,armourProfile,currentCombatBuild:()=>({id:'adventurer',weaponDamage:1,interval:1,armor:0,stagger:1,counter:0,dodge:0,spell:1,mana:10}),
-    ...miningRules,...bedRules,autoJourney:null,homeBedRest:null,homeFurniture:[],ownedFurniture:{bed:1},atHome:()=>context.currentRoom==='home',...dungeonLootUI,recordCombatFx,counterMultiplier,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,staggerProfile,weaponStagger,boarRules,dungeonEnemyPreview,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
+    ...miningRules,...bedRules,autoJourney:null,homeBedRest:null,homeFurniture:[],ownedFurniture:{bed:1},atHome:()=>context.currentRoom==='home',...dungeonLootUI,recordCombatFx,counterMultiplier,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,staggerProfile,weaponStagger,boarRules,dungeonEnemyPreview,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,bowDrawTime,canRaiseShield,shieldRules,
     huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,huntRespawnField,enemyAttack,enemyStatusEffects,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
@@ -195,6 +195,23 @@ test('an unassisted starter boar hunt remains winnable even with minimum hits an
   }
   assert.equal(encounter,null);
   assert(health>=40);
+});
+
+test('Iron Shield blocks only the front and heavy impacts break an active guard',()=>{
+ const e=createHunt(1000);
+ const guard=huntingTurn(e,100,{},'guard',2050,()=>.99,'trainingSword',null,'ironShield');
+ assert(guard.guardRaised);
+ assert.equal(guard.encounter.stamina,80);
+ const saved=normalizeHunting({encounter:guard.encounter}).encounter;
+ const hit=huntingTurn(saved,100,{},'enemy',2300,()=>.99,'trainingSword',null,'ironShield');
+ assert(hit.perfectBlock);assert(hit.guardBlocked>0);assert(hit.encounter.counterUntil>2300);
+ const rear=ironShieldImpact({...guard.encounter},25,{x:5,y:5},{x:4,y:5},{shape:'arc',damage:0},2300);
+ assert.equal(rear,null);
+ const heavy={...guard.encounter};
+ const broken=ironShieldImpact(heavy,32,{x:5,y:5},{x:6,y:5},{shape:'ring',damage:6},2300);
+ assert(broken.broken);assert(!broken.perfect);assert.equal(broken.blocked,8);
+ assert.equal(heavy.stamina,50);assert.equal(heavy.guardUntil,0);
+ assert.equal(heavy.nextGuardAt,4800);
 });
 
 test('beetles telegraph heavier slams and the Guardian queues one separately dodgeable aftershock',()=>{

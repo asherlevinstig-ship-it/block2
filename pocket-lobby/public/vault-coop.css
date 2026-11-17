@@ -3,8 +3,17 @@
 .vault-coop-dialog{width:min(480px,calc(100vw - 28px));padding:28px}.vault-coop-dialog .close{position:absolute;top:12px;right:12px;width:32px;height:32px;padding:0}.vault-coop-dialog .eyebrow{padding-right:25px;font-size:9px;line-height:1.7;color:#c7acd9}.vault-coop-dialog h2{font-size:26px;color:#ffe2a5}.vault-coop-dialog p{font-size:13px;line-height:1.6;color:#bbcddd}.vault-coop-dialog>button:not(.close){display:block;width:100%;padding:12px;margin:14px 0;white-space:normal}.vault-coop-dialog label{display:grid;gap:7px;margin-top:22px;font-size:12px}.vault-coop-dialog input{min-width:0;width:100%;padding:12px;background:#112034;color:#eedcff;border:1px solid #6c6582;border-radius:7px;text-transform:uppercase}#coopJoinError{color:#f3b5aa}
 @media(max-width:900px){.vault-coop-entry{top:375px;max-width:calc(100% - 24px);white-space:normal}.vault-coop-panel{top:205px;padding:10px}.vault-coop-panel header{font-size:12px}.vault-coop-panel p{font-size:10px}.coop-actions button{flex-basis:80px}.vault-coop-dialog{padding:22px}}
 .combat-recap-cause{padding:13px 15px;border-left:3px solid #e2ac83;background:#a96b5020;color:#edd2b8;font-size:13px;line-height:1.65}.combat-recap-cause[hidden]{display:none}
+.vault-coop-panel #coopTeamOpening{padding:6px 8px;border-inline-start:2px solid #f8d580;background:#624c262e;color:#ffe7a8;font-weight:700}
 .vault-coop-panel #coopImpact{height:5px;margin:5px 0;accent-color:#8de6c4}
 .vault-coop-panel[data-danger=true] #coopImpact{accent-color:#ff917c}
 .vault-coop-panel[data-danger=true] #coopWarning{color:#ffb49e}
+.vault-coop-panel[data-warning="sweep"]{--vault-warning:#ffdc9c}
+.vault-coop-panel[data-warning="slam"]{--vault-warning:#ffb39a}
+.vault-coop-panel[data-warning="bolt"]{--vault-warning:#d8bdff}
+.vault-coop-panel[data-warning="cover"]{--vault-warning:#adf0d7}
+.vault-coop-panel:is([data-warning="sweep"],[data-warning="slam"],[data-warning="bolt"],[data-warning="cover"]) #coopWarning{
+ padding-inline-start:8px;border-inline-start:2px solid var(--vault-warning);color:var(--vault-warning);
+}
+.vault-coop-panel:is([data-warning="sweep"],[data-warning="slam"],[data-warning="bolt"],[data-warning="cover"]) #coopImpact{accent-color:var(--vault-warning)}
 @media(min-width:901px){.vault-coop-panel{left:auto;right:12px;transform:none;width:340px;top:58px}}
 #coopDetails{display:block;margin:6px 0;padding:3px 6px;font-size:10px;border-color:#675d79;color:#d4c7eb;background:#1a2940}.vault-coop-panel[data-compact=true] :is(#coopHint,#coopMembers,.coop-ally){display:none}@media(max-width:900px){.vault-coop-panel{top:0;max-width:calc(100% - 16px);width:calc(100% - 16px)}.vault-coop-panel #coopFeedback{font-size:10px;margin-bottom:0}}

@@ -37,4 +37,11 @@ body:has(.layout[data-depths]:not([data-depths=""])){background:#081426 url('./d
 #vaultMechanismChoices[hidden]{display:none}#vaultMechanismOptions:not([hidden]){margin-right:6px}
 .depths-decision-vitals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0}.depths-decision-vitals[hidden]{display:none}.depths-decision-vitals>div{border:1px solid #617689;border-radius:8px;padding:6px 8px;background:#111f32}.depths-decision-vitals span,.depths-decision-vitals b{display:block}.depths-decision-vitals span{font-size:10px;color:#b7c7da}.depths-decision-vitals b{font-size:14px;color:#ffe6ac}.depths-decision-vitals p{grid-column:1/-1;margin:0;color:#ffd899}.depths-decision-vitals p:empty{display:none}#depthsDecision[data-gallery-decision=true] .depths-option{min-width:0}#depthsDecision[data-gallery-decision=true] .depths-option button{white-space:normal;min-width:0}
 
+.dungeon-arena-hud[data-warning="sweep"]{--vault-warning:#ffdc9c}
+.dungeon-arena-hud[data-warning="slam"]{--vault-warning:#ffb39a}
+.dungeon-arena-hud[data-warning="bolt"]{--vault-warning:#d8bdff}
+.dungeon-arena-hud[data-warning="cover"]{--vault-warning:#adf0d7}
+.dungeon-arena-hud:is([data-warning="sweep"],[data-warning="slam"],[data-warning="bolt"],[data-warning="cover"]) #dungeonArenaCue{
+ padding-inline-start:8px;border-inline-start:2px solid var(--vault-warning);color:var(--vault-warning);font-weight:700;
+}
 #rareHuntCards button{margin:10px 8px 0 0;padding:9px 12px;min-height:38px;width:auto;font:700 12px system-ui;border:1px solid #9b855e;border-radius:7px;background:#273951;color:#f3d69d;white-space:normal}#rareHuntCards button:disabled{opacity:.5}

@@ -35,7 +35,7 @@ test('pinning saves a target without changing odds; forged targets, ownership an
 
 test('real solo and dungeon kills award their source once, with a rare drop receipt',()=>{
  for(const [id,item] of Object.entries(rareHunts)){
-  const room={depthsGuardian:'depthsVault',cacheGuardian:'depthsCache',treasuryGuardian:'depthsTreasury',crystalGuardian:'crystaldeep'}[item.enemy];
+  const room={depthsGuardian:'depthsVault',cacheGuardian:'depthsCache',treasuryGuardian:'depthsTreasury',crystalGuardian:'crystaldeep',cinderback:'brokenRoad'}[item.enemy];
   const s=state({location:room,...(room.startsWith('depths')?{depthsRun:{cleared:2,routeChoice:'dangerous'}}:{})});
   assert(!ownsRareItem(s,id));const events=win(s);assert(events.some(e=>e.rareDrop===id),id);assert(ownsRareItem(s,id));const kills=rareHuntProgress(s,id).kills;advanceServerCombat(s,2000,()=>0);assert.equal(rareHuntProgress(s,id).kills,kills);
  }
@@ -75,5 +75,5 @@ test('co-op Vault rewards include the new hunt once and co-op weapon kills heal 
 
 test('rare hunt collection lists each source and shows a pinned hunt in the existing goal chip',()=>{
  const s=state();applyGameplayAction(s,'rareHuntTarget',{id:'anglersCloak'},1000);const g=boot(s);g.run('renderDungeonLoot();updateUpgradeGoalHud()');
- assert.equal(g.nodes.get('rareHuntCards').children.length,4);assert.match(g.nodes.get('upgradeGoalHud').textContent,/Angler/);assert.deepEqual(g.errors,[]);
+ assert.equal(g.nodes.get('rareHuntCards').children.length,Object.keys(rareHunts).length);assert.match(g.nodes.get('upgradeGoalHud').textContent,/Angler/);assert.deepEqual(g.errors,[]);
 });

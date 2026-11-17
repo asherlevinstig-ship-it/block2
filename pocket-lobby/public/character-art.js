@@ -343,14 +343,17 @@ function drawTool(ctx,kind,angle,x,y,draw=0){
     const metal=kind==='runicPick'?'#b7a2f4':kind==='copperPick'?'#dfa46c':kind==='ironPick'?'#e0edf2':'#b7d3dc';
     p(-9,-19,18,3,'#344459');p(-8,-18,16,2,metal);p(-10,-16,3,3,metal);p(7,-16,3,3,'#dcebf0');
     if(kind==='runicPick'){p(-5,-19,1,4,'#deffff');p(2,-18,1,3,'#deffff');p(-1,-13,3,2,'#a5e8f5');p(-1,-8,3,1,'#c5a9ff');}
-  }else if(kind==='shortbow'){
+  }else if((kind==='shortbow'||kind==='cinderthornLongbow')){
+    const long=kind==='cinderthornLongbow';
     ctx.rotate(-angle);if(angle>0)ctx.scale(-1,1);
+    if(long){ctx.translate(0,-1);ctx.scale(1.2,1.35);}
     ctx.lineCap='round';ctx.lineJoin='round';
     ctx.beginPath();ctx.moveTo(-5,-24);ctx.lineTo(2,-20);ctx.lineTo(7,-12);ctx.lineTo(3,-4);ctx.lineTo(-4,1);
     ctx.lineWidth=4;ctx.strokeStyle='#442b30';ctx.stroke();
-    ctx.lineWidth=2;ctx.strokeStyle='#d79a57';ctx.stroke();
+    ctx.lineWidth=2;ctx.strokeStyle=long?'#cd8153':'#d79a57';ctx.stroke();
     ctx.beginPath();ctx.moveTo(-5,-24);ctx.lineTo(-5-draw*8,-12);ctx.lineTo(-4,1);ctx.lineWidth=1;ctx.strokeStyle='#fff0c8';ctx.stroke();
-    if(draw){p(-6-draw*8,-13,13+draw*8,1,'#e7ce9e');p(7,-14,4,3,'#d5ece8');}
+    if(draw){p(-6-draw*8,-13,13+draw*8,1,'#e7ce9e');p(7,-14,4,3,long&&draw>=.95?'#adffda':'#d5ece8');
+      if(long&&draw>=.95)p(8,-15,2,5,'#e9fff4');}
   }else if(kind==='warAxe'){
     p(-2,-24,4,30,'#302938');p(-1,-23,2,27,'#bd8857');
     p(-7,-24,16,8,'#2a3a4b');p(1,-27,10,14,'#526d83');
@@ -406,7 +409,7 @@ const carriedWeaponStyles={
     quickfang:{length:10,width:3,case:'#403051',edge:'#b091d4',metal:'#d1b5ee',grip:'#624174',guard:7}
   };
 function drawCarriedEquipment(ctx,kind,anchor){
-  if(['huntingSpear','breakerSpear','warAxe','shortbow'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
+  if(['huntingSpear','breakerSpear','warAxe','shortbow','cinderthornLongbow'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
   const dagger=['quickDagger','quickfang'].includes(kind);
 
@@ -816,6 +819,12 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
     }else ctx.drawImage(image,left,top,w,h);
     if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&!options.back&&selection.state!=='cast'&&!handCast)drawTool(ctx,options.weaponTier,toolAngle,gx,gy,options.pose?.bowDraw);
+    if(options.vest==='ironShield'&&!options.seated&&!options.fishing&&!options.reading){
+      const sx=x+(options.guarding?0:options.direction==='left'?8:-8),sy=y-(options.guarding?24:16);
+      ctx.save();ctx.translate(sx,sy);ctx.beginPath();ctx.moveTo(-7,-6);ctx.lineTo(0,-9);ctx.lineTo(7,-6);ctx.lineTo(6,3);ctx.lineTo(0,9);ctx.lineTo(-6,3);ctx.closePath();
+      ctx.fillStyle=options.guarding?'#a4c8dd':'#668298';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#26384c';ctx.stroke();
+      ctx.fillStyle='#e2b36e';ctx.fillRect(-2,-3,4,6);ctx.restore();
+    }
     if(reaction.shieldPulse!==null&&reaction.shieldPulse!==undefined){
       const progress=reaction.shieldPulse;
       ctx.save();ctx.globalAlpha*=Math.max(0,1-progress);ctx.strokeStyle='#a0f8e8';ctx.lineWidth=1.2;

@@ -90,12 +90,18 @@ export function projectileCover(encounter,from,to){
  }
  return first;
 }
-export function arenaBehindCover(e,move,tile=arenaPlayer(e)){
- if(move.shape!=='bolt'||e.brainVersion===2&&!move.blockable)return false;
+export function arenaBoltBlocker(e,move,tile=arenaPlayer(e)){
+ if(move.shape!=='bolt'||e.brainVersion===2&&!move.blockable)return null;
  const enemy=e.brainVersion===2?(e.brainOrigin??arenaEnemy(e)):arenaEnemy(e),distance=Math.hypot(tile.x-enemy.x,tile.y-enemy.y);
  const cover=e.arenaRoom==='depthsVault'&&e.vaultMechanism==='screen'?[...dungeonCover,vaultScreen]:dungeonCover;
- return cover.some(p=>lineDistance(p,enemy,tile)<.65&&Math.hypot(p.x-enemy.x,p.y-enemy.y)<distance-.4);
+ let nearest=null,nearestDistance=distance-.4;
+ for(const p of cover){
+  const gap=Math.hypot(p.x-enemy.x,p.y-enemy.y);
+  if(gap<nearestDistance&&lineDistance(p,enemy,tile)<.65){nearest=p;nearestDistance=gap;}
+ }
+ return nearest;
 }
+export const arenaBehindCover=(e,move,tile)=>!!arenaBoltBlocker(e,move,tile);
 export function arenaMoveEvent(state,tile,now,scenery=[],stamina=state.hunting?.encounter?.stamina??100){
  const e=state.hunting?.encounter,from=e&&arenaPlayer(e);
  if(e?.arenaVersion!==1||!tile||now<(e.arenaStepAt??0)||Math.abs(tile.x-from.x)+Math.abs(tile.y-from.y)!==1||!dungeonWalkable(state.location,tile,scenery,e.vaultMechanism))return null;

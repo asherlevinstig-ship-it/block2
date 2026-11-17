@@ -32,6 +32,26 @@ test('shortbow shoots across a ranged dungeon lane but cover stops the same shot
  assert.deepEqual(hit.arrow,{from:clear,to:target,blocked:false});assert(hit.damage>0);
 });
 
+test('Cinderthorn Longbow draws for longer and snares clear shots without changing a committed warning',()=>{
+ const s=normalizeState({location:'clearing',position:{x:6,y:1},actionPoints:{value:3},stats:{strengthXp:1000,agilityXp:1000},
+  combatGear:{ownedWeapons:['cinderthornLongbow'],equippedWeapon:'cinderthornLongbow'}});
+ applyGameplayAction(s,'fight',{},1000,()=>.5);
+ assert.equal(s.hunting.encounter.nextPlayerAt,2500);
+ const from={x:2,y:5},to={x:8,y:5},e={...s.hunting.encounter,arenaPlayer:from,arenaEnemy:to,arenaSolids:[],brainNextThinkAt:2600,nextBoarAt:3800};
+ const shot=huntingTurn(e,100,s.stats,'attack',2500,()=>.5,'cinderthornLongbow');
+ assert(shot.damage>0&&shot.snared&&shot.arrow.longbow);
+ assert.equal(shot.encounter.snaredUntil,5000);
+ assert.equal(shot.encounter.brainNextThinkAt,3100);
+ assert.equal(shot.encounter.nextBoarAt,4300);
+ const locked=huntingTurn({...e,arenaLockedFor:3800},100,s.stats,'attack',2500,()=>.5,'cinderthornLongbow');
+ assert.equal(locked.encounter.nextBoarAt,3800);
+ const blocked=huntingTurn({...e,arenaSolids:[{x:4,y:5}]},100,s.stats,'attack',2500,()=>.5,'cinderthornLongbow');
+ assert(blocked.arrow.blocked);
+ assert.equal(blocked.damage,0);
+ assert.equal(blocked.encounter.snaredUntil,undefined);
+ assert.equal(normalizeHunting({encounter:shot.encounter}).encounter.snaredUntil,5000);
+});
+
 test('Elite strength and previews agree with the live scaled encounter and boss thresholds',()=>{
  for(const [id,hp] of [['cacheGuardian',315],['sealGuardian',368],['depthsGuardian',420]]){const base=huntEnemies[id],s=fighter(base.room);assert.equal(s.hunting.encounter.health,hp);assert.equal(smartProfile(base).health,hp);assert.equal(huntEnemy(s.hunting.encounter).health,hp);assert(huntEnemy(s.hunting.encounter).damage>base.damage);}
  const e=fighter('depthsVault').hunting.encounter;for(const [hp,index] of [[281,1],[280,2],[141,2],[140,3]])assert.equal(vaultPhase({...e,health:hp}).index,index);

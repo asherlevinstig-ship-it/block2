@@ -4,7 +4,7 @@ export {enemyRoleInfo,channelerWardActive} from './enemy-roles.js';
 export {combatBuild} from './combat-builds.js';
 import {buildProfile} from './combat-builds.js';
 import {FOX_STAGGER} from './familiars.js';
-import {addKinds,activeAdd,addEncounter,mergeAddEvent,normalizeAdds} from './dungeon-adds.js';
+import {addKinds,activeAdd,addEncounter,mergeAddEvent,normalizeAdds,combatTargetTile} from './dungeon-adds.js';
 import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-brain.js';
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor,isCombatArena,projectileCover} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
@@ -17,10 +17,10 @@ export function staggerProfile(enemy){
  return {limit:boss?160:enemy.room.startsWith('depths')?140:80,stun:boss?900:1800,opening:boss?1800:2400,recovery:boss?5000:3500};
 }
 export function weaponStagger(weapon,upgrade,counter=false){
- const profile=weaponProfile(weapon,upgrade);const base=!profile?0:weapon==='shortbow'?8:profile.interval>=1400?36:profile.interval>=1000?18:8;
+ const profile=weaponProfile(weapon,upgrade);const base=!profile?0:bowDrawTime(weapon)?8:profile.interval>=1400?36:profile.interval>=1000?18:8;
  return base+(profile?.staggerBonus??0)+(counter?40:0);
 }
-export {vaultWarningPrompt} from './vault-coop.js';
+export {vaultWarningPrompt,vaultWarningStyle} from './vault-coop.js';
 export const counterRules={duration:1800,bonus:.5};
 export function counterMultiplier(weapon,upgrade,build,vault=false){
   return (weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)+build.counter+(vault ? .25 : 0);
@@ -28,10 +28,33 @@ export function counterMultiplier(weapon,upgrade,build,vault=false){
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
 export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
-export const armourCatalog={prospectorsGloves:{name:"Prospector’s Gloves",loot:true,vitality:1,absorption:0,dodgeCost:40,description:"Rare Shardback Guardian loot. 10% chance for +1 ore per swing. Occupies your armour slot; no absorption."},scoutLeather:{name:'Scout Leather',price:180,vitality:1,absorption:2,dodgeCost:35,description:'Layered leather, cross-body straps and light shoulder guards. Less protection, easier dodging.'},towerPlate:{name:'Tower Sentinel Plate',price:650,vitality:3,absorption:7,dodgeCost:65,description:'Steel breastplate, broad pauldrons and a Tower crest. Strong protection, expensive dodges.'}};
+export const armourCatalog={ironShield:{name:'Iron Shield',crafted:true,vitality:2,absorption:0,dodgeCost:40,description:'Forge at Coppervein Quarry. With a sword equipped, raise it to block frontal attacks. Occupies your armour slot.'},prospectorsGloves:{name:"Prospector’s Gloves",loot:true,vitality:1,absorption:0,dodgeCost:40,description:"Rare Shardback Guardian loot. 10% chance for +1 ore per swing. Occupies your armour slot; no absorption."},scoutLeather:{name:'Scout Leather',price:180,vitality:1,absorption:2,dodgeCost:35,description:'Layered leather, cross-body straps and light shoulder guards. Less protection, easier dodging.'},towerPlate:{name:'Tower Sentinel Plate',price:650,vitality:3,absorption:7,dodgeCost:65,description:'Steel breastplate, broad pauldrons and a Tower crest. Strong protection, expensive dodges.'}};
 export const armourSelection=gear=>gear?.equippedArmour??(gear?.stonebackVestEquipped?'stonebackVest':null);
 export const armourProfile=id=>id===true||id==='stonebackVest'?stonebackVest:armourCatalog[id]??null;
 export const combatDodgeCost=(equipped,build)=>Math.max(10,(armourProfile(equipped)?.dodgeCost??boarRules.dodgeCost)+(build?.dodge??0));
+export const shieldRules={raiseCost:20,impactCost:10,breakCost:30,window:900,perfect:330,cooldown:1400,breakRecovery:2500};
+export const canRaiseShield=(armour,weapon)=>armour==='ironShield'&&['trainingSword','wardenSword','ironSword','duelistBlade','vampiricSword'].includes(weapon);
+const shieldAngle=(from,to)=>Math.atan2(to.y-from.y,to.x-from.x);
+export function raiseIronShield(state,from,to,now){
+ if(now<(state.nextGuardAt??0)||state.stamina<shieldRules.raiseCost)return false;
+ state.stamina-=shieldRules.raiseCost;
+ state.guardAt=now;
+ state.guardUntil=now+shieldRules.window;
+ state.nextGuardAt=now+shieldRules.cooldown;
+ state.guardFacing=(Math.round(shieldAngle(from,to)*4/Math.PI)+8)%8;
+ return true;
+}
+export function ironShieldImpact(state,damage,from,origin,move,now){
+ if(!damage||now>=(state.guardUntil??0)||!['arc','lane','bolt','ring'].includes(move.shape)||move.center==='target')return null;
+ if(Math.cos(shieldAngle(from,origin)-state.guardFacing*Math.PI/4)<.5)return null;
+ const broken=damage>=34||move.damage>=6||state.stamina<shieldRules.impactCost;
+ const perfect=!broken&&now-state.guardAt<=shieldRules.perfect;
+ const blocked=Math.floor(damage*(broken?.25:perfect?.85:.60));
+ state.stamina=Math.max(0,state.stamina-(broken?shieldRules.breakCost:shieldRules.impactCost));
+ state.guardUntil=0;
+ if(broken)state.nextGuardAt=now+shieldRules.breakRecovery;
+ return {blocked,perfect,broken};
+}
 export const canUseArmour=(stats,id)=>!!armourCatalog[id]&&skillLevel(stats.vitalityXp??0)>=armourCatalog[id].vitality;
 const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]};
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
@@ -107,8 +130,9 @@ const enemyMoves={
   aftershock:{id:'aftershock',name:'Aftershock',tell:900,delay:1350,damage:-10,shape:'ring',opensShell:false}
 };
 export const dungeonEnemyPreview=enemy=>enemy?.room.startsWith('depths')?smartProfile(enemy):enemy;
-export const shortbowDrawMs=900;
-export const playerMeleeReach=weapon=>weapon==='shortbow'?5:['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45;
+export const bowDrawTime=weapon=>Object.hasOwn(weaponCatalog,weapon)?weaponCatalog[weapon].drawMs??0:0;
+export const longbowSnare={duration:2500,delay:500};
+export const playerMeleeReach=weapon=>(Object.hasOwn(weaponCatalog,weapon)?weaponCatalog[weapon].range:0)||(['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45);
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   if(encounter?.addActor)return addKinds[encounter.addActor].move;
   if(encounter?.brainVersion===2&&Object.hasOwn(smartAttacks,encounter.brainMove))return smartAttacks[encounter.brainMove];
@@ -156,7 +180,8 @@ export const weaponCatalog={
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
   wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
   ironSword:{name:'Iron Sword',damage:20,interval:1200,strength:2,agility:1,price:150,description:'A dependable blade with a steady rhythm.'},
-  shortbow:{name:'Hunting Shortbow',damage:13,interval:1800,strength:1,agility:2,description:'A craftable bow with a 5-tile range. Draw before firing. Cover blocks arrows.'},
+  shortbow:{name:'Hunting Shortbow',damage:13,interval:1800,drawMs:900,range:5,strength:1,agility:2,description:'A craftable bow with a 5-tile range. Draw before firing. Cover blocks arrows.'},
+  cinderthornLongbow:{name:'Cinderthorn Longbow',rarity:'Rare',damage:20,interval:2400,drawMs:1500,range:7,strength:2,agility:4,description:'Rare Cinderback loot. A clear shot snares the target for 2.5 seconds. Cover stops arrows.'},
   warAxe:{name:'War Axe',damage:24,interval:1550,strength:3,agility:2,description:'Forged at Coppervein Quarry. A landed swing also deals half base damage to one nearby reinforcement.'},
   huntingSpear:{name:'Hunting Spear',damage:30,interval:1700,strength:3,agility:1,price:600,description:'Heavy thrusts with a longer recovery between attacks.'},
   quickDagger:{name:'Quick Dagger',damage:12,interval:700,strength:1,agility:3,price:550,description:'A light blade for rapid, precise strikes.'}
@@ -307,7 +332,7 @@ export function normalizeHunting(input={}){
       if(![30,40,50].includes(input.encounter.stoneguardReduction))throw new Error('Invalid Stoneguard protection.');
       result.encounter.stoneguardReduction=input.encounter.stoneguardReduction;
     }
-    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
+    for(const key of ['guardAt','guardUntil','nextGuardAt','snaredUntil','chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
     if(input.encounter.arenaVersion!==undefined){
@@ -319,6 +344,11 @@ export function normalizeHunting(input={}){
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
     if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee','move'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
+    if(input.encounter.guardFacing!==undefined){
+      const facing=input.encounter.guardFacing;
+      if(!Number.isInteger(facing)||facing<0||facing>7)throw new Error('Invalid guard facing.');
+      result.encounter.guardFacing=facing;
+    }
     const {counterPercent,buildId,brainVersion}=input.encounter;
     if(counterPercent!==undefined){
       const bonuses=buildId==='duelist'?[50,75,110,135]:[50,75];
@@ -367,9 +397,9 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     const event=mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments),now);
     return warAxeSweep(event,encounter,target,weapon,now);
   }
-  if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
+  if(!['attack','enemy','flee','dodge','guard'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
-  const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
+  const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':action==='guard'?'nextGuardAt':'nextFleeAt';
   if(now<encounter[clock])return null;
   const build=buildProfile(encounter.buildId,encounter.buildRelics),attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped,enchantments,build);
   const enemy=huntEnemy(encounter);
@@ -379,6 +409,10 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   if(action==='dodge'&&stamina<dodgeCost)return null;
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
   if(now>=(encounter.counterUntil??0)){delete result.encounter.counterUntil;delete result.encounter.counterPercent;}
+  if(action==='guard'){
+    if(!canRaiseShield(vestEquipped,weapon)||!raiseIronShield(result.encounter,arenaPlayer(encounter),combatTargetTile(encounter),now))return null;
+    result.guardRaised=true;return result;
+  }
   if(action==='dodge'){
     delete result.encounter.autoDodgeUntil;
     result.encounter.stamina-=dodgeCost;
@@ -393,11 +427,11 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   if(action==='attack'){
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
-    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2||weapon==='shortbow'?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2&&weapon!=='warAxe')result.encounter.nextPlayerAt=now+350;return result;}
-    if(weapon==='shortbow'){
+    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2||bowDrawTime(weapon)?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2&&weapon!=='warAxe')result.encounter.nextPlayerAt=now+350;return result;}
+    if(bowDrawTime(weapon)){
       const from=arenaPlayer(encounter),to=arenaEnemy(encounter);
       const cover=encounter.arenaVersion===1?projectileCover(encounter,from,to):null;
-      result.arrow={from,to:cover??to,blocked:!!cover};
+      result.arrow={from,to:cover??to,blocked:!!cover,...(weapon==='cinderthornLongbow'?{longbow:true}:{})};
       if(cover)return result;
     }
     result.damage=Math.ceil((attributes.damage+Math.floor(random()*5))*openingMultiplier);
@@ -444,6 +478,12 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
         if(enemy.shellArmor)result.encounter.exposedUntil=Math.max(result.encounter.exposedUntil??0,result.encounter.staggerWeakUntil);
       }
     }
+    if(weapon==='cinderthornLongbow'&&result.damage>0&&result.encounter.health>0&&now>=(encounter.snaredUntil??0)){
+      result.encounter.snaredUntil=now+longbowSnare.duration;
+      if(encounter.arenaLockedFor!==encounter.nextBoarAt&&now<encounter.nextBoarAt)result.encounter.nextBoarAt+=longbowSnare.delay;
+      if(!encounter.addActor&&encounter.brainVersion===2&&encounter.brainNextThinkAt<encounter.nextBoarAt)result.encounter.brainNextThinkAt=Math.max(now,encounter.brainNextThinkAt)+longbowSnare.delay;
+      result.snared=true;
+    }
     if(!result.encounter.health){result.outcome='victory';if(encounter.addActor)result.killedEncounter=result.encounter;result.encounter=null;}
   }else{
     const move=enemyAttack(encounter,enemy);
@@ -471,6 +511,12 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.shellExposed=true;
     }
     result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor-mealArmour(encounter,now)+(encounter.fortuneBoots?2:0));
+    const guard=canRaiseShield(vestEquipped,weapon)&&ironShieldImpact(result.encounter,result.taken,arenaPlayer(encounter),encounter.brainOrigin??arenaEnemy(encounter),move,now);
+    if(guard){
+      result.taken-=guard.blocked;
+      result.guardBlocked=guard.blocked;result.guardBroken=guard.broken;result.perfectBlock=guard.perfect;
+      if(guard.perfect){result.encounter.counterUntil=now+counterRules.duration+(build.counterWindow??0);result.encounter.counterPercent=Math.round(counterMultiplier(weapon,upgrade,build,vault)*100);}
+    }
     if(result.taken&&now<(encounter.weakenedUntil??0)){
       result.weakened=Math.floor(result.taken*(encounter.weakenPercent??essenceEffects.shadow.reduction*100)/100);
       result.taken-=result.weakened;
@@ -552,6 +598,7 @@ export function enemyStatusEffects(encounter,now){
   if(!encounter)return [];
   const effects=[];
   if(encounter.burn&&now<encounter.burn.until)effects.push({kind:'fire',name:'Burning',color:essenceEffects.fire.color,remaining:encounter.burn.until-now,detail:encounter.burn.damage+' damage / sec'});
+  if(now<(encounter.snaredUntil??0))effects.push({kind:'snare',name:'Snared',color:'#a6ffd8',remaining:encounter.snaredUntil-now,detail:'Slower to move and prepare attacks'});
   if(now<(encounter.chilledUntil??0))effects.push({kind:'ice',name:'Chilled',color:essenceEffects.ice.color,remaining:encounter.chilledUntil-now,detail:'Next attack delayed'});
   if(now<(encounter.weakenedUntil??0))effects.push({kind:'shadow',name:essenceEffects.shadow.name,color:essenceEffects.shadow.color,remaining:encounter.weakenedUntil-now,detail:'Next hit −'+(encounter.weakenPercent??essenceEffects.shadow.reduction*100)+'%'});
   if(now<(encounter.interruptResistUntil??0))effects.push({kind:'storm',name:essenceEffects.storm.name,color:essenceEffects.storm.color,remaining:encounter.interruptResistUntil-now,detail:'Resists interrupts'});

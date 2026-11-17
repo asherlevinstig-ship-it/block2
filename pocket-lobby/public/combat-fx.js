@@ -57,7 +57,7 @@ export function recordCombatFx(events,result,time){
   if(staggered)events.staggerAt=time;
   if(action==='enemy'&&!result.targetId)events.boarAttackAt=time;
   if(taken){events.hurtAt=time;events.hurtHeavy=heavy===true||taken>=20;}
-  if(warded||absorbed||result.bloodPriceBlocked||result.stoneguardBlocked)events.shieldAt=time;
+  if(result.guardBlocked&&!result.guardBroken||warded||absorbed||result.bloodPriceBlocked||result.stoneguardBlocked)events.shieldAt=time;
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
   if(power){events.castAt=time;events.castKind=null;}
   if(result.outcome==='victory')events.victoryAt=time;
@@ -226,9 +226,9 @@ export function drawShortbowArrow(ctx,point,arrow,age,reduced){
   const [ax,ay]=point(from.x+.5,from.y+.5,16),[tx,ty]=point(to.x+.5,to.y+.5,blocked?11:15);
   const travel=reduced?1:Math.min(1,t/.68),x=ax+(tx-ax)*travel,y=ay+(ty-ay)*travel;
   const trail=Math.max(0,travel-.18);
-  ctx.save();ctx.strokeStyle='#ffe0a1';ctx.lineWidth=1.6;ctx.globalAlpha=travel<1?1:1-t;
+  ctx.save();ctx.strokeStyle=arrow.exposed?'#fff2a7':arrow.longbow?'#abffda':'#ffe0a1';ctx.lineWidth=arrow.longbow?2.2:1.6;ctx.globalAlpha=travel<1?1:1-t;
   line(ctx,ax+(tx-ax)*trail,ay+(ty-ay)*trail,x,y);
-  if(travel===1)particles(ctx,tx,ty,t,blocked?'#d9b493':'#ffdb8a',reduced,13,5);
+  if(travel===1)particles(ctx,tx,ty,t,blocked?'#d9b493':arrow.exposed?'#fff2a7':arrow.longbow?'#a6ffd8':'#ffdb8a',reduced,13,5);
   ctx.restore();
 }
 export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,encounter}){
